@@ -69,7 +69,7 @@ flutter run
 
 «La URL del repositorio será incorporada una vez creado y configurado el repositorio oficial del proyecto.»
 
-## Estructura de carpetas
+## Estructura de carpetas  
 
 vestuario-digital/
 ├── assets/
