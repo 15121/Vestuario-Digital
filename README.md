@@ -55,8 +55,118 @@ Las funcionalidades avanzadas, como inteligencia artificial, reconocimiento auto
 Para ejecutar el proyecto será necesario contar con un entorno de desarrollo compatible con Flutter y Dart, además de las herramientas necesarias para ejecutar una aplicación Flutter en un dispositivo o emulador compatible.
 
 ## Instalación y ejecución
+Ingresar a la carpeta del proyecto:
 
-Clonar el repositorio:
+cd vestuario-digital
 
-```bash
-git clone [URL DEL REPOSITORIO]
+Instalar las dependencias:
+
+flutter pub get
+
+Ejecutar la aplicación:
+
+flutter run
+
+«La URL del repositorio será incorporada una vez creado y configurado el repositorio oficial del proyecto.»
+
+## Estructura de carpetas
+
+vestuario-digital/
+├── assets/
+├── lib/
+│   ├── config/
+│   ├── database/
+│   ├── models/
+│   ├── services/
+│   ├── screens/
+│   ├── widgets/
+│   └── utils/
+├── test/
+├── pubspec.yaml
+└── README.md
+
+### Descripción de las carpetas
+
+- assets/: recursos estáticos, como imágenes, fuentes e íconos.
+- lib/: código fuente principal de la aplicación.
+- config/: configuraciones generales, rutas y constantes.
+- database/: conexión, tablas y consultas de SQLite.
+- models/: clases que representan las entidades del sistema.
+- services/: comunicación con servicios externos, como la API de clima.
+- screens/: pantallas principales de la aplicación.
+- widgets/: componentes reutilizables de la interfaz.
+- utils/: funciones auxiliares, validaciones y formatos de datos.
+- test/: pruebas unitarias y funcionales.
+- pubspec.yaml: configuración de dependencias y recursos del proyecto.
+
+## Control de versiones
+
+El proyecto utilizará GitHub para organizar el desarrollo colaborativo y controlar las diferentes versiones del código.
+
+Se utilizarán las siguientes ramas:
+
+- main
+- develop
+- feature/nombre-funcionalidad
+
+### Ramas principales
+
+- main: contiene las versiones estables del proyecto.
+- develop: rama destinada a integrar los desarrollos realizados.
+- feature/nombre-funcionalidad: ramas destinadas al desarrollo de funcionalidades específicas.
+
+Ejemplos:
+- feature/us01-registro
+- feature/us02-login
+- feature/us03-registrar-prenda
+
+### Convención de commits
+
+Los commits seguirán una nomenclatura clara para identificar el tipo de modificación realizada.
+
+- feat: nueva funcionalidad
+- fix: corrección de errores
+- docs: modificación de documentación
+- refactor: reorganización del código
+- style: cambios de formato o estilos
+- test: incorporación o modificación de pruebas
+
+Ejemplos:
+- feat: add login screen
+- fix: correct form validation
+- docs: update README
+- test: add login validation tests
+
+## Issues
+
+Los Issues se utilizarán para registrar y realizar el seguimiento de las tareas del proyecto.
+
+Cada Issue podrá relacionarse con:
+
+- Historia de Usuario.
+- Requerimiento Funcional.
+- Sprint correspondiente.
+- Tarea del Product Backlog.
+
+Ejemplo:
+- Issue: US03 - Registrar prenda
+- Requerimiento: RF03
+- Sprint: Sprint 2
+- Prioridad: Alta
+
+## Organización por Sprints
+
+El desarrollo se organizará de acuerdo con el Plan Scrum definido para el proyecto.
+
+| Sprint | Historias de Usuario |
+| --- | --- |
+| Sprint 1 | US01, US02 |
+| Sprint 2 | US03, US04, US05, US12, US13 |
+| Sprint 3 | US06, US07, US11 |
+| Sprint 4 | US08, US09, US10 |
+
+## Estado del proyecto
+
+Estado actual: En planificación y preparación para el desarrollo del MVP.
+
+El repositorio se actualizará progresivamente durante el desarrollo, incorporando el código fuente, documentación, Issues, ramas, commits y demás elementos correspondientes al avance del proyecto.
