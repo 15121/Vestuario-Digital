@@ -1,8 +1,8 @@
-#Vestuario-Digital
+# Vestuario Digital
 
 Organizá tu ropa, creá tu estilo.
 
-##Descripción del proyecto
+## Descripción del proyecto
 
 Vestuario Digital es una aplicación móvil con diseño responsivo desarrollada como Producto Mínimo Viable (MVP), orientada a facilitar la organización y gestión del guardarropa personal mediante un armario digital.
 
@@ -10,31 +10,32 @@ La aplicación permite registrar y administrar prendas, visualizar y filtrar el 
 
 El proyecto se desarrolla considerando un alcance adecuado para el contexto académico y priorizando una solución simple, organizada y funcional.
 
-Objetivo
+## Objetivo
 
 El objetivo de Vestuario Digital es facilitar la organización del guardarropa personal y ayudar al usuario a seleccionar sus prendas y outfits de manera práctica, reduciendo el tiempo destinado a elegir qué vestir y favoreciendo una mejor organización de la ropa.
 
-Integrantes y roles
+## Integrantes y roles
 
-Integrante| Rol
-Iara Cazón| Project Manager
-Sabrina Arévalo| Analista Funcional
-Kiara Soto| Analista Funcional
-Priscila Martínez| Analista de Negocios
-Agustina Martínez| Programadora
-Celeste Milton| Programadora
+| Integrante | Rol |
+|---|---|
+| Iara Cazón | Project Manager |
+| Sabrina Arévalo | Analista Funcional |
+| Kiara Soto | Analista Funcional |
+| Priscila Martínez | Analista de Negocios |
+| Agustina Martínez | Programadora |
+| Celeste Milton | Programadora |
 
 Los roles se rotarán periódicamente durante el desarrollo del proyecto, permitiendo que los integrantes adquieran conocimientos y experiencia en las distintas áreas involucradas.
 
-Tecnologías utilizadas
+## Tecnologías utilizadas
 
-- Flutter: framework principal para el desarrollo de la aplicación.
-- Dart: lenguaje de programación utilizado junto con Flutter.
-- SQLite: sistema de gestión de base de datos local.
-- API externa de clima: utilizada para obtener información meteorológica necesaria para las recomendaciones básicas.
-- GitHub: plataforma utilizada para el control de versiones y el trabajo colaborativo.
+- **Flutter:** framework principal para el desarrollo de la aplicación.
+- **Dart:** lenguaje de programación utilizado junto con Flutter.
+- **SQLite:** sistema de gestión de base de datos local.
+- **API externa de clima:** utilizada para obtener información meteorológica necesaria para las recomendaciones básicas.
+- **GitHub:** plataforma utilizada para el control de versiones y el trabajo colaborativo.
 
-Funcionalidades principales del MVP
+## Funcionalidades principales del MVP
 
 - Registro e inicio de sesión de usuarios.
 - Registro y administración de prendas.
@@ -49,130 +50,13 @@ Funcionalidades principales del MVP
 
 Las funcionalidades avanzadas, como inteligencia artificial, reconocimiento automático de prendas, colorimetría automatizada y asesoramiento avanzado de imagen, quedan fuera del alcance de esta primera versión.
 
-Requisitos para ejecutar el proyecto
+## Requisitos para ejecutar el proyecto
 
 Para ejecutar el proyecto será necesario contar con un entorno de desarrollo compatible con Flutter y Dart, además de las herramientas necesarias para ejecutar una aplicación Flutter en un dispositivo o emulador compatible.
 
-Instalación y ejecución
+## Instalación y ejecución
 
 Clonar el repositorio:
 
+```bash
 git clone [URL DEL REPOSITORIO]
-
-Ingresar a la carpeta del proyecto:
-
-cd vestuario-digital
-
-Instalar las dependencias:
-
-flutter pub get
-
-Ejecutar la aplicación:
-
-flutter run
-
-«La URL del repositorio será incorporada una vez creado y configurado el repositorio oficial del proyecto.»
-
-Estructura de carpetas
-
-vestuario-digital/
-├── assets/
-├── lib/
-├── config/
-├── database/
-├── models/
-├── services/
-├── screens/
-├── widgets/
-├── utils/
-├── test/
-├── pubspec.yaml
-└── README.md
-
-Descripción de las carpetas
-
-- assets/: recursos estáticos, como imágenes, fuentes e íconos.
-- lib/: código fuente principal de la aplicación.
-- config/: configuraciones generales, rutas y constantes.
-- database/: conexión, tablas y consultas de SQLite.
-- models/: clases que representan las entidades del sistema.
-- services/: comunicación con servicios externos, como la API de clima.
-- screens/: pantallas principales de la aplicación.
-- widgets/: componentes reutilizables de la interfaz.
-- utils/: funciones auxiliares, validaciones y formatos de datos.
-- test/: pruebas unitarias y funcionales.
-- pubspec.yaml: configuración de dependencias y recursos del proyecto.
-
-Control de versiones
-
-El proyecto utilizará GitHub para organizar el desarrollo colaborativo y controlar las diferentes versiones del código.
-
-Se utilizarán las siguientes ramas:
-
-main
-develop
-feature/nombre-funcionalidad
-
-Ramas principales
-
-- main: contiene las versiones estables del proyecto.
-- develop: rama destinada a integrar los desarrollos realizados.
-- feature/nombre-funcionalidad: ramas destinadas al desarrollo de funcionalidades específicas.
-
-Ejemplos:
-
-feature/us01-registro
-feature/us02-login
-feature/us03-registrar-prenda
-
-Convención de commits
-
-Los commits seguirán una nomenclatura clara para identificar el tipo de modificación realizada.
-
-feat: nueva funcionalidad
-fix: corrección de errores
-docs: modificación de documentación
-refactor: reorganización del código
-style: cambios de formato o estilos
-test: incorporación o modificación de pruebas
-
-Ejemplos
-
-feat: add login screen
-fix: correct form validation
-docs: update README
-test: add login validation tests
-
-Issues
-
-Los Issues se utilizarán para registrar y realizar el seguimiento de las tareas del proyecto.
-
-Cada Issue podrá relacionarse con:
-
-- Historia de Usuario.
-- Requerimiento Funcional.
-- Sprint correspondiente.
-- Tarea del Product Backlog.
-
-Ejemplo:
-
-Issue: US03 - Registrar prenda
-Requerimiento: RF03
-Sprint: Sprint 2
-Prioridad: Alta
-
-Organización por Sprints
-
-El desarrollo se organizará de acuerdo con el Plan Scrum definido para el proyecto.
-
-Sprint| Historias de Usuario
-Sprint 1| US01, US02
-Sprint 2| US03, US04, US05, US12, US13
-Sprint 3| US06, US07, US11
-Sprint 4| US08, US09, US10
-
-Estado del proyecto
-
-Estado actual: En planificación y preparación para el desarrollo del MVP.
-
-El repositorio se actualizará progresivamente durante el desarrollo, incorporando el código fuente, documentación, Issues, ramas, commits y demás elementos correspondientes al avance del proyecto.
