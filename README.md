@@ -70,7 +70,7 @@ flutter run
 «La URL del repositorio será incorporada una vez creado y configurado el repositorio oficial del proyecto.»
 
 ## Estructura de carpetas  
-
+<pre>
 vestuario-digital/
 ├── assets/
 ├── lib/
@@ -84,7 +84,7 @@ vestuario-digital/
 ├── test/
 ├── pubspec.yaml
 └── README.md
-
+</pre>
 ### Descripción de las carpetas
 
 - assets/: recursos estáticos, como imágenes, fuentes e íconos.
