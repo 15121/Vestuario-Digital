@@ -66,18 +66,91 @@ El objetivo de Vestuario Digital es facilitar la organización del guardarropa p
 ## Instalación y ejecución
 
 1. **Clonar el repositorio:**
-   ```bash
-   git clone [https://github.com/15121/Vestuario-Digital.git](https://github.com/15121/Vestuario-Digital.git)                                                     Ingresar a la carpeta del proyecto:Bashcd Vestuario-Digital
-Instalar las dependencias:Bashnpm install
-Ejecutar la aplicación:Bashnpx expo start -c
-Visualizar en el celular: Escanear el código QR resultante desde la aplicación Expo Go.Estructura de carpetasPlaintextVestuario-Digital/
+   git clone https://github.com/15121/Vestuario-Digital.git
+
+2. **Ingresar a la carpeta del proyecto:**
+   cd Vestuario-Digital
+
+3. **Instalar las dependencias:**
+   npm install
+
+4. **Ejecutar la aplicación:**
+   npx expo start -c
+
+5. **Visualizar en el celular:** Escanear el código QR resultante desde la aplicación **Expo Go**.
+
+---
+
+## Estructura de carpetas
+Vestuario-Digital/
 ├── assets/
 ├── App.js
 ├── app.json
 ├── package.json
 └── README.md
-Control de versionesEl proyecto utilizará GitHub para organizar el desarrollo colaborativo y controlar las diferentes versiones del código.Ramas principalesmain: Contiene las versiones estables del proyecto.develop: Rama destinada a integrar los desarrollos realizados.feature/nombre-funcionalidad: Ramas destinadas al desarrollo de funcionalidades específicas.Ejemplos de ramas:feature/us01-registrofeature/us02-loginfeature/us03-registrar-prendaConvención de commitsLos commits seguirán una nomenclatura clara para identificar el tipo de modificación realizada:feat: Nueva funcionalidad.fix: Corrección de errores.docs: Modificación de documentación.refactor: Reorganización del código sin alterar su comportamiento.style: Cambios de formato o estilos.test: Incorporación o modificación de pruebas.Ejemplos:feat: add login screenfix: correct form validationdocs: update READMEtest: add login validation testsIssuesLos Issues se utilizarán para registrar y realizar el seguimiento de las tareas del proyecto. Cada Issue podrá relacionarse con:Historia de Usuario.Requerimiento Funcional.Sprint correspondiente.Tarea del Product Backlog.Ejemplo de Issue:PlaintextIssue: US03 - Registrar prenda
+
+---
+
+## Control de versiones
+El proyecto utilizará GitHub para organizar el desarrollo colaborativo y controlar las diferentes versiones del código.
+
+### Ramas principales
+* **main:** Contiene las versiones estables del proyecto.
+* **develop:** Rama destinada a integrar los desarrollos realizados.
+* **feature/nombre-funcionalidad:** Ramas destinadas al desarrollo de funcionalidades específicas.
+
+**Ejemplos de ramas:**
+* feature/us01-registro
+* feature/us02-login
+* feature/us03-registrar-prenda
+
+---
+
+## Convención de commits
+Los commits seguirán una nomenclatura clara para identificar el tipo de modificación realizada:
+
+* **feat:** Nueva funcionalidad.
+* **fix:** Corrección de errores.
+* **docs:** Modificación de documentación.
+* **refactor:** Reorganización del código sin alterar su comportamiento.
+* **style:** Cambios de formato o estilos.
+* **test:** Incorporación o modificación de pruebas.
+
+**Ejemplos:**
+* feat: add login screen
+* fix: correct form validation
+* docs: update README
+* test: add login validation tests
+
+---
+
+## Issues
+Los Issues se utilizarán para registrar y realizar el seguimiento de las tareas del proyecto. Cada Issue podrá relacionarse con:
+* Historia de Usuario.
+* Requerimiento Funcional.
+* Sprint correspondiente.
+* Tarea del Product Backlog.
+
+**Ejemplo de Issue:**
+Issue: US03 - Registrar prenda
 Requerimiento: RF03
 Sprint: Sprint 2
 Prioridad: Alta
-Organización por SprintsSprintHistorias de UsuarioSprint 1US01, US02Sprint 2US03, US04, US05, US12, US13Sprint 3US06, US07, US11Sprint 4US08, US09, US10Estado del proyectoEstado actual: En planificación y preparación para el desarrollo del MVP.El repositorio se actualizará progresivamente durante el desarrollo, incorporando el código fuente, documentación, Issues, ramas, commits y demás elementos correspondientes al avance del proyecto.
+
+---
+
+## Organización por Sprints
+
+| Sprint | Historias de Usuario |
+| :--- | :--- |
+| **Sprint 1** | US01, US02 |
+| **Sprint 2** | US03, US04, US05, US12, US13 |
+| **Sprint 3** | US06, US07, US11 |
+| **Sprint 4** | US08, US09, US10 |
+
+---
+
+## Estado del proyecto
+**Estado actual:** En planificación y preparación para el desarrollo del MVP.
+
+El repositorio se actualizará progresivamente durante el desarrollo, incorporando el código fuente, documentación, Issues, ramas, commits y demás elementos correspondientes al avance del proyecto.
