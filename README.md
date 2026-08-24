@@ -82,12 +82,13 @@ El objetivo de Vestuario Digital es facilitar la organización del guardarropa p
 ---
 
 ## Estructura de carpetas
-Vestuario-Digital/
-├── assets/
-├── App.js
-├── app.json
-├── package.json
-└── README.md
+
+    Vestuario-Digital/
+    ├── assets/
+    ├── App.js
+    ├── app.json
+    ├── package.json
+    └── README.md
 
 ---
 
