@@ -81,11 +81,11 @@ export default function RegisterScreen({ navigation }) {
   };
 
 
-  // ==========================================================
+// ==========================================================
   // FUNCIÓN DE REGISTRO
   // ==========================================================
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
 
     // --------------------------------------------------------
     // VALIDACIÓN DE CAMPOS OBLIGATORIOS
@@ -127,7 +127,8 @@ export default function RegisterScreen({ navigation }) {
 
     try {
 
-      registerUser(
+      // Agregamos await para esperar la respuesta del guardado
+      await registerUser(
         name,
         lastname,
         email,
