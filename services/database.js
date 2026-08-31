@@ -167,3 +167,82 @@ export const resetUserPassword = async (email, newPassword) => {
     }
   }
 };
+// ============================================================
+// Obtener resumen del armario (Prendas, Outfits, Usados, Maletas)
+// ============================================================
+export const getArmarioSummary = (userId) => {
+  if (Platform.OS === 'web') {
+    // Lectura en Web usando localStorage
+    const clothes = JSON.parse(localStorage.getItem('clothes') || '[]');
+    const outfits = JSON.parse(localStorage.getItem('outfits') || '[]');
+    const history = JSON.parse(localStorage.getItem('history') || '[]');
+    const suitcases = JSON.parse(localStorage.getItem('suitcases') || '[]');
+
+    // Filtrar por el id del usuario logueado
+    const userClothes = clothes.filter((item) => item.userId === userId);
+    const userOutfits = outfits.filter((item) => item.userId === userId);
+    
+    // Usados en los últimos 7 días
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const userUsed = history.filter(
+      (item) => item.userId === userId && new Date(item.date).getTime() >= sevenDaysAgo
+    );
+
+    // Maletas activas (ej: estado distintas de 'archivada')
+    const userSuitcases = suitcases.filter(
+      (item) => item.userId === userId && item.active !== false
+    );
+
+    return {
+      clothesCount: userClothes.length,
+      outfitsCount: userOutfits.length,
+      usedThisWeekCount: userUsed.length,
+      activeSuitcasesCount: userSuitcases.length,
+    };
+  } else {
+    // Consulta SQL en Celular usando SQLite
+    try {
+      if (!db) {
+        initDatabase();
+      }
+
+      // Conteo de prendas
+      const clothesStmt = db.prepareSync('SELECT COUNT(*) AS total FROM clothes WHERE userId = ?');
+      const clothesRes = clothesStmt.executeSync([userId]).getFirstSync();
+
+      // Conteo de outfits
+      const outfitsStmt = db.prepareSync('SELECT COUNT(*) AS total FROM outfits WHERE userId = ?');
+      const outfitsRes = outfitsStmt.executeSync([userId]).getFirstSync();
+
+      // Opcional: tablas de historial y maletas si existen en SQLite
+      let usedCount = 0;
+      let suitcasesCount = 0;
+
+      try {
+        const usedStmt = db.prepareSync(
+          "SELECT COUNT(*) AS total FROM history WHERE userId = ? AND date >= date('now', '-7 days')"
+        );
+        usedCount = usedStmt.executeSync([userId]).getFirstSync()?.total || 0;
+      } catch (e) {
+        // En caso de que aún no hayas creado la tabla 'history'
+      }
+
+      try {
+        const suitcasesStmt = db.prepareSync("SELECT COUNT(*) AS total FROM suitcases WHERE userId = ?");
+        suitcasesCount = suitcasesStmt.executeSync([userId]).getFirstSync()?.total || 0;
+      } catch (e) {
+        // En caso de que aún no hayas creado la tabla 'suitcases'
+      }
+
+      return {
+        clothesCount: clothesRes?.total || 0,
+        outfitsCount: outfitsRes?.total || 0,
+        usedThisWeekCount: usedCount,
+        activeSuitcasesCount: suitcasesCount,
+      };
+    } catch (error) {
+      console.log('Error al obtener resumen del armario:', error);
+      return { clothesCount: 0, outfitsCount: 0, usedThisWeekCount: 0, activeSuitcasesCount: 0 };
+    }
+  }
+};

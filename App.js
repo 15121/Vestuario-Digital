@@ -8,7 +8,9 @@ import { initDatabase } from './services/database';
 import WelcomeScreen from './screens/welcomeScreen';
 import LoginScreen from './screens/loginScreen';
 import RegisterScreen from './screens/registerScreen';
-import ForgotPasswordScreen from './screens/ForgotPasswordScreen';  
+import ForgotPasswordScreen from './screens/ForgotPasswordScreen'; 
+// 1. SUMAR IMPORT DEL TAB NAVIGATOR (Ajustá la ruta si la tenés en otra carpeta)
+import MainTabNavigator from './navigation/MainTabNavigator'; 
 
 const Stack = createNativeStackNavigator();
 
@@ -20,7 +22,9 @@ export default function App() {
   });
 
   useEffect(() => {
-    initDatabase();
+    if (Platform.OS !== 'web') {
+      initDatabase();
+    }
   }, []);
 
   if (!fontsLoaded) {
@@ -51,6 +55,9 @@ export default function App() {
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Register" component={RegisterScreen} />
           <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+          
+          {/* 2. SUMAR LA RUTA PRINCIPAL QUE CONTIENE LAS PESTAÑAS Y LA BARRA INFERIOR */}
+          <Stack.Screen name="Main" component={MainTabNavigator} />
         </Stack.Navigator>
       </NavigationContainer>
     </>
