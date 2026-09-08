@@ -4,334 +4,526 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
+  ScrollView,
   useWindowDimensions,
 } from 'react-native';
-import ResponsiveContainer from '../components/ResponsiveContainer';
 
-const PURPLE_PRIMARY = '#764DC6';
-const BACKGROUND = '#F8E9FE';
+import {
+  useFonts,
+  Poppins_400Regular,
+  Poppins_500Medium,
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+} from '@expo-google-fonts/poppins';
+ import { Ionicons } from '@expo/vector-icons';
 
-export default function WelcomeScreen({ navigation }) {
+const PURPLE = '#764DC6';
+const LIGHT_PURPLE = '#A66BE3';
+const BACKGROUND = '#F8F9FE';
+
+export default function WelcomeScreen() {
   const { width } = useWindowDimensions();
-  const isDesktop = width > 768;
+
+  const isMobile = width < 768;
+
+  const [fontsLoaded] = useFonts({
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+  });
+
+  if (!fontsLoaded) {
+    return null;
+  }
 
   return (
-    <ResponsiveContainer>
-      <View style={[styles.container, isDesktop && styles.desktopContainer]}>
+    <View style={styles.container}>
 
-        {/* =========================
-            SECCIÓN PRINCIPAL IZQUIERDA
-            ========================= */}
-        <View
-          style={[
-            styles.headerSection,
-            isDesktop && styles.desktopHeaderSection,
-          ]}
-        >
-          <Image
-            source={require('../assets/logo.png')}
-            style={[
-              styles.logo,
-              isDesktop && styles.desktopLogo,
-            ]}
-            resizeMode="contain"
-          />
+      {/* BARRA SUPERIOR */}
+      <View style={styles.header}>
 
-          <Text
-            style={[
-              styles.title,
-              isDesktop && styles.desktopTitle,
-            ]}
-          >
-            Vestuario Digital
+        <Text style={styles.menuIcon}>
+          ☰
+        </Text>
+
+        <Text style={styles.headerTitle}>
+          Detalle de prenda
+        </Text>
+
+        <View style={styles.profile}>
+          <Text style={styles.profileIcon}>
+            👤
           </Text>
-
-          <Text
-            style={[
-              styles.subtitle,
-              isDesktop && styles.desktopSubtitle,
-            ]}
-          >
-            Organizá tu ropa, creá tu estilo.
-          </Text>
-
-          {/* BOTONES SOLO EN PC */}
-          {isDesktop && (
-            <View style={styles.desktopButtonGroup}>
-
-              <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={() => navigation?.navigate('Login')}
-              >
-                <Text style={styles.primaryButtonText}>
-                  Iniciar sesión
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={() => navigation?.navigate('Register')}
-              >
-                <Text style={styles.secondaryButtonText}>
-                  Crear cuenta
-                </Text>
-              </TouchableOpacity>
-
-            </View>
-          )}
         </View>
 
-
-        {/* =========================
-            ILUSTRACIÓN DEL PERCHERO
-            ========================= */}
-        <View
-          style={[
-            styles.imageSection,
-            isDesktop && styles.desktopImageSection,
-          ]}
-        >
-          <Image
-            source={require('../assets/ilustracion.png')}
-            style={[
-              styles.illustrationImage,
-              isDesktop && styles.desktopIllustrationImage,
-            ]}
-            resizeMode="contain"
-          />
-        </View>
+      </View>
 
 
-        {/* =========================
-            BOTONES SOLO EN CELULAR
-            ========================= */}
-        {!isDesktop && (
-          <View style={styles.mobileButtonGroup}>
+      <View style={styles.body}>
 
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={() => navigation?.navigate('Login')}
-            >
-              <Text style={styles.primaryButtonText}>
-                Iniciar sesión
-              </Text>
+        {/* MENÚ LATERAL - COMPUTADORA */}
+        {!isMobile && (
+          <View style={styles.sidebar}>
+
+            <TouchableOpacity style={styles.sideItem}>
+              <Text style={styles.sideIcon}>⌂</Text>
+              <Text style={styles.sideText}>Inicio</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={() => navigation?.navigate('Register')}
-            >
-              <Text style={styles.secondaryButtonText}>
-                Crear cuenta
-              </Text>
+            <TouchableOpacity style={styles.sideItem}>
+              <Text style={styles.sideIcon}>♧</Text>
+              <Text style={styles.sideText}>Prendas</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.sideItem}>
+              <Text style={styles.sideIcon}>♧</Text>
+              <Text style={styles.sideText}>Outfits</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.sideItem}>
+              <Text style={styles.sideIcon}>▣</Text>
+              <Text style={styles.sideText}>Maleta</Text>
             </TouchableOpacity>
 
           </View>
         )}
 
+
+        {/* CONTENIDO */}
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.content,
+            isMobile && styles.mobileContent,
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+
+          <View
+            style={[
+              styles.mainLayout,
+              isMobile && styles.mobileLayout,
+            ]}
+          >
+
+            {/* ESPACIO VACÍO PARA LA FOTO */}
+            <View
+              style={[
+                styles.leftColumn,
+                isMobile && styles.mobileColumn,
+              ]}
+            >
+
+              <View
+                style={[
+                  styles.emptyImage,
+                  isMobile && styles.mobileEmptyImage,
+                ]}
+              >
+              </View>
+
+            </View>
+
+
+            {/* INFORMACIÓN VACÍA */}
+            <View
+              style={[
+                styles.infoCard,
+                isMobile && styles.mobileInfoCard,
+              ]}
+            >
+
+            <InfoRow title="Categoría" icon="shirt-outline" />
+            <InfoRow title="Color" icon="color-palette-outline" />
+            <InfoRow title="Temporada" icon="sunny-outline" />
+            <InfoRow title="Ocasión" icon="sparkles-outline" />
+            <InfoRow title="Descripción" icon="document-text-outline" />
+            <InfoRow title="Fecha de creación" icon="calendar-outline" />
+
+
+              {/* BOTONES */}
+              <View
+                style={[
+                  styles.buttons,
+                  isMobile && styles.mobileButtons,
+                ]}
+              >
+
+                <TouchableOpacity style={styles.editButton}>
+                  <Text style={styles.editText}>
+                    Editar
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.deleteButton}>
+                  <Text style={styles.deleteText}>
+                    Eliminar
+                  </Text>
+                </TouchableOpacity>
+
+              </View>
+
+            </View>
+
+          </View>
+
+
+          {/* VOLVER */}
+          <TouchableOpacity
+            style={[
+              styles.backButton,
+              isMobile && styles.mobileBackButton,
+            ]}
+          >
+            <Text style={styles.backText}>
+              ← Volver
+            </Text>
+          </TouchableOpacity>
+
+        </ScrollView>
+
       </View>
-    </ResponsiveContainer>
+
+
+      {/* BOTÓN + */}
+      <TouchableOpacity
+        style={[
+          styles.addButton,
+          isMobile && styles.mobileAddButton,
+        ]}
+      >
+        <Text style={styles.addText}>
+          +
+        </Text>
+      </TouchableOpacity>
+
+    </View>
   );
 }
 
 
-const styles = StyleSheet.create({
+/* FILA DE INFORMACIÓN */
 
-  // ==========================================
-  // CONTENEDOR GENERAL
-  // ==========================================
+function InfoRow({ title, icon }) {
+  return (
+    <View style={styles.infoRow}>
+
+      <View style={styles.infoLeft}>
+
+        <View style={styles.iconCircle}>
+          <Ionicons
+            name={icon}
+            size={16}
+            color={PURPLE}
+          />
+        </View>
+
+        <Text style={styles.infoTitle}>
+          {title}
+        </Text>
+
+      </View>
+
+      <View style={styles.infoValue} />
+
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
 
   container: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 40,
-    paddingBottom: 20,
-    justifyContent: 'space-between',
-    alignItems: 'center',
-
-    // FONDO OFICIAL
     backgroundColor: BACKGROUND,
   },
 
 
-  // ==========================================
-  // VERSIÓN PC
-  // ==========================================
+  /* BARRA SUPERIOR */
 
-  desktopContainer: {
+  header: {
+    height: 60,
+    backgroundColor: LIGHT_PURPLE,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-
-    paddingHorizontal: '5%',
-    paddingTop: 0,
-    paddingBottom: 0,
-
-    gap: 70,
+    paddingHorizontal: 20,
   },
 
-
-  // ==========================================
-  // CELULAR
-  // ==========================================
-
-  headerSection: {
-    alignItems: 'center',
-    width: '100%',
-
-    // BAJAMOS EL LOGO Y EL TEXTO
-    marginTop: 70,
-  },
-
-  logo: {
-    width: 110,
-    height: 110,
-    marginBottom: 10,
-  },
-
-  title: {
-    fontSize: 28,
-    fontFamily: 'Poppins_700Bold',
-    color: '#B87EEE',
-    textAlign: 'center',
-  },
-
-  subtitle: {
-    fontSize: 15,
-    fontFamily: 'Poppins_400Regular',
-    color: '#8A8A8A',
-    textAlign: 'center',
-    marginTop: 4,
-  },
-
-
-  // ==========================================
-  // ILUSTRACIÓN
-  // ==========================================
-
-  imageSection: {
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-
-    // NO MODIFICAMOS LA POSICIÓN DEL PERCHERO
-    marginVertical: 10,
-  },
-
-  illustrationImage: {
-    width: '100%',
-    height: 260,
-  },
-
-
-  // ==========================================
-  // BOTONES CELULAR
-  // ==========================================
-
-  mobileButtonGroup: {
-    width: '100%',
-    gap: 12,
-
-    // SUBIMOS LOS BOTONES
-    marginBottom: 50,
-  },
-
-
-  // ==========================================
-  // PC
-  // ==========================================
-
-  desktopHeaderSection: {
-    width: '42%',
-    alignItems: 'center',
-    marginTop: 0,
-  },
-
-  desktopLogo: {
-    width: 175,
-    height: 175,
-    marginBottom: 18,
-  },
-
-  desktopTitle: {
-    fontSize: 42,
-  },
-
-  desktopSubtitle: {
-    fontSize: 19,
-    marginTop: 5,
-    marginBottom: 12,
-  },
-
-  desktopImageSection: {
-    width: '55%',
-    marginVertical: 0,
-  },
-
-  desktopIllustrationImage: {
-    width: '100%',
-    height: 560,
-  },
-
-  desktopButtonGroup: {
-    width: '100%',
-    maxWidth: 400,
-
-    marginTop: 30,
-
-    gap: 14,
-  },
-
-
-  // ==========================================
-  // BOTÓN PRINCIPAL
-  // ==========================================
-
-  primaryButton: {
-    backgroundColor: PURPLE_PRIMARY,
-
-    height: 54,
-
-    borderRadius: 14,
-
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  primaryButtonText: {
+  menuIcon: {
+    width: 50,
     color: '#FFFFFF',
+    fontSize: 23,
+    fontFamily: 'Poppins_400Regular',
+  },
 
-    fontSize: 17,
-
+  headerTitle: {
+    flex: 1,
+    textAlign: 'center',
+    color: '#FFFFFF',
+    fontSize: 16,
     fontFamily: 'Poppins_600SemiBold',
   },
 
-
-  // ==========================================
-  // BOTÓN SECUNDARIO
-  // ==========================================
-
-  secondaryButton: {
+  profile: {
+    width: 35,
+    height: 35,
+    borderRadius: 18,
     backgroundColor: '#FFFFFF',
-
-    height: 54,
-
-    borderRadius: 14,
-
-    borderWidth: 1.5,
-    borderColor: PURPLE_PRIMARY,
-
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
   },
 
-  secondaryButtonText: {
-    color: PURPLE_PRIMARY,
-
+  profileIcon: {
     fontSize: 17,
+  },
 
+
+  /* CUERPO */
+
+  body: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+
+
+  /* MENÚ LATERAL */
+
+  sidebar: {
+    width: 85,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    paddingTop: 28,
+    borderRightWidth: 1,
+    borderRightColor: '#EEEEEE',
+  },
+
+  sideItem: {
+    alignItems: 'center',
+    marginBottom: 28,
+  },
+
+  sideIcon: {
+    fontSize: 21,
+    color: '#777777',
+    marginBottom: 5,
+  },
+
+  sideText: {
+    color: '#777777',
+    fontSize: 11,
+    fontFamily: 'Poppins_400Regular',
+  },
+
+
+  /* CONTENIDO */
+
+  scroll: {
+    flex: 1,
+  },
+
+  content: {
+    flexGrow: 1,
+    padding: 25,
+  },
+
+  mobileContent: {
+    padding: 16,
+    paddingBottom: 90,
+  },
+
+
+  /* COMPUTADORA */
+
+  mainLayout: {
+    width: '100%',
+    maxWidth: 1000,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    gap: 20,
+  },
+
+  leftColumn: {
+    flex: 1,
+  },
+
+  emptyImage: {
+    height: 330,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#EEEEEE',
+  },
+
+
+  /* INFORMACIÓN */
+
+  infoCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#EEEEEE',
+    padding: 16,
+  },
+
+  infoRow: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+
+  infoLeft: {
+    width: '50%',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  iconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F2EAFE',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 9,
+  },
+
+  infoIcon: {
+    color: PURPLE,
+    fontSize: 18,
     fontFamily: 'Poppins_600SemiBold',
+  },
+
+  infoTitle: {
+    color: '#777777',
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+  },
+
+  infoValue: {
+    flex: 1,
+  },
+
+
+  /* BOTONES */
+
+  buttons: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+  },
+
+  editButton: {
+    flex: 1,
+    height: 40,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#B58BE7',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  editText: {
+    color: PURPLE,
+    fontSize: 12,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+
+  deleteButton: {
+    flex: 1,
+    height: 40,
+    borderRadius: 7,
+    backgroundColor: PURPLE,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  deleteText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+
+
+  /* VOLVER */
+
+  backButton: {
+    width: '100%',
+    maxWidth: 1000,
+    height: 46,
+    alignSelf: 'center',
+    marginTop: 20,
+    borderRadius: 7,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E4D9F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  backText: {
+    color: PURPLE,
+    fontSize: 13,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+
+
+  /* CELULAR */
+
+  mobileLayout: {
+    flexDirection: 'column',
+    gap: 16,
+  },
+
+  mobileColumn: {
+    width: '100%',
+  },
+
+  mobileEmptyImage: {
+    height: 220,
+    width: '100%',
+  },
+
+  mobileInfoCard: {
+    width: '100%',
+    padding: 14,
+  },
+
+  mobileButtons: {
+    flexDirection: 'column',
+    gap: 10,
+  },
+
+  mobileBackButton: {
+    marginTop: 16,
+  },
+
+
+  /* BOTÓN + */
+
+  addButton: {
+    position: 'absolute',
+    left: 23,
+    bottom: 23,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: PURPLE,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  mobileAddButton: {
+    left: 18,
+    bottom: 18,
+  },
+
+  addText: {
+    color: '#FFFFFF',
+    fontSize: 28,
+    fontFamily: 'Poppins_400Regular',
   },
 
 });
