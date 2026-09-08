@@ -1,65 +1,24 @@
-import { useEffect } from 'react';
-import { Platform } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { useFonts, Poppins_400Regular, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
-
-import { initDatabase } from './services/database';
-import WelcomeScreen from './screens/welcomeScreen';
-import LoginScreen from './screens/loginScreen';
-import RegisterScreen from './screens/registerScreen';
-import ForgotPasswordScreen from './screens/ForgotPasswordScreen'; 
-// 1. SUMAR IMPORT DEL TAB NAVIGATOR (Ajustá la ruta si la tenés en otra carpeta)
-import MainTabNavigator from './navigation/MainTabNavigator'; 
-
-const Stack = createNativeStackNavigator();
+import React from 'react';
+import { SafeAreaView, StyleSheet, StatusBar } from 'react-native';
+import CreateOutfitScreen from './screens/CreateOutfitScreen';
 
 export default function App() {
-  const [fontsLoaded] = useFonts({
-    Poppins_400Regular,
-    Poppins_600SemiBold,
-    Poppins_700Bold,
-  });
-
-  useEffect(() => {
-    if (Platform.OS !== 'web') {
-      initDatabase();
-    }
-  }, []);
-
-  if (!fontsLoaded) {
-    return null;
-  }
+  const dummyNavigation = {
+    goBack: () => console.log('Volver atrás'),
+    navigate: (screen) => console.log('Navegar a:', screen),
+  };
 
   return (
-    <>
-      {Platform.OS === 'web' && (
-        <style type="text/css">{`
-          html, body, #root {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            background-color: #F8F5FF;
-          }
-        `}</style>
-      )}
-
-      <NavigationContainer>
-        <Stack.Navigator 
-          initialRouteName="Welcome"
-          screenOptions={{ headerShown: false }}
-        >
-          <Stack.Screen name="Welcome" component={WelcomeScreen} />
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Register" component={RegisterScreen} />
-          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-          
-          {/* 2. SUMAR LA RUTA PRINCIPAL QUE CONTIENE LAS PESTAÑAS Y LA BARRA INFERIOR */}
-          <Stack.Screen name="Main" component={MainTabNavigator} />
-        </Stack.Navigator>
-      </NavigationContainer>
-    </>
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" />
+      <CreateOutfitScreen navigation={dummyNavigation} />
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F5F5FA',
+  },
+});
