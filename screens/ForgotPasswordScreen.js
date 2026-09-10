@@ -14,14 +14,7 @@ import { MESSAGES } from '../theme/messages';
 import ResponsiveContainer from '../components/ResponsiveContainer';
 import AlertMessage from '../components/AlertMessage';
 import { resetUserPassword } from '../services/database';
-
-// ============================================================
-// CONFIGURACIÓN DE EMAILJS
-// ============================================================
-// IMPORTANTE: Asegurate de pegar tus credenciales reales aquí
-const EMAILJS_SERVICE_ID = 'service_f75fbir'; // Reemplazar con tu Service ID
-const EMAILJS_TEMPLATE_ID = 'template_z3y7t8b';       // Tu Template ID de EmailJS
-const EMAILJS_PUBLIC_KEY = 'D3fmwok6fbm58WR_p';   // Reemplazar con tu Public Key
+import { sendForgotPasswordEmail } from '../services/emailService';
 
 // ============================================================
 // PANTALLA RECUPERAR CONTRASEÑA
@@ -90,30 +83,8 @@ export default function ForgotPasswordScreen({ navigation }) {
         return;
       }
 
-      // 3. Parámetros para la plantilla de EmailJS
-      const templateParams = {
-        user_email: email,
-        temp_password: tempPassword,
-      };
-
-      // 4. Envío de correo mediante API HTTP directa de EmailJS (Evita fallos en React Native/Expo)
-      const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          service_id: EMAILJS_SERVICE_ID,
-          template_id: EMAILJS_TEMPLATE_ID,
-          user_id: EMAILJS_PUBLIC_KEY,
-          template_params: templateParams,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`EmailJS Error status ${response.status}: ${errorText}`);
-      }
+      // 3. Envío de correo centralizado vía emailService.js
+      await sendForgotPasswordEmail(email, tempPassword);
 
       setAlert({
         type: 'success',
@@ -284,7 +255,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-    justify: 'space-between',
+    justifyContent: 'space-between',
   },
   topBar: {
     backgroundColor: '#B185DB',

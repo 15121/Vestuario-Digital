@@ -16,8 +16,6 @@ import AlertMessage from '../components/AlertMessage';
 import { MESSAGES } from '../theme/messages';
 import { loginUser } from '../services/database';
 
-
-
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,7 +30,7 @@ export default function LoginScreen({ navigation }) {
     if (alert.message) setAlert({ type: '', message: '' });
   };
 
-const handleLogin = () => {
+  const handleLogin = () => {
     // 1. Validación de campos obligatorios
     if (!email || !password) {
       setAlert({
@@ -44,7 +42,7 @@ const handleLogin = () => {
 
     // 2. Intento de inicio de sesión
     try {
-      loginUser(email, password);
+      const userResult = loginUser(email, password);
       
       setAlert({
         type: 'success',
@@ -52,11 +50,11 @@ const handleLogin = () => {
       });
 
       setTimeout(() => {
-        navigation?.navigate('Home');
+        // Redirige a Main enviando el usuario logueado
+        navigation?.navigate('Main', { user: userResult });
       }, 1200);
 
     } catch (error) {
-      // Muestra "Esta cuenta no existe." enviándole la clave creada
       setAlert({
         type: 'error',
         message: MESSAGES.USER_NOT_FOUND || 'Esta cuenta no existe.',
@@ -64,7 +62,6 @@ const handleLogin = () => {
     }
   };
 
-  // Función flexible para evitar fallos de ruta entre 'ForgotPassword' y 'ForgotPasswordScreen'
   const goToForgotPassword = () => {
     try {
       navigation.navigate('ForgotPassword');
@@ -191,8 +188,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8E9FE',
   },
-
-  // HEADER IGUAL A REGISTERSCREEN (ALTO EN CELULAR 85, PC 60)
   topBar: {
     backgroundColor: '#B185DB',
     height: 85,
@@ -209,25 +204,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 18,
   },
-
-// CONTENEDOR DEL SCROLL
-// Permite que el contenido ocupe toda la altura disponible
-// y así podamos centrarlo verticalmente en celular.
-scrollContent: {
-  flexGrow: 1,
-  paddingBottom: 20,
-},
-// CONTENIDO PRINCIPAL DEL LOGIN
-// En celular, flex: 1 permite ocupar el espacio disponible
-// y justifyContent: 'center' centra todo el formulario
-// verticalmente en la pantalla.
-mainContent: {
-  width: '100%',
-  flexGrow: 1,
-  paddingHorizontal: 24,
-  paddingTop: 10,
-  justifyContent: 'center',
-},
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 20,
+  },
+  mainContent: {
+    width: '100%',
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingTop: 10,
+    justifyContent: 'center',
+  },
   desktopContent: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -236,14 +223,12 @@ mainContent: {
     gap: 60,
     paddingTop: 30,
   },
-
   leftColumn: {
     width: '100%',
   },
   desktopLeftColumn: {
     width: '45%',
   },
-
   title: {
     fontSize: 30,
     fontFamily: 'Poppins_700Bold',
@@ -258,7 +243,6 @@ mainContent: {
     textAlign: 'center',
     marginBottom: 16,
   },
-
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -279,7 +263,6 @@ mainContent: {
     fontFamily: 'Poppins_400Regular',
     color: '#333333',
   },
-
   forgotPasswordContainer: {
     alignItems: 'flex-end',
     marginBottom: 14,
@@ -290,8 +273,6 @@ mainContent: {
     fontSize: 13,
     fontFamily: 'Poppins_600SemiBold',
   },
-
-  // BOTÓN CON EL VIOLETA EXACTO #764DC6
   submitButton: {
     backgroundColor: '#764DC6',
     height: 48,
@@ -305,7 +286,6 @@ mainContent: {
     fontSize: 16,
     fontFamily: 'Poppins_600SemiBold',
   },
-
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -322,7 +302,6 @@ mainContent: {
     color: '#8A8A8A',
     fontFamily: 'Poppins_400Regular',
   },
-
   footerContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -339,7 +318,6 @@ mainContent: {
     fontFamily: 'Poppins_600SemiBold',
     color: '#B87EEE',
   },
-
   desktopRightColumn: {
     width: '50%',
     alignItems: 'center',

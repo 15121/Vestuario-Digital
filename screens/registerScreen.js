@@ -81,7 +81,7 @@ export default function RegisterScreen({ navigation }) {
   };
 
 
-// ==========================================================
+  // ==========================================================
   // FUNCIÓN DE REGISTRO
   // ==========================================================
 
@@ -122,13 +122,13 @@ export default function RegisterScreen({ navigation }) {
 
 
     // --------------------------------------------------------
-    // GUARDAR USUARIO
+    // GUARDAR USUARIO Y REDIRIGIR A HOME
     // --------------------------------------------------------
 
     try {
 
-      // Agregamos await para esperar la respuesta del guardado
-      await registerUser(
+      // Guardamos y obtenemos los datos del nuevo usuario
+      const newUser = await registerUser(
         name,
         lastname,
         email,
@@ -137,7 +137,7 @@ export default function RegisterScreen({ navigation }) {
 
 
       // ------------------------------------------------------
-      // REGISTRO EXITOSO
+      // REGISTRO EXITOSO: ALERTA Y REDIRECCIÓN A MAIN (HOME)
       // ------------------------------------------------------
 
       setAlert({
@@ -146,8 +146,20 @@ export default function RegisterScreen({ navigation }) {
       });
 
       setTimeout(() => {
-        navigation?.navigate('Login');
-      }, 1500);
+        // Reiniciamos la pila de navegación hacia Main enviando los datos
+        navigation.reset({
+          index: 0,
+          routes: [
+            {
+              name: 'Main',
+              params: {
+                user: newUser || { name, lastname, email },
+                isTempPassword: false,
+              },
+            },
+          ],
+        });
+      }, 1200);
 
     } catch (error) {
 
@@ -176,8 +188,6 @@ export default function RegisterScreen({ navigation }) {
         {/* ==================================================
             BARRA SUPERIOR
             Contiene el botón para volver a la pantalla anterior.
-            En Celular conserva el grosor pero con la flecha
-            más pequeña y un poco más abajo.
             ================================================== */}
 
         <View style={[styles.topBar, isDesktop && styles.desktopTopBar]}>
@@ -205,12 +215,6 @@ export default function RegisterScreen({ navigation }) {
 
           {/* =================================================
               CONTENIDO PRINCIPAL
-              
-              CELULAR:
-              - Elevado un poco más arriba y centrado verticalmente.
-              
-              PC:
-              - Dos columnas intactas.
               ================================================= */}
 
           <View
@@ -252,7 +256,7 @@ export default function RegisterScreen({ navigation }) {
 
 
               {/* =============================================
-                  CARTEL DE ALERTA DISEÑADO (AQUÍ SE MUESTRA EN WEB Y CELULAR)
+                  CARTEL DE ALERTA DISEÑADO
                   ============================================= */}
 
               <AlertMessage type={alert.type} message={alert.message} />
@@ -481,22 +485,10 @@ export default function RegisterScreen({ navigation }) {
 
 const styles = StyleSheet.create({
 
-
-  // ==========================================================
-  // CONTENEDOR GENERAL DE LA PANTALLA
-  // ==========================================================
-
   container: {
     flex: 1,
-
-    // Fondo de la aplicación.
     backgroundColor: COLORS.background,
   },
-
-
-  // ==========================================================
-  // BARRA SUPERIOR - POR DEFECTO (CELULAR)
-  // ==========================================================
 
   topBar: {
     backgroundColor: '#B185DB',
@@ -505,19 +497,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
 
-
-  // ==========================================================
-  // BARRA SUPERIOR - PC
-  // ==========================================================
-
   desktopTopBar: {
     height: 60,
   },
-
-
-  // ==========================================================
-  // BOTÓN VOLVER
-  // ==========================================================
 
   backButton: {
     width: 36,
@@ -527,209 +509,98 @@ const styles = StyleSheet.create({
     marginTop: 18,
   },
 
-
-  // ==========================================================
-  // CONTENIDO DEL SCROLL
-  // ==========================================================
-
   scrollContent: {
     flexGrow: 1,
-
-    // Centra el bloque entero verticalmente
     justifyContent: 'center',
   },
-
-
-  // ==========================================================
-  // CONTENIDO PRINCIPAL - CELULAR
-  // ==========================================================
 
   mainContent: {
     width: '100%',
-
     paddingHorizontal: 24,
-
     justifyContent: 'center',
-
     flexDirection: 'column',
-
-    // Eleva un poco el bloque completo (título, campos y botón) más hacia arriba
     marginTop: -25,
   },
 
-
-  // ==========================================================
-  // CONTENIDO PRINCIPAL - PC
-  // ==========================================================
-
   desktopContent: {
     flexDirection: 'row',
-
     alignItems: 'center',
-
     justifyContent: 'center',
-
     paddingHorizontal: '8%',
-
     gap: 60,
-
     marginTop: 0,
   },
-
-
-  // ==========================================================
-  // COLUMNA DEL FORMULARIO - CELULAR
-  // ==========================================================
 
   leftColumn: {
     width: '100%',
   },
 
-
-  // ==========================================================
-  // COLUMNA DEL FORMULARIO - PC
-  // ==========================================================
-
   desktopLeftColumn: {
     width: '45%',
   },
 
-
-  // ==========================================================
-  // TÍTULO
-  // ==========================================================
-
   title: {
     fontSize: 32,
-
     fontFamily: 'Poppins_700Bold',
-
     color: COLORS.primary,
-
     textAlign: 'center',
-
     marginBottom: 4,
   },
 
-
-  // ==========================================================
-  // SUBTÍTULO
-  // ==========================================================
-
   subtitle: {
     fontSize: 15,
-
     fontFamily: 'Poppins_400Regular',
-
     color: COLORS.textLight,
-
     textAlign: 'center',
-
     marginBottom: 20,
   },
 
-
-  // ==========================================================
-  // CONTENEDOR DE CADA INPUT
-  // ==========================================================
-
   inputContainer: {
     flexDirection: 'row',
-
     alignItems: 'center',
-
     backgroundColor: '#FFFFFF',
-
     borderRadius: 12,
-
     paddingHorizontal: 16,
-
     height: 48,
-
     marginBottom: 12,
-
     borderWidth: 1,
-
     borderColor: '#EFEFEF',
   },
-
-
-  // ==========================================================
-  // ÍCONO DE LOS INPUTS
-  // ==========================================================
 
   inputIcon: {
     marginRight: 10,
   },
 
-
-  // ==========================================================
-  // TEXTO DENTRO DE LOS INPUTS
-  // ==========================================================
-
   input: {
     flex: 1,
-
     fontSize: 14,
-
     fontFamily: 'Poppins_400Regular',
-
     color: '#333333',
   },
 
-
-  // ==========================================================
-  // BOTÓN CREAR CUENTA
-  // ==========================================================
-
   submitButton: {
     backgroundColor: '#764dc6',
-
     height: 50,
-
     borderRadius: 12,
-
     alignItems: 'center',
-
     justifyContent: 'center',
-
     marginTop: 10,
   },
 
-
-  // ==========================================================
-  // TEXTO DEL BOTÓN CREAR CUENTA
-  // ==========================================================
-
   submitButtonText: {
     color: '#FFFFFF',
-
     fontSize: 16,
-
     fontFamily: 'Poppins_600SemiBold',
   },
 
-
-  // ==========================================================
-  // COLUMNA DE LA ILUSTRACIÓN - PC
-  // ==========================================================
-
   desktopRightColumn: {
     width: '50%',
-
     alignItems: 'center',
-
     justifyContent: 'center',
   },
 
-
-  // ==========================================================
-  // ILUSTRACIÓN DEL ARMARIO - PC
-  // ==========================================================
-
   illustrationImage: {
     width: '100%',
-
     height: 420,
   },
 
