@@ -377,7 +377,7 @@ function DesktopSidebar({
         style={styles.addButton}
         onPress={() => {
           try {
-            navigation.navigate('CrearOutfit', { user });
+           navigation.navigate('CreateOutfit', { user });
           } catch (error) {
             try {
               navigation.navigate('Main', {
@@ -493,90 +493,87 @@ function HistoryCard({
 }) {
   return (
     <View
-      style={[
-        styles.historyCard,
+      style={
         isDesktop
-          ? styles.historyCardDesktop
-          : styles.historyCardMobile,
-      ]}
+          ? styles.historyCardWrapperDesktop
+          : styles.historyCardWrapperMobile
+      }
     >
 
-      {/* IMAGEN */}
+      {/* FECHA ARRIBA DE LA TARJETA */}
+      <View style={styles.historyDateBadge}>
+        <Ionicons
+          name="calendar-outline"
+          size={18}
+          color={COLORS.buttonDark}
+        />
 
-      <View
-        style={
-          isDesktop
-            ? styles.historyImageContainerDesktop
-            : styles.historyImageContainerMobile
-        }
-      >
-        {item?.imageUri ? (
-          <Image
-            source={{ uri: item.imageUri }}
-            style={styles.historyImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={styles.imagePlaceholder}>
-            <Ionicons
-              name="shirt-outline"
-              size={42}
-              color={COLORS.primary}
-            />
-          </View>
-        )}
+        <Text style={styles.historyDateBadgeText}>
+          Usado el {formatShortDate(item?.date)}
+        </Text>
       </View>
 
-      {/* INFORMACIÓN */}
+      {/* TARJETA */}
+      <View style={styles.historyCard}>
 
-      <View style={styles.historyInfo}>
-
-        <Text
-          style={styles.historyName}
-          numberOfLines={2}
+        {/* IMAGEN */}
+        <View
+          style={
+            isDesktop
+              ? styles.historyImageContainerDesktop
+              : styles.historyImageContainerMobile
+          }
         >
-          {item?.outfitName || 'Outfit sin nombre'}
-        </Text>
+          {item?.imageUri ? (
+            <Image
+              source={{ uri: item.imageUri }}
+              style={styles.historyImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <Ionicons
+                name="shirt-outline"
+                size={42}
+                color={COLORS.primary}
+              />
+            </View>
+          )}
+        </View>
 
-        {/* FECHA */}
+        {/* INFORMACIÓN */}
+        <View style={styles.historyInfo}>
 
-        <View style={styles.infoRow}>
-
-          <Ionicons
-            name="calendar-outline"
-            size={22}
-            color={COLORS.buttonDark}
-          />
-
-          <Text style={styles.infoText}>
-            Usado el {formatShortDate(item?.date)}
+          <Text
+            style={styles.historyName}
+            numberOfLines={2}
+          >
+            {item?.outfitName || 'Outfit sin nombre'}
           </Text>
+
+          {/* NOTA */}
+          {!!item?.note && (
+            <View style={styles.infoRow}>
+
+              <Ionicons
+                name="document-text-outline"
+                size={22}
+                color={COLORS.buttonDark}
+              />
+
+              <Text style={styles.infoText}>
+                <Text style={styles.noteLabel}>
+                  Nota:
+                </Text>{' '}
+                {item.note}
+              </Text>
+
+            </View>
+          )}
 
         </View>
 
-        {/* NOTA */}
-
-        {!!item?.note && (
-          <View style={styles.infoRow}>
-
-            <Ionicons
-              name="document-text-outline"
-              size={22}
-              color={COLORS.buttonDark}
-            />
-
-            <Text style={styles.infoText}>
-              <Text style={styles.noteLabel}>
-                Nota:
-              </Text>{' '}
-              {item.note}
-            </Text>
-
-          </View>
-        )}
-
       </View>
-
     </View>
   );
 }
@@ -995,30 +992,65 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
+historyCardDesktop: {
+  width: '23.5%',
+  minWidth: 220,
+},
 
-  historyCardDesktop: {
-    width: '23.5%',
-    minWidth: 220,
-    marginBottom: 24,
-  },
-
+historyCardWrapperDesktop: {
+  width: '23.5%',
+  minWidth: 220,
+  marginBottom: 30,
+},
   /* ==========================================================
      LISTA MOBILE
   ========================================================== */
 
-  historyList: {
-    width: '100%',
-  },
+ historyList: {
+  width: '100%',
+},
 
-  historyCardMobile: {
-    width: '100%',
-    minHeight: 180,
-    marginBottom: 18,
-  },
+historyCardWrapperMobile: {
+  width: '100%',
+  marginBottom: 26,
+},
 
+historyCardMobile: {
+  width: '100%',
+  minHeight: 180,
+  flexDirection: 'row',
+  alignItems: 'center',
+},
   /* ==========================================================
      TARJETA GENERAL
   ========================================================== */
+historyDateBadge: {
+  alignSelf: 'flex-start',
+  flexDirection: 'row',
+  alignItems: 'center',
+
+  backgroundColor: '#F2E9FF',
+
+  paddingHorizontal: 12,
+  paddingVertical: 6,
+
+  borderTopLeftRadius: 10,
+  borderTopRightRadius: 10,
+
+  marginLeft: 12,
+  marginBottom: 6,
+},
+
+historyDateBadgeText: {
+  marginLeft: 6,
+
+  fontFamily: 'Poppins_600SemiBold',
+  fontSize: 12,
+
+  color: COLORS.buttonDark,
+},
+
+
 
   historyCard: {
     backgroundColor: '#FFFFFF',
@@ -1082,10 +1114,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  historyCardMobile: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
 
   historyName: {
     fontFamily: 'Poppins_700Bold',

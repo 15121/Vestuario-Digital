@@ -8,6 +8,7 @@ import {
   Pressable,
   SafeAreaView,
   Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../theme/colours';
@@ -25,11 +26,155 @@ export default function SideMenu({
   onHelp,
   onLogout,
 }) {
+  const { width } = useWindowDimensions();
+  const isDesktop = width > 768;
+
   const userName = user
     ? `${user.name || ''} ${user.lastname || ''}`.trim()
     : 'Usuario';
 
   const userEmail = user?.email || '';
+
+  const menuContent = (
+    <SafeAreaView style={styles.menuContainer}>
+      <View
+        style={[
+          styles.menu,
+          isDesktop ? styles.menuRight : styles.menuLeft,
+        ]}
+      >
+
+        {/* =========================
+            PERFIL
+        ========================= */}
+        <View style={styles.profileSection}>
+
+          <View style={styles.avatar}>
+            <Ionicons
+              name="person"
+              size={54}
+              color="#FFFFFF"
+            />
+          </View>
+
+          <Text
+            style={styles.userName}
+            numberOfLines={1}
+          >
+            {userName}
+          </Text>
+
+          <Text
+            style={styles.userEmail}
+            numberOfLines={1}
+          >
+            {userEmail}
+          </Text>
+
+        </View>
+
+        {/* =========================
+            OPCIONES
+        ========================= */}
+
+        <View style={styles.menuOptions}>
+
+          {/* MI PERFIL */}
+          <TouchableOpacity
+            style={styles.menuItem}
+            activeOpacity={0.7}
+            onPress={() => {
+              onClose?.();
+              onProfile?.();
+            }}
+          >
+            <View style={styles.iconContainer}>
+              <Ionicons
+                name="person-circle-outline"
+                size={27}
+                color={COLORS.primary}
+              />
+            </View>
+
+            <Text style={styles.menuText}>
+              Mi perfil
+            </Text>
+          </TouchableOpacity>
+
+          <View style={styles.separator} />
+
+          {/* ACERCA DE LA APLICACIÓN */}
+          <TouchableOpacity
+            style={styles.menuItem}
+            activeOpacity={0.7}
+            onPress={() => {
+              onClose?.();
+              onAbout?.();
+            }}
+          >
+            <View style={styles.iconContainer}>
+              <Ionicons
+                name="information-circle-outline"
+                size={27}
+                color={COLORS.primary}
+              />
+            </View>
+
+            <Text style={styles.menuText}>
+              Acerca de la aplicación
+            </Text>
+          </TouchableOpacity>
+
+          {/* AYUDA */}
+          <TouchableOpacity
+            style={styles.menuItem}
+            activeOpacity={0.7}
+            onPress={() => {
+              onClose?.();
+              onHelp?.();
+            }}
+          >
+            <View style={styles.iconContainer}>
+              <Ionicons
+                name="help-outline"
+                size={29}
+                color={COLORS.primary}
+              />
+            </View>
+
+            <Text style={styles.menuText}>
+              Ayuda
+            </Text>
+          </TouchableOpacity>
+
+          <View style={styles.separator} />
+
+          {/* =========================
+              CERRAR SESIÓN
+          ========================= */}
+          <TouchableOpacity
+            style={styles.logoutButton}
+            activeOpacity={0.75}
+            onPress={() => {
+              onClose?.();
+              onLogout?.();
+            }}
+          >
+            <Ionicons
+              name="log-out-outline"
+              size={28}
+              color={COLORS.primary}
+            />
+
+            <Text style={styles.logoutText}>
+              Cerrar sesión
+            </Text>
+          </TouchableOpacity>
+
+        </View>
+      </View>
+    </SafeAreaView>
+  );
 
   return (
     <Modal
@@ -40,146 +185,30 @@ export default function SideMenu({
     >
       <View style={styles.overlay}>
 
-        {/* Zona que queda fuera del menú */}
-        <Pressable
-          style={styles.overlayTouchable}
-          onPress={onClose}
-        />
+        {isDesktop ? (
+          <>
+            {/* Zona que queda fuera del menú */}
+            <Pressable
+              style={styles.overlayTouchable}
+              onPress={onClose}
+            />
 
-        {/* MENÚ LATERAL */}
-        <SafeAreaView style={styles.menuContainer}>
-          <View style={styles.menu}>
+            {/* MENÚ LATERAL - DESKTOP (derecha) */}
+            {menuContent}
+          </>
+        ) : (
+          <>
+            {/* MENÚ LATERAL - MOBILE (izquierda) */}
+            {menuContent}
 
-            {/* =========================
-                PERFIL
-            ========================= */}
-            <View style={styles.profileSection}>
+            {/* Zona que queda fuera del menú */}
+            <Pressable
+              style={styles.overlayTouchable}
+              onPress={onClose}
+            />
+          </>
+        )}
 
-              <View style={styles.avatar}>
-                <Ionicons
-                  name="person"
-                  size={54}
-                  color="#FFFFFF"
-                />
-              </View>
-
-              <Text
-                style={styles.userName}
-                numberOfLines={1}
-              >
-                {userName}
-              </Text>
-
-              <Text
-                style={styles.userEmail}
-                numberOfLines={1}
-              >
-                {userEmail}
-              </Text>
-
-            </View>
-
-            {/* =========================
-                OPCIONES
-            ========================= */}
-
-            <View style={styles.menuOptions}>
-
-              {/* MI PERFIL */}
-              <TouchableOpacity
-                style={styles.menuItem}
-                activeOpacity={0.7}
-                onPress={() => {
-                  onClose?.();
-                  onProfile?.();
-                }}
-              >
-                <View style={styles.iconContainer}>
-                  <Ionicons
-                    name="person-circle-outline"
-                    size={27}
-                    color={COLORS.primary}
-                  />
-                </View>
-
-                <Text style={styles.menuText}>
-                  Mi perfil
-                </Text>
-              </TouchableOpacity>
-
-              <View style={styles.separator} />
-
-              {/* ACERCA DE LA APLICACIÓN */}
-              <TouchableOpacity
-                style={styles.menuItem}
-                activeOpacity={0.7}
-                onPress={() => {
-                  onClose?.();
-                  onAbout?.();
-                }}
-              >
-                <View style={styles.iconContainer}>
-                  <Ionicons
-                    name="information-circle-outline"
-                    size={27}
-                    color={COLORS.primary}
-                  />
-                </View>
-
-                <Text style={styles.menuText}>
-                  Acerca de la aplicación
-                </Text>
-              </TouchableOpacity>
-
-              {/* AYUDA */}
-              <TouchableOpacity
-                style={styles.menuItem}
-                activeOpacity={0.7}
-                onPress={() => {
-                  onClose?.();
-                  onHelp?.();
-                }}
-              >
-                <View style={styles.iconContainer}>
-                  <Ionicons
-                    name="help-outline"
-                    size={29}
-                    color={COLORS.primary}
-                  />
-                </View>
-
-                <Text style={styles.menuText}>
-                  Ayuda
-                </Text>
-              </TouchableOpacity>
-
-              <View style={styles.separator} />
-
-              {/* =========================
-                  CERRAR SESIÓN
-              ========================= */}
-              <TouchableOpacity
-                style={styles.logoutButton}
-                activeOpacity={0.75}
-                onPress={() => {
-                  onClose?.();
-                  onLogout?.();
-                }}
-              >
-                <Ionicons
-                  name="log-out-outline"
-                  size={28}
-                  color={COLORS.primary}
-                />
-
-                <Text style={styles.logoutText}>
-                  Cerrar sesión
-                </Text>
-              </TouchableOpacity>
-
-            </View>
-          </View>
-        </SafeAreaView>
       </View>
     </Modal>
   );
@@ -215,14 +244,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAF9FF',
     paddingHorizontal: 28,
     paddingTop: 30,
+  },
 
-    // Esquina superior derecha redondeada
+  // Variante PC: el menú cuelga del lado derecho,
+  // así que las esquinas redondeadas y la sombra
+  // van sobre el borde izquierdo (el borde "libre").
+  menuRight: {
+    borderTopLeftRadius: 28,
+    borderBottomLeftRadius: 28,
+
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: -4,
+      height: 0,
+    },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+
+  // Variante mobile: el menú cuelga del lado izquierdo,
+  // así que las esquinas redondeadas y la sombra
+  // van sobre el borde derecho (el borde "libre").
+  menuLeft: {
     borderTopRightRadius: 28,
-
-    // Esquina inferior derecha redondeada
     borderBottomRightRadius: 28,
 
-    // Sombra
     shadowColor: '#000000',
     shadowOffset: {
       width: 4,

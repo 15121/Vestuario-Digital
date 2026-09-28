@@ -2,18 +2,44 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+
 export default function AlertMessage({ type = 'success', message }) {
   if (!message) return null;
 
   const isSuccess = type === 'success';
+  const isWarning = type === 'warning';
+
+  const containerStyle = isSuccess
+    ? styles.successBg
+    : isWarning
+    ? styles.warningBg
+    : styles.errorBg;
+
+  const iconBgStyle = isSuccess
+    ? styles.successIconBg
+    : isWarning
+    ? styles.warningIconBg
+    : styles.errorIconBg;
+
+  const iconName = isSuccess
+    ? 'checkmark'
+    : isWarning
+    ? 'alert-circle-outline'
+    : 'warning-outline';
+
+  const iconColor = isSuccess
+    ? '#2E7D32'
+    : isWarning
+    ? '#B26A00'
+    : '#D32F2F';
 
   return (
-    <View style={[styles.container, isSuccess ? styles.successBg : styles.errorBg]}>
-      <View style={[styles.iconCircle, isSuccess ? styles.successIconBg : styles.errorIconBg]}>
+    <View style={[styles.container, containerStyle]}>
+      <View style={[styles.iconCircle, iconBgStyle]}>
         <Ionicons 
-          name={isSuccess ? "checkmark" : "warning-outline"} 
+          name={iconName} 
           size={16} 
-          color={isSuccess ? "#2E7D32" : "#D32F2F"} 
+          color={iconColor} 
         />
       </View>
       <Text style={styles.text}>{message}</Text>
@@ -37,6 +63,9 @@ const styles = StyleSheet.create({
   errorBg: {
     backgroundColor: '#FFEBEE', // Rojo claro
   },
+  warningBg: {
+    backgroundColor: '#FFF3E0', // Naranja claro
+  },
   iconCircle: {
     width: 26,
     height: 26,
@@ -50,6 +79,9 @@ const styles = StyleSheet.create({
   },
   errorIconBg: {
     backgroundColor: '#FFCDD2',
+  },
+  warningIconBg: {
+    backgroundColor: '#FFE0B2',
   },
   text: {
     fontSize: 13,

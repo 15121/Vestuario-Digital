@@ -1,5 +1,11 @@
 
-import React, { useState, useCallback } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+} from 'react';
+
 import {
   View,
   Text,
@@ -10,6 +16,9 @@ import {
   FlatList,
   Alert,
   useWindowDimensions,
+  Modal,
+  Pressable,
+  ScrollView,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
  
@@ -76,15 +85,86 @@ const formatDate = (isoString) => {
 export default function ClothingScreen({ navigation, route }) {
   const user = route?.params?.user;
  
-  const [clothes, setClothes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchText, setSearchText] = useState('');
-  const [activeCategory, setActiveCategory] = useState('Todas');
-  const [sortOrder, setSortOrder] = useState('recientes'); // 'recientes' | 'antiguas'
-  const [sortMenuVisible, setSortMenuVisible] = useState(false);
+const [clothes, setClothes] = useState([]);
+const [loading, setLoading] = useState(true);
+
+const [searchText, setSearchText] = useState('');
+
+const [activeCategory, setActiveCategory] = useState('Todas');
+
+const [sortOrder, setSortOrder] = useState('recientes');
+const [sortMenuVisible, setSortMenuVisible] = useState(false);
+
+// ==========================================================
+// FILTROS AVANZADOS
+// ==========================================================
+
+const [filtersVisible, setFiltersVisible] = useState(false);
+
+const [selectedColor, setSelectedColor] = useState('Todos');
+const [selectedSeason, setSelectedSeason] = useState('Todas');
+const [selectedOccasion, setSelectedOccasion] = useState('Todas');
  
   const { width } = useWindowDimensions();
   const isDesktop = width > 768;
+  // ==========================================================
+// OPCIONES REALES BASADAS EN LAS PRENDAS DEL USUARIO
+// ==========================================================
+
+const getUniqueValues = useCallback(
+  (field) => {
+    return Array.from(
+      new Set(
+        clothes
+          .map((item) =>
+            String(item?.[field] || '').trim()
+          )
+          .filter(Boolean)
+      )
+    );
+  },
+  [clothes]
+);
+
+const categoryFilters = useMemo(() => {
+  const categories = getUniqueValues('category');
+
+  return [
+    { key: 'Todas', label: 'Todas' },
+    ...categories.map((category) => ({
+      key: category,
+      label: category,
+    })),
+  ];
+}, [getUniqueValues]);
+
+const seasonOptions = useMemo(() => {
+  const seasons = getUniqueValues('season')
+    .filter((season) => season !== 'Todas');
+
+  return ['Todas', ...seasons];
+}, [getUniqueValues]);
+
+const colorOptions = useMemo(() => {
+  return ['Todos', ...getUniqueValues('color')];
+}, [getUniqueValues]);
+
+const occasionOptions = useMemo(() => {
+  return ['Todas', ...getUniqueValues('ocasion')];
+}, [getUniqueValues]);
+
+// Si una categoría deja de existir porque se eliminó
+// una prenda, volvemos automáticamente a "Todas".
+useEffect(() => {
+  if (
+    activeCategory !== 'Todas' &&
+    !categoryFilters.some(
+      (item) => item.key === activeCategory
+    )
+  ) {
+    setActiveCategory('Todas');
+  }
+}, [activeCategory, categoryFilters]);
  
   // ----------------------------------------------------------
   // CARGA DE PRENDAS (se repite cada vez que la pantalla toma foco,
@@ -120,18 +200,107 @@ export default function ClothingScreen({ navigation, route }) {
   // FILTRADO Y ORDEN
   // ----------------------------------------------------------
  
-  const filteredClothes = clothes
-    .filter((item) => activeCategory === 'Todas' || item.category === activeCategory)
-    .filter((item) =>
-      searchText.trim() === ''
-        ? true
-        : (item.title || '').toLowerCase().includes(searchText.trim().toLowerCase())
-    )
-    .sort((a, b) => {
-      const dateA = new Date(a.createdAt).getTime() || 0;
-      const dateB = new Date(b.createdAt).getTime() || 0;
-      return sortOrder === 'recientes' ? dateB - dateA : dateA - dateB;
-    });
+// ==========================================================
+// NORMALIZAR TEXTO
+// Permite buscar sin importar mayúsculas/minúsculas
+// ni diferencias de acentos.
+// ==========================================================
+
+const normalizeText = (value) => {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+};
+
+
+// ==========================================================
+// FILTRADO + BÚSQUEDA + ORDEN
+// ==========================================================
+
+const filteredClothes = clothes
+  .filter((item) => {
+    // ------------------------------------------------------
+    // CATEGORÍA
+    // ------------------------------------------------------
+
+    if (
+      activeCategory !== 'Todas' &&
+      String(item.category || '').trim() !== activeCategory
+    ) {
+      return false;
+    }
+
+    // ------------------------------------------------------
+    // COLOR
+    // ------------------------------------------------------
+
+    if (
+      selectedColor !== 'Todos' &&
+      String(item.color || '').trim() !== selectedColor
+    ) {
+      return false;
+    }
+
+    // ------------------------------------------------------
+    // TEMPORADA
+    // ------------------------------------------------------
+
+    if (
+      selectedSeason !== 'Todas' &&
+      String(item.season || '').trim() !== selectedSeason
+    ) {
+      return false;
+    }
+
+    // ------------------------------------------------------
+    // OCASIÓN
+    // ------------------------------------------------------
+
+    if (
+      selectedOccasion !== 'Todas' &&
+      String(item.ocasion || '').trim() !== selectedOccasion
+    ) {
+      return false;
+    }
+
+    // ------------------------------------------------------
+    // BUSCADOR
+    // Busca en TODOS los datos visibles de la prenda.
+    // ------------------------------------------------------
+
+    const search = normalizeText(searchText);
+
+    if (!search) {
+      return true;
+    }
+
+    const searchableText = [
+      item.title,
+      item.category,
+      item.color,
+      item.season,
+      item.ocasion,
+      item.description,
+    ]
+      .map(normalizeText)
+      .join(' ');
+
+    return searchableText.includes(search);
+  })
+  .slice()
+  .sort((a, b) => {
+    const dateA = new Date(a.createdAt).getTime();
+    const dateB = new Date(b.createdAt).getTime();
+
+    const safeDateA = Number.isNaN(dateA) ? 0 : dateA;
+    const safeDateB = Number.isNaN(dateB) ? 0 : dateB;
+
+    return sortOrder === 'recientes'
+      ? safeDateB - safeDateA
+      : safeDateA - safeDateB;
+  });
  
   // ----------------------------------------------------------
   // ACCIONES POR PRENDA
@@ -158,26 +327,7 @@ export default function ClothingScreen({ navigation, route }) {
     }
   };
  
-  const handleMenuPress = (item) => {
-    Alert.alert(item.title, '¿Qué querés hacer con esta prenda?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Editar',
-        onPress: () => {
-          try {
-            navigation.navigate('EditarPrenda', { prenda: item });
-          } catch (e) {
-            Alert.alert('Próximamente', 'La edición de prendas se implementará más adelante.');
-          }
-        },
-      },
-      {
-        text: 'Eliminar',
-        style: 'destructive',
-        onPress: () => confirmDelete(item),
-      },
-    ]);
-  };
+ 
  
   const confirmDelete = (item) => {
     Alert.alert(
@@ -227,14 +377,11 @@ export default function ClothingScreen({ navigation, route }) {
         </View>
  
         <View style={styles.cardInfo}>
-          <View style={styles.cardTitleRow}>
-            <Text style={styles.cardTitle} numberOfLines={1}>
-              {item.title}
-            </Text>
-            <TouchableOpacity onPress={() => handleMenuPress(item)} hitSlop={8}>
-              <Ionicons name="ellipsis-vertical" size={18} color="#8A8A8A" />
-            </TouchableOpacity>
-          </View>
+         <View style={styles.cardTitleRow}>
+  <Text style={styles.cardTitle} numberOfLines={1}>
+    {item.title}
+  </Text>
+</View>
  
           <View style={styles.cardTagsRow}>
             <View style={styles.cardTag}>
@@ -289,7 +436,7 @@ export default function ClothingScreen({ navigation, route }) {
         style={styles.emptyButton}
         onPress={() => {
           try {
-            navigation.navigate('AgregarPrenda');
+            navigation.navigate('AddClothing', { user });
           } catch (e) {
             Alert.alert('Próximamente', 'La pantalla para agregar prendas se implementará pronto.');
           }
@@ -325,35 +472,52 @@ export default function ClothingScreen({ navigation, route }) {
           </View>
  
           <TouchableOpacity
-            style={styles.filtersButton}
-            onPress={() =>
-              Alert.alert('Filtros', 'Los filtros avanzados se implementarán en una próxima tarea.')
-            }
-          >
-            <Ionicons name="filter-outline" size={16} color={COLORS.buttonDark} />
-            <Text style={styles.filtersButtonText}>Filtros</Text>
-          </TouchableOpacity>
+  style={styles.filtersButton}
+  onPress={() => setFiltersVisible(true)}
+>
+  <Ionicons
+    name="filter-outline"
+    size={16}
+    color={COLORS.buttonDark}
+  />
+
+  <Text style={styles.filtersButtonText}>
+    Filtros
+  </Text>
+</TouchableOpacity>
         </View>
  
         {/* ================================================
             CHIPS DE CATEGORÍA
             ================================================ */}
-        <View style={styles.chipsRow}>
-          {CATEGORY_FILTERS.map((filter) => {
-            const isActive = activeCategory === filter.key;
-            return (
-              <TouchableOpacity
-                key={filter.key}
-                style={[styles.chip, isActive && styles.chipActive]}
-                onPress={() => setActiveCategory(filter.key)}
-              >
-                <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
-                  {filter.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+      <View style={styles.chipsRow}>
+  {categoryFilters.map((filter) => {
+    const isActive =
+      activeCategory === filter.key;
+
+    return (
+      <TouchableOpacity
+        key={filter.key}
+        style={[
+          styles.chip,
+          isActive && styles.chipActive,
+        ]}
+        onPress={() =>
+          setActiveCategory(filter.key)
+        }
+      >
+        <Text
+          style={[
+            styles.chipText,
+            isActive && styles.chipTextActive,
+          ]}
+        >
+          {filter.label}
+        </Text>
+      </TouchableOpacity>
+    );
+  })}
+</View>
  
         {/* ================================================
             CONTADOR + ORDEN
@@ -422,6 +586,202 @@ export default function ClothingScreen({ navigation, route }) {
           showsVerticalScrollIndicator={false}
         />
       )}
+            {/* ==================================================
+          MODAL DE FILTROS AVANZADOS
+          ================================================== */}
+
+      <Modal
+        visible={filtersVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() =>
+          setFiltersVisible(false)
+        }
+      >
+        <View style={styles.filterModalOverlay}>
+          <View style={styles.filterModalCard}>
+
+            <View style={styles.filterModalHeader}>
+              <Text style={styles.filterModalTitle}>
+                Filtros
+              </Text>
+
+              <TouchableOpacity
+                onPress={() =>
+                  setFiltersVisible(false)
+                }
+              >
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color={COLORS.textDark}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+            >
+
+              {/* ================================
+                  COLOR
+                  ================================ */}
+
+              <Text style={styles.filterSectionTitle}>
+                Color
+              </Text>
+
+              <View style={styles.filterOptionsRow}>
+                {colorOptions.map((option) => {
+                  const active =
+                    selectedColor === option;
+
+                  return (
+                    <TouchableOpacity
+                      key={`color-${option}`}
+                      style={[
+                        styles.filterOption,
+                        active &&
+                          styles.filterOptionActive,
+                      ]}
+                      onPress={() =>
+                        setSelectedColor(option)
+                      }
+                    >
+                      <Text
+                        style={[
+                          styles.filterOptionText,
+                          active &&
+                            styles.filterOptionTextActive,
+                        ]}
+                      >
+                        {option}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+
+              {/* ================================
+                  TEMPORADA
+                  ================================ */}
+
+              <Text style={styles.filterSectionTitle}>
+                Temporada
+              </Text>
+
+              <View style={styles.filterOptionsRow}>
+                {seasonOptions.map((option) => {
+                  const active =
+                    selectedSeason === option;
+
+                  return (
+                    <TouchableOpacity
+                      key={`season-${option}`}
+                      style={[
+                        styles.filterOption,
+                        active &&
+                          styles.filterOptionActive,
+                      ]}
+                      onPress={() =>
+                        setSelectedSeason(option)
+                      }
+                    >
+                      <Text
+                        style={[
+                          styles.filterOptionText,
+                          active &&
+                            styles.filterOptionTextActive,
+                        ]}
+                      >
+                        {option}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+
+              {/* ================================
+                  OCASIÓN
+                  ================================ */}
+
+              <Text style={styles.filterSectionTitle}>
+                Ocasión
+              </Text>
+
+              <View style={styles.filterOptionsRow}>
+                {occasionOptions.map((option) => {
+                  const active =
+                    selectedOccasion === option;
+
+                  return (
+                    <TouchableOpacity
+                      key={`occasion-${option}`}
+                      style={[
+                        styles.filterOption,
+                        active &&
+                          styles.filterOptionActive,
+                      ]}
+                      onPress={() =>
+                        setSelectedOccasion(option)
+                      }
+                    >
+                      <Text
+                        style={[
+                          styles.filterOptionText,
+                          active &&
+                            styles.filterOptionTextActive,
+                        ]}
+                      >
+                        {option}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+            </ScrollView>
+
+
+            {/* ================================
+                ACCIONES
+                ================================ */}
+
+            <View style={styles.filterActionsRow}>
+
+              <TouchableOpacity
+                style={styles.filterClearButton}
+                onPress={() => {
+                  setSelectedColor('Todos');
+                  setSelectedSeason('Todas');
+                  setSelectedOccasion('Todas');
+                  setActiveCategory('Todas');
+                  setSearchText('');
+                }}
+              >
+                <Text style={styles.filterClearText}>
+                  Limpiar
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.filterApplyButton}
+                onPress={() =>
+                  setFiltersVisible(false)
+                }
+              >
+                <Text style={styles.filterApplyText}>
+                  Aplicar
+                </Text>
+              </TouchableOpacity>
+
+            </View>
+
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -436,14 +796,19 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   topSection: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
+  paddingHorizontal: 16,
+  paddingTop: 16,
+  position: 'relative',
+  zIndex: 20,
+  elevation: 20,
+},
   topSectionDesktop: {
-    paddingHorizontal: 24,
-    paddingTop: 20,
-  },
- 
+  paddingHorizontal: 24,
+  paddingTop: 20,
+  position: 'relative',
+  zIndex: 20,
+  elevation: 20,
+},
   // ----------------------------------------------------------
   // BUSCADOR + FILTROS
   // ----------------------------------------------------------
@@ -525,12 +890,15 @@ const styles = StyleSheet.create({
   // ----------------------------------------------------------
   // CONTADOR + ORDEN
   // ----------------------------------------------------------
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
+ summaryRow: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: 12,
+  position: 'relative',
+  zIndex: 30,
+  elevation: 30,
+},
   summaryText: {
     fontSize: 13,
     fontFamily: 'Poppins_400Regular',
@@ -711,6 +1079,116 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontFamily: 'Poppins_600SemiBold',
+  },
+    // ==========================================================
+  // MODAL DE FILTROS
+  // ==========================================================
+
+  filterModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+
+  filterModalCard: {
+    width: '100%',
+    maxWidth: 520,
+    maxHeight: '85%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    elevation: 8,
+  },
+
+  filterModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+
+  filterModalTitle: {
+    fontSize: 20,
+    fontFamily: 'Poppins_600SemiBold',
+    color: COLORS.textDark,
+  },
+
+  filterSectionTitle: {
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: COLORS.textDark,
+    marginTop: 10,
+    marginBottom: 10,
+  },
+
+  filterOptionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+
+  filterOption: {
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: '#EFEFEF',
+  },
+
+  filterOptionActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+
+  filterOptionText: {
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+    color: COLORS.textDark,
+  },
+
+  filterOptionTextActive: {
+    color: '#FFFFFF',
+    fontFamily: 'Poppins_600SemiBold',
+  },
+
+  filterActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 18,
+  },
+
+  filterClearButton: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EFEFEF',
+  },
+
+  filterClearText: {
+    fontSize: 13,
+    fontFamily: 'Poppins_600SemiBold',
+    color: COLORS.textDark,
+  },
+
+  filterApplyButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 18,
+    backgroundColor: COLORS.primary,
+  },
+
+  filterApplyText: {
+    fontSize: 13,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#FFFFFF',
   },
 });
  

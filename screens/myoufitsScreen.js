@@ -25,6 +25,7 @@ import {
 
 import { COLORS } from '../theme/colours';
 
+
 // ============================================================
 // MIS OUTFITS
 // ============================================================
@@ -541,13 +542,7 @@ export default function MyOutfitsScreen({
 
     try {
 
-      navigation.navigate(
-        'CrearOutfit',
-        {
-          user,
-        }
-      );
-
+    navigation.navigate('CreateOutfit', { user });
     } catch (error) {
 
       Alert.alert(
@@ -820,32 +815,7 @@ export default function MyOutfitsScreen({
         </View>
 
 
-        {/* ====================================================
-            TÍTULO
-        ===================================================== */}
-
-        <View style={styles.sectionHeader}>
-
-          <Text style={styles.sectionTitle}>
-
-            {activeView === 'outfits'
-              ? 'Tus outfits guardados'
-              : 'Historial de outfits'}
-
-          </Text>
-
-
-          <Text style={styles.sectionSubtitle}>
-
-            {activeView === 'outfits'
-              ? 'Tocá un outfit para ver los detalles'
-              : 'Consultá los outfits que usaste anteriormente'}
-
-          </Text>
-
-        </View>
-
-
+ 
         {/* ====================================================
             CARGANDO
         ===================================================== */}
@@ -873,6 +843,21 @@ export default function MyOutfitsScreen({
 
           <FlatList
             data={filteredOutfits}
+            style={styles.outfitList}
+
+            ListHeaderComponent={
+              <View style={styles.sectionHeader}>
+
+    <Text style={styles.sectionTitle}>
+      Tus outfits guardados
+    </Text>
+
+    <Text style={styles.sectionSubtitle}>
+      Tocá un outfit para ver los detalles
+    </Text>
+
+  </View>
+}
 
             keyExtractor={(item) =>
               String(item.id)
@@ -982,7 +967,20 @@ export default function MyOutfitsScreen({
 
           <FlatList
             data={filteredHistory}
+  style={styles.outfitList}
+    ListHeaderComponent={
+    <View style={styles.sectionHeader}>
 
+      <Text style={styles.sectionTitle}>
+        Historial de outfits
+      </Text>
+
+      <Text style={styles.sectionSubtitle}>
+        Consultá los outfits que usaste anteriormente
+      </Text>
+
+    </View>
+  }
             keyExtractor={(item, index) =>
               String(
                 item.id ??
@@ -990,116 +988,78 @@ export default function MyOutfitsScreen({
               )
             }
 
-            renderItem={({ item }) => (
+           renderItem={({ item }) => {
+  // Buscamos el outfit original al que pertenece
+  // este registro del historial.
+  const outfit = outfits.find(
+    (savedOutfit) =>
+      String(savedOutfit.id) ===
+      String(item.outfitId)
+  );
 
-              <TouchableOpacity
-                style={styles.historyCard}
-                activeOpacity={0.9}
-                onPress={() => {
+  // Si encontramos el outfit original,
+  // usamos EXACTAMENTE la misma tarjeta
+  // que se utiliza en "Mis outfits".
+  if (outfit) {
+    return (
+      <View style={styles.historyOutfitWrapper}>
+        <OutfitCard
+          outfit={outfit}
+          clothesById={clothesById}
+          onPress={() => handleOpenOutfit(outfit)}
+          onOptions={() => {}}
+        />
 
-                  if (item.outfitId) {
+        <View style={styles.historyUsedBadge}>
+          <Ionicons
+            name="checkmark-circle"
+            size={16}
+            color={COLORS.primary}
+          />
 
-                    handleOpenOutfit({
+          <Text style={styles.historyUsedText}>
+            Usado el {formatDate(item.date)}
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
-                      id: item.outfitId,
+  // Si el outfit ya no existe, dejamos una tarjeta
+  // alternativa para no romper el historial.
+  return (
+    <View style={styles.historyFallbackCard}>
+      <View style={styles.historyFallbackIcon}>
+        <MaterialCommunityIcons
+          name="hanger"
+          size={32}
+          color="#B7A9C5"
+        />
+      </View>
 
-                      name:
-                        item.outfitName,
+      <View style={styles.historyFallbackInfo}>
+        <Text
+          style={styles.historyTitle}
+          numberOfLines={1}
+        >
+          {item.outfitName || 'Outfit'}
+        </Text>
 
-                      description:
-                        item.note,
+        <View style={styles.dateRow}>
+          <Ionicons
+            name="calendar-outline"
+            size={14}
+            color="#77707F"
+          />
 
-                    });
-
-                  }
-
-                }}
-              >
-
-                {/* Imagen */}
-
-                {item.imageUri ? (
-
-                  <Image
-                    source={{
-                      uri: item.imageUri,
-                    }}
-                    style={styles.historyImage}
-                    resizeMode="cover"
-                  />
-
-                ) : (
-
-                  <View
-                    style={
-                      styles.historyImagePlaceholder
-                    }
-                  >
-
-                    <MaterialCommunityIcons
-                      name="hanger"
-                      size={32}
-                      color="#B7A9C5"
-                    />
-
-                  </View>
-
-                )}
-
-
-                {/* Información */}
-
-                <View style={styles.historyInfo}>
-
-                  <Text
-                    style={styles.historyTitle}
-                    numberOfLines={1}
-                  >
-                    {item.outfitName ||
-                      'Outfit'}
-                  </Text>
-
-
-                  {item.note && (
-
-                    <Text
-                      style={styles.historyNote}
-                      numberOfLines={2}
-                    >
-                      {item.note}
-                    </Text>
-
-                  )}
-
-
-                  <View style={styles.dateRow}>
-
-                    <Ionicons
-                      name="calendar-outline"
-                      size={14}
-                      color="#77707F"
-                    />
-
-                    <Text
-                      style={styles.dateText}
-                    >
-                      {formatDate(item.date)}
-                    </Text>
-
-                  </View>
-
-                </View>
-
-
-                <Ionicons
-                  name="chevron-forward"
-                  size={23}
-                  color={COLORS.primary}
-                />
-
-              </TouchableOpacity>
-
-            )}
+          <Text style={styles.dateText}>
+            Usado el {formatDate(item.date)}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}}
 
             contentContainerStyle={[
               styles.listContent,
@@ -1341,7 +1301,11 @@ const styles = StyleSheet.create({
     paddingBottom: 30,
   },
 
-
+outfitList: {
+  flex: 1,
+  minHeight: 0,
+  width: '100%',
+},
   listEmptyContent: {
     flexGrow: 1,
   },
@@ -1666,4 +1630,74 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
   },
 
+  historyOutfitWrapper: {
+  position: 'relative',
+  marginBottom: 18,
+},
+
+historyUsedBadge: {
+  position: 'absolute',
+  top: 12,
+  left: 12,
+
+  flexDirection: 'row',
+  alignItems: 'center',
+
+  backgroundColor: '#FFFFFF',
+
+  borderRadius: 20,
+
+  paddingHorizontal: 10,
+  paddingVertical: 6,
+
+  shadowColor: '#000000',
+  shadowOffset: {
+    width: 0,
+    height: 2,
+  },
+  shadowOpacity: 0.12,
+  shadowRadius: 4,
+  elevation: 3,
+},
+
+historyUsedText: {
+  marginLeft: 5,
+  color: COLORS.primary,
+  fontSize: 11,
+  fontFamily: 'Poppins_600SemiBold',
+},
+
+historyFallbackCard: {
+  flexDirection: 'row',
+  alignItems: 'center',
+
+  backgroundColor: '#FFFFFF',
+
+  borderRadius: 14,
+
+  padding: 14,
+
+  marginBottom: 14,
+
+  borderWidth: 1,
+  borderColor: '#ECE7F1',
+},
+
+historyFallbackIcon: {
+  width: 70,
+  height: 70,
+
+  borderRadius: 10,
+
+  backgroundColor: '#F8F5FA',
+
+  alignItems: 'center',
+  justifyContent: 'center',
+
+  marginRight: 14,
+},
+
+historyFallbackInfo: {
+  flex: 1,
+},
 });

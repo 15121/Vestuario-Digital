@@ -1,4 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   View,
   Text,
@@ -16,11 +21,13 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   getOutfitById,
   getClothingItemById,
-  deleteOutfit,
+  addHistoryEntry,
 } from '../services/database';
-
 import { COLORS } from '../theme/colours';
 import { MESSAGES } from '../theme/messages';
+import {
+  OutfitScreenLayout,
+} from '../navigation/MainTabNavigator';
 
 // ============================================================
 // CONFIGURACIÓN DE CATEGORÍAS
@@ -197,13 +204,6 @@ function ClothingRow({ item, onPress }) {
           </Text>
         </View>
       </View>
-
-      {/* Flecha */}
-      <Ionicons
-        name="chevron-forward"
-        size={24}
-        color={COLORS.buttonDark}
-      />
     </TouchableOpacity>
   );
 }
@@ -305,7 +305,8 @@ export default function OutfitDetailScreen({ navigation, route }) {
   });
 
   const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState(false);
+const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+const successMessageTimeout = useRef(null);
 
   // ==========================================================
   // CARGAR OUTFIT
@@ -314,7 +315,13 @@ export default function OutfitDetailScreen({ navigation, route }) {
   useEffect(() => {
     loadOutfit();
   }, [outfitId]);
-
+useEffect(() => {
+  return () => {
+    if (successMessageTimeout.current) {
+      clearTimeout(successMessageTimeout.current);
+    }
+  };
+}, []);
   const loadOutfit = async () => {
     try {
       setLoading(true);
@@ -438,103 +445,20 @@ export default function OutfitDetailScreen({ navigation, route }) {
   // ABRIR DETALLE DE PRENDA
   // ==========================================================
 
-  const handleClothingPress = (item) => {
-    if (!item?.id) return;
+const handleClothingPress = (item) => {
+  if (!item?.id) return;
 
-    navigation.navigate(
-      'ClothingDetail',
-      {
-        clothingId: item.id,
-        user,
-      }
-    );
-  };
-
-  // ==========================================================
-  // EDITAR OUTFIT
-  // ==========================================================
-
-  const handleEdit = () => {
-    if (!outfit) return;
-
-    navigation.navigate(
-      'CrearOutfit',
-      {
-        user,
-        outfit,
-        outfitId: outfit.id,
-        editMode: true,
-      }
-    );
-  };
-
-  // ==========================================================
-  // ELIMINAR OUTFIT
-  // ==========================================================
-
-  const performDelete = async () => {
-    if (!outfit?.id) return;
-
-    try {
-      setDeleting(true);
-
-      const result = await deleteOutfit(
-        normalizeId(outfit.id)
-      );
-
-      if (!result?.success) {
-        Alert.alert(
-          'Error',
-          MESSAGES.OUTFIT_ERROR
-        );
-
-        return;
-      }
-
-      Alert.alert(
-        'Outfit eliminado',
-        'El outfit fue eliminado correctamente.',
-        [
-          {
-            text: 'Aceptar',
-            onPress: () => navigation.goBack(),
-          },
-        ]
-      );
-    } catch (error) {
-      console.log(
-        'Error eliminando outfit:',
-        error
-      );
-
-      Alert.alert(
-        'Error',
-        MESSAGES.OUTFIT_ERROR
-      );
-    } finally {
-      setDeleting(false);
+  navigation.navigate(
+    'ClothingDetail',
+    {
+      prenda: item,
+      clothingId: item.id,
+      user,
     }
-  };
+  );
+};
 
-  const handleDelete = () => {
-    if (!outfit) return;
 
-    Alert.alert(
-      'Eliminar outfit',
-      `¿Querés eliminar "${outfit.name || 'este outfit'}"?`,
-      [
-        {
-          text: 'Cancelar',
-          style: 'cancel',
-        },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: performDelete,
-        },
-      ]
-    );
-  };
 
   // ==========================================================
   // VOLVER
@@ -543,13 +467,66 @@ export default function OutfitDetailScreen({ navigation, route }) {
   const handleBack = () => {
     navigation.goBack();
   };
+const handleMarkAsUsed = async () => {
+  if (!user?.id || !outfit?.id) {
+    Alert.alert(
+      'Error',
+      'No se pudo identificar el outfit o el usuario.'
+    );
+    return;
+  }
 
+  try {
+    const result = await addHistoryEntry({
+      userId: user.id,
+      outfitId: outfit.id,
+      outfitName: outfit.name || 'Outfit sin nombre',
+      imageUri: '',
+      note: '',
+    });
+
+    if (!result?.success) {
+      throw new Error(
+        result?.message || 'HISTORY_ERROR'
+      );
+    }
+
+    // Limpiamos un mensaje anterior si todavía estaba visible.
+    if (successMessageTimeout.current) {
+      clearTimeout(successMessageTimeout.current);
+    }
+
+    // Mostramos mensaje de éxito.
+    setShowSuccessMessage(true);
+
+    // Lo ocultamos después de unos segundos.
+    successMessageTimeout.current = setTimeout(() => {
+      setShowSuccessMessage(false);
+    }, 2500);
+
+  } catch (error) {
+    console.log(
+      'Error registrando uso del outfit:',
+      error
+    );
+
+    Alert.alert(
+      'Error',
+      'No se pudo registrar el outfit en el historial.'
+    );
+  }
+};
   // ==========================================================
   // LOADING
   // ==========================================================
 
-  if (loading) {
-    return (
+if (loading) {
+  return (
+    <OutfitScreenLayout
+      title="Detalle de Outfit"
+      navigation={navigation}
+      user={user}
+    >
       <View style={styles.loadingContainer}>
         <ActivityIndicator
           size="large"
@@ -560,15 +537,20 @@ export default function OutfitDetailScreen({ navigation, route }) {
           Cargando outfit...
         </Text>
       </View>
-    );
-  }
-
+    </OutfitScreenLayout>
+  );
+}
   // ==========================================================
   // OUTFIT NO ENCONTRADO
   // ==========================================================
 
   if (!outfit) {
-    return (
+  return (
+    <OutfitScreenLayout
+      title="Detalle de Outfit"
+      navigation={navigation}
+      user={user}
+    >
       <View style={styles.emptyContainer}>
         <MaterialCommunityIcons
           name="hanger"
@@ -593,7 +575,8 @@ export default function OutfitDetailScreen({ navigation, route }) {
           </Text>
         </TouchableOpacity>
       </View>
-    );
+    </OutfitScreenLayout>
+  );
   }
 
   // ==========================================================
@@ -601,7 +584,25 @@ export default function OutfitDetailScreen({ navigation, route }) {
   // ==========================================================
 
   return (
+  <OutfitScreenLayout
+    title="Detalle de Outfit"
+    navigation={navigation}
+    user={user}
+  >
     <View style={styles.root}>
+      {showSuccessMessage && (
+  <View style={styles.successMessage}>
+    <Ionicons
+      name="checkmark-circle"
+      size={22}
+      color="#2F6B4F"
+    />
+
+    <Text style={styles.successMessageText}>
+      ¡Outfit marcado exitosamente!
+    </Text>
+  </View>
+)}
 
       {/* ======================================================
           CONTENIDO
@@ -620,25 +621,7 @@ export default function OutfitDetailScreen({ navigation, route }) {
             TÍTULO
         ==================================================== */}
 
-        <View style={styles.titleRow}>
-
-          <TouchableOpacity
-            style={styles.backIconButton}
-            onPress={handleBack}
-          >
-            <Ionicons
-              name="arrow-back"
-              size={30}
-              color={COLORS.buttonDark}
-            />
-          </TouchableOpacity>
-
-          <Text style={styles.pageTitle}>
-            Detalle de outfit
-          </Text>
-
-        </View>
-
+{/* Título gestionado por el header global */}
         {/* ====================================================
             DOS COLUMNAS EN DESKTOP
         ==================================================== */}
@@ -789,64 +772,26 @@ export default function OutfitDetailScreen({ navigation, route }) {
                 BOTONES
             ================================================= */}
 
-            <View
-              style={[
-                styles.actions,
-                !isDesktop && styles.actionsMobile,
-              ]}
-            >
-
-              <TouchableOpacity
-                style={[
-                  styles.editButton,
-                  deleting && styles.disabledButton,
-                ]}
-                onPress={handleEdit}
-                disabled={deleting}
-              >
-                <Ionicons
-                  name="pencil-outline"
-                  size={20}
-                  color={COLORS.buttonDark}
-                />
-
-                <Text style={styles.editButtonText}>
-                  Editar
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.deleteButton,
-                  deleting && styles.disabledButton,
-                ]}
-                onPress={handleDelete}
-                disabled={deleting}
-              >
-                {deleting ? (
-                  <ActivityIndicator
-                    size="small"
-                    color="#FFFFFF"
-                  />
-                ) : (
-                  <Ionicons
-                    name="trash-outline"
-                    size={20}
-                    color="#FFFFFF"
-                  />
-                )}
-
-                <Text style={styles.deleteButtonText}>
-                  Eliminar
-                </Text>
-              </TouchableOpacity>
-
-            </View>
+    
 
             {/* =================================================
                 VOLVER
             ================================================= */}
+<TouchableOpacity
+  style={styles.useButton}
+  onPress={handleMarkAsUsed}
+  activeOpacity={0.85}
+>
+  <Ionicons
+    name="checkmark-circle-outline"
+    size={22}
+    color="#FFFFFF"
+  />
 
+  <Text style={styles.useButtonText}>
+    Marcar como usado
+  </Text>
+</TouchableOpacity>
             <TouchableOpacity
               style={styles.returnButton}
               onPress={handleBack}
@@ -860,10 +805,10 @@ export default function OutfitDetailScreen({ navigation, route }) {
 
         </View>
 
-      </ScrollView>
-    </View>
-  );
-}
+       </ScrollView>
+  </View>
+</OutfitScreenLayout>
+);}
 
 // ============================================================
 // ESTILOS
@@ -1263,56 +1208,6 @@ const styles = StyleSheet.create({
   // BOTONES
   // ==========================================================
 
-  actions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 14,
-  },
-
-  actionsMobile: {
-    gap: 8,
-  },
-
-  editButton: {
-    flex: 1,
-    height: 52,
-    borderRadius: 9,
-    borderWidth: 2,
-    borderColor: COLORS.buttonDark,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-
-  editButtonText: {
-    marginLeft: 8,
-    color: COLORS.buttonDark,
-    fontSize: 14,
-    fontFamily: 'Poppins_600SemiBold',
-  },
-
-  deleteButton: {
-    flex: 1,
-    height: 52,
-    borderRadius: 9,
-    backgroundColor: COLORS.buttonDark,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  deleteButtonText: {
-    marginLeft: 8,
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontFamily: 'Poppins_600SemiBold',
-  },
-
-  disabledButton: {
-    opacity: 0.6,
-  },
-
   returnButton: {
     height: 52,
     borderRadius: 9,
@@ -1390,4 +1285,57 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Poppins_600SemiBold',
   },
+  useButton: {
+  minHeight: 50,
+  borderRadius: 10,
+  backgroundColor: COLORS.primary,
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingHorizontal: 20,
+  marginBottom: 12,
+},
+
+useButtonText: {
+  marginLeft: 8,
+  color: '#FFFFFF',
+  fontSize: 15,
+  fontFamily: 'Poppins_600SemiBold',
+},
+
+successMessage: {
+  position: 'absolute',
+  top: 16,
+  left: 20,
+  right: 20,
+  zIndex: 1000,
+
+  minHeight: 52,
+  borderRadius: 12,
+
+  backgroundColor: '#BFE8D0',
+
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+
+  paddingHorizontal: 18,
+
+  shadowColor: '#000000',
+  shadowOffset: {
+    width: 0,
+    height: 3,
+  },
+  shadowOpacity: 0.18,
+  shadowRadius: 6,
+  elevation: 6,
+},
+
+successMessageText: {
+  marginLeft: 8,
+  color: '#2F6B4F',
+  fontSize: 14,
+  fontFamily: 'Poppins_600SemiBold',
+  textAlign: 'center',
+},
 });

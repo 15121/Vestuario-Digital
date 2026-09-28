@@ -6,6 +6,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import {
   useFonts,
   Poppins_400Regular,
+    Poppins_500Medium,     
   Poppins_600SemiBold,
   Poppins_700Bold,
 } from '@expo-google-fonts/poppins';
@@ -18,12 +19,17 @@ import LoginScreen from './screens/loginScreen';
 import RegisterScreen from './screens/registerScreen';
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
 
-// Navegación principal
+// Navegación principal de usuarios
 import MainTabNavigator from './navigation/MainTabNavigator';
+
+// Navegación Root / Administrador
+import RootTabNavigator from './navigation/RootTabNavigator';
 
 // Prendas
 import AddClothingScreen from './screens/addClothingScreen';
+import EditClothingScreen from './screens/editClothingScreen';
 import ClothingDetailScreen from './screens/clothingDetailScreen';
+import ClothingScreen from './screens/clothingScreen';
 
 // Outfits
 import MyOutfitsScreen from './screens/myoufitsScreen';
@@ -50,16 +56,17 @@ const Stack = createNativeStackNavigator();
 export default function App() {
   const [fontsLoaded] = useFonts({
     Poppins_400Regular,
+    Poppins_500Medium,  
     Poppins_600SemiBold,
     Poppins_700Bold,
   });
 
+  // Inicializar la base de datos
   useEffect(() => {
-    if (Platform.OS !== 'web') {
-      initDatabase();
-    }
+    initDatabase();
   }, []);
 
+  // Esperar a que se carguen las fuentes
   if (!fontsLoaded) {
     return null;
   }
@@ -86,7 +93,10 @@ export default function App() {
             headerShown: false,
           }}
         >
-          {/* INICIO DE LA APP */}
+          {/* =========================================
+              INICIO DE LA APP
+          ========================================= */}
+
           <Stack.Screen
             name="Welcome"
             component={WelcomeScreen}
@@ -107,13 +117,33 @@ export default function App() {
             component={ForgotPasswordScreen}
           />
 
-          {/* NAVEGACIÓN PRINCIPAL */}
+          {/* =========================================
+              NAVEGACIÓN PRINCIPAL - USUARIO NORMAL
+          ========================================= */}
+
           <Stack.Screen
             name="Main"
             component={MainTabNavigator}
           />
 
-          {/* PRENDAS */}
+          {/* =========================================
+              NAVEGACIÓN ROOT / ADMINISTRADOR
+          ========================================= */}
+
+          <Stack.Screen
+            name="Root"
+            component={RootTabNavigator}
+          />
+
+          {/* =========================================
+              PRENDAS
+          ========================================= */}
+
+          <Stack.Screen
+            name="Clothing"
+            component={ClothingScreen}
+          />
+
           <Stack.Screen
             name="AddClothing"
             component={AddClothingScreen}
@@ -123,15 +153,22 @@ export default function App() {
             name="ClothingDetail"
             component={ClothingDetailScreen}
           />
+          <Stack.Screen
+            name="EditarPrenda"
+           component={EditClothingScreen}
+            />
 
-          {/* OUTFITS */}
+          {/* =========================================
+              OUTFITS
+          ========================================= */}
+
           <Stack.Screen
             name="MyOutfits"
             component={MyOutfitsScreen}
           />
 
           <Stack.Screen
-            name="CrearOutfit"
+            name="CreateOutfit"
             component={CreateOutfitScreen}
           />
 
@@ -140,25 +177,37 @@ export default function App() {
             component={OutfitDetailScreen}
           />
 
-          {/* HISTORIAL */}
+          {/* =========================================
+              HISTORIAL
+          ========================================= */}
+
           <Stack.Screen
             name="HistoryClothing"
             component={HistoryClothingScreen}
           />
 
-          {/* RECOMENDACIÓN CLIMÁTICA */}
+          {/* =========================================
+              RECOMENDACIÓN CLIMÁTICA
+          ========================================= */}
+
           <Stack.Screen
-            name="WeatherRec"
+            name="WeatherRecScreen"
             component={WeatherRecScreen}
           />
 
-          {/* MODO MALETA */}
+          {/* =========================================
+              MODO MALETA
+          ========================================= */}
+
           <Stack.Screen
-            name="PackingMode"
+            name="PackingModeScreen"
             component={PackingModeScreen}
           />
 
-          {/* PERFIL */}
+          {/* =========================================
+              PERFIL
+          ========================================= */}
+
           <Stack.Screen
             name="Profile"
             component={ViewProfileScreen}
@@ -169,7 +218,10 @@ export default function App() {
             component={EditProfileScreen}
           />
 
-          {/* MENÚ HAMBURGUESA */}
+          {/* =========================================
+              MENÚ HAMBURGUESA
+          ========================================= */}
+
           <Stack.Screen
             name="AboutApp"
             component={AboutAppScreen}

@@ -1,4 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+
 import {
   View,
   Text,
@@ -9,11 +14,13 @@ import {
   Image,
   Alert,
   Modal,
-  Platform,
   useWindowDimensions,
 } from 'react-native';
 
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import {
+  Ionicons,
+  MaterialCommunityIcons,
+} from '@expo/vector-icons';
 
 import { COLORS } from '../theme/colours';
 import { MESSAGES } from '../theme/messages';
@@ -27,102 +34,652 @@ import {
 
 
 // ============================================================
-// FUNCIONES AUXILIARES
+// COLORES DE APOYO
 // ============================================================
 
-// Formatea una fecha para mostrarla como DD/MM/YYYY
-const formatDate = (dateValue) => {
-  if (!dateValue) return '';
+const SUCCESS_BACKGROUND =
+  COLORS.successBackground || '#EAF8EE';
 
-  // Si ya viene con formato DD/MM/YYYY
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateValue)) {
-    return dateValue;
+const SUCCESS_BORDER =
+  COLORS.successBorder || '#B9E4C4';
+
+const SUCCESS_TEXT =
+  COLORS.successText || '#4E9B63';
+
+const STATUS_PLANNED_BACKGROUND =
+  '#EAF7EE';
+
+const STATUS_PLANNED_BORDER =
+  '#B9E4C4';
+
+const STATUS_PLANNED_TEXT =
+  '#2E9D57';
+
+const STATUS_ACTIVE_BACKGROUND =
+  '#FFF1E6';
+
+const STATUS_ACTIVE_BORDER =
+  '#F3C9A6';
+
+const STATUS_ACTIVE_TEXT =
+  '#E67E22';
+
+const STATUS_FINISHED_BACKGROUND =
+  '#FDECEC';
+
+const STATUS_FINISHED_BORDER =
+  '#F2BABA';
+
+const STATUS_FINISHED_TEXT =
+  '#D64545';
+// ============================================================
+// FECHAS
+// ============================================================
+
+const parseStoredDate = (dateValue) => {
+  if (!dateValue) {
+    return null;
   }
 
-  const date = new Date(dateValue);
+  if (dateValue instanceof Date) {
+    if (Number.isNaN(dateValue.getTime())) {
+      return null;
+    }
+
+    return new Date(
+      dateValue.getFullYear(),
+      dateValue.getMonth(),
+      dateValue.getDate()
+    );
+  }
+
+  const value = String(dateValue).trim();
+
+  // YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] =
+      value.split('-').map(Number);
+
+    return new Date(
+      year,
+      month - 1,
+      day
+    );
+  }
+
+  // DD/MM/YYYY
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+    const [day, month, year] =
+      value.split('/').map(Number);
+
+    return new Date(
+      year,
+      month - 1,
+      day
+    );
+  }
+
+  const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    return dateValue;
+    return null;
   }
 
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate()
+  );
+};
+
+
+const formatDate = (dateValue) => {
+  const date = parseStoredDate(dateValue);
+
+  if (!date) {
+    return '';
+  }
+
+  const day = String(
+    date.getDate()
+  ).padStart(2, '0');
+
+  const month = String(
+    date.getMonth() + 1
+  ).padStart(2, '0');
+
   const year = date.getFullYear();
 
   return `${day}/${month}/${year}`;
 };
 
 
-// Convierte DD/MM/YYYY a un valor ISO cuando corresponde
 const normalizeDate = (dateValue) => {
-  if (!dateValue) return '';
+  const date = parseStoredDate(dateValue);
 
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateValue)) {
-    const [day, month, year] = dateValue.split('/');
-    return `${year}-${month}-${day}`;
+  if (!date) {
+    return '';
   }
 
-  return dateValue;
+  const year = date.getFullYear();
+
+  const month = String(
+    date.getMonth() + 1
+  ).padStart(2, '0');
+
+  const day = String(
+    date.getDate()
+  ).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
 };
 
 
-// Color visual de la prenda según su color guardado
+const createLocalDate = (
+  year,
+  month,
+  day
+) => {
+  return new Date(
+    year,
+    month,
+    day
+  );
+};
+
+
+// ============================================================
+// ESTADO DE LA MALETA
+// ============================================================
+
+const getSuitcaseStatus = (
+  startDate,
+  endDate
+) => {
+  if (!startDate || !endDate) {
+    return 'Sin planificar';
+  }
+
+  const today = new Date();
+
+  const todayOnly = createLocalDate(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  );
+
+  if (todayOnly < startDate) {
+    return 'Planificada';
+  }
+
+  if (todayOnly > endDate) {
+    return 'Finalizada';
+  }
+
+  return 'En curso';
+};
+
+
+// ============================================================
+// COLOR DE LA PRENDA
+// ============================================================
+
 const getColorDot = (color) => {
-  const value = String(color || '').toLowerCase();
+  const value =
+    String(color || '').toLowerCase();
 
-  if (value.includes('negro')) return '#111111';
-  if (value.includes('azul')) return '#4169E1';
-  if (value.includes('rojo')) return '#D94A4A';
-  if (value.includes('verde')) return '#5BAE72';
-  if (value.includes('amarillo')) return '#E8C547';
-  if (value.includes('rosa')) return '#E58BB5';
-  if (value.includes('violeta') || value.includes('morado')) return '#8B5CC7';
-  if (value.includes('gris')) return '#A5A5A5';
-  if (value.includes('beige')) return '#C8B89A';
+  if (value.includes('negro')) {
+    return '#111111';
+  }
 
-  // Blanco
+  if (value.includes('azul')) {
+    return '#4169E1';
+  }
+
+  if (value.includes('rojo')) {
+    return '#D94A4A';
+  }
+
+  if (value.includes('verde')) {
+    return '#5BAE72';
+  }
+
+  if (value.includes('amarillo')) {
+    return '#E8C547';
+  }
+
+  if (value.includes('rosa')) {
+    return '#E58BB5';
+  }
+
+  if (
+    value.includes('violeta') ||
+    value.includes('morado')
+  ) {
+    return '#8B5CC7';
+  }
+
+  if (value.includes('gris')) {
+    return '#A5A5A5';
+  }
+
+  if (value.includes('beige')) {
+    return '#C8B89A';
+  }
+
+  if (value.includes('blanco')) {
+    return '#FFFFFF';
+  }
+
   return '#FFFFFF';
 };
 
 
 // ============================================================
-// COMPONENTE PRINCIPAL
+// CALENDARIO
 // ============================================================
 
-export default function PackingModeScreen({ navigation, route }) {
+const MONTH_NAMES = [
+  'Enero',
+  'Febrero',
+  'Marzo',
+  'Abril',
+  'Mayo',
+  'Junio',
+  'Julio',
+  'Agosto',
+  'Septiembre',
+  'Octubre',
+  'Noviembre',
+  'Diciembre',
+];
 
-  const { width } = useWindowDimensions();
+const WEEK_DAYS = [
+  'L',
+  'M',
+  'X',
+  'J',
+  'V',
+  'S',
+  'D',
+];
 
-  // En el proyecto se utiliza > 768 para diferenciar escritorio
-  // de la versión mobile.
-  const isDesktop = width > 768;
 
-  // Usuario recibido desde MainTabNavigator
-  const user = route?.params?.user;
+function CalendarModal({
+  visible,
+  value,
+  onSelect,
+  onClose,
+}) {
+  const today = new Date();
 
-  // Si llega suitcaseId significa que estamos editando una maleta.
-  const suitcaseId = route?.params?.suitcaseId;
+  const [
+    displayMonth,
+    setDisplayMonth,
+  ] = useState(
+    new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      1
+    )
+  );
 
-  // ----------------------------------------------------------
-  // ESTADOS
-  // ----------------------------------------------------------
 
-  const [clothes, setClothes] = useState([]);
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
 
-  const [destination, setDestination] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [status, setStatus] = useState('Planificada');
+    const date =
+      value || new Date();
 
-  const [packedItems, setPackedItems] = useState({});
+    setDisplayMonth(
+      new Date(
+        date.getFullYear(),
+        date.getMonth(),
+        1
+      )
+    );
+  }, [visible, value]);
 
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
 
-  // Modal para editar la nota de una prenda
-  const [noteModalVisible, setNoteModalVisible] = useState(false);
-  const [selectedClothing, setSelectedClothing] = useState(null);
-  const [noteText, setNoteText] = useState('');
+  const year =
+    displayMonth.getFullYear();
+
+  const month =
+    displayMonth.getMonth();
+
+
+  const firstDay =
+    new Date(
+      year,
+      month,
+      1
+    ).getDay();
+
+  const startingOffset =
+    firstDay === 0
+      ? 6
+      : firstDay - 1;
+
+
+  const daysInMonth =
+    new Date(
+      year,
+      month + 1,
+      0
+    ).getDate();
+
+
+  const calendarDays = [];
+
+  for (
+    let i = 0;
+    i < startingOffset;
+    i += 1
+  ) {
+    calendarDays.push(null);
+  }
+
+  for (
+    let day = 1;
+    day <= daysInMonth;
+    day += 1
+  ) {
+    calendarDays.push(day);
+  }
+
+  while (
+    calendarDays.length % 7 !== 0
+  ) {
+    calendarDays.push(null);
+  }
+
+
+  const isSameDate = (
+    dateA,
+    dateB
+  ) => {
+    if (!dateA || !dateB) {
+      return false;
+    }
+
+    return (
+      dateA.getFullYear() ===
+        dateB.getFullYear() &&
+      dateA.getMonth() ===
+        dateB.getMonth() &&
+      dateA.getDate() ===
+        dateB.getDate()
+    );
+  };
+
+
+  const handleDayPress = (day) => {
+    if (!day) {
+      return;
+    }
+
+    const selectedDate =
+      createLocalDate(
+        year,
+        month,
+        day
+      );
+
+    onSelect(selectedDate);
+    onClose();
+  };
+
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View
+        style={styles.calendarOverlay}
+      >
+        <View
+          style={styles.calendarModal}
+        >
+
+          <View
+            style={styles.calendarHeader}
+          >
+            <TouchableOpacity
+              style={styles.calendarArrow}
+              onPress={() =>
+                setDisplayMonth(
+                  new Date(
+                    year,
+                    month - 1,
+                    1
+                  )
+                )
+              }
+            >
+              <Ionicons
+                name="chevron-back"
+                size={20}
+                color={COLORS.textDark}
+              />
+            </TouchableOpacity>
+
+            <Text
+              style={
+                styles.calendarMonthTitle
+              }
+            >
+              {MONTH_NAMES[month]} {year}
+            </Text>
+
+            <TouchableOpacity
+              style={styles.calendarArrow}
+              onPress={() =>
+                setDisplayMonth(
+                  new Date(
+                    year,
+                    month + 1,
+                    1
+                  )
+                )
+              }
+            >
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={COLORS.textDark}
+              />
+            </TouchableOpacity>
+          </View>
+
+
+          <View
+            style={styles.weekDaysRow}
+          >
+            {WEEK_DAYS.map(
+              (day) => (
+                <View
+                  key={day}
+                  style={styles.weekDay}
+                >
+                  <Text
+                    style={
+                      styles.weekDayText
+                    }
+                  >
+                    {day}
+                  </Text>
+                </View>
+              )
+            )}
+          </View>
+
+
+          <View
+            style={styles.calendarGrid}
+          >
+            {calendarDays.map(
+              (day, index) => {
+                if (!day) {
+                  return (
+                    <View
+                      key={`empty-${index}`}
+                      style={
+                        styles.calendarDay
+                      }
+                    />
+                  );
+                }
+
+                const currentDate =
+                  createLocalDate(
+                    year,
+                    month,
+                    day
+                  );
+
+                const selected =
+                  isSameDate(
+                    currentDate,
+                    value
+                  );
+
+                const isToday =
+                  isSameDate(
+                    currentDate,
+                    today
+                  );
+
+                return (
+                  <TouchableOpacity
+                    key={`day-${day}`}
+                    style={
+                      styles.calendarDay
+                    }
+                    onPress={() =>
+                      handleDayPress(day)
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.calendarDayText,
+                        selected &&
+                          styles.calendarDayTextSelected,
+                        !selected &&
+                          isToday &&
+                          styles.calendarDayTextToday,
+                      ]}
+                    >
+                      {day}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              }
+            )}
+          </View>
+
+
+          <View
+            style={styles.calendarActions}
+          >
+            <TouchableOpacity
+              style={
+                styles.calendarCancelButton
+              }
+              onPress={onClose}
+            >
+              <Text
+                style={
+                  styles.calendarCancelText
+                }
+              >
+                Cancelar
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+
+// ============================================================
+// PANTALLA MALeta
+// ============================================================
+
+export default function PackingModeScreen({
+  navigation,
+  route,
+}) {
+  const { width } =
+    useWindowDimensions();
+
+  const isDesktop =
+    width > 768;
+
+  const user =
+    route?.params?.user;
+
+const suitcaseId =
+  route?.params?.suitcaseId;
+
+const isEditing =
+  !!suitcaseId;
+
+  const [clothes, setClothes] =
+    useState([]);
+
+  const [destination, setDestination] =
+    useState('');
+
+  const [startDate, setStartDate] =
+    useState(null);
+
+  const [endDate, setEndDate] =
+    useState(null);
+
+  const [packedItems, setPackedItems] =
+    useState({});
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [
+    successMessageVisible,
+    setSuccessMessageVisible,
+  ] = useState(false);
+
+  const [
+    calendarVisible,
+    setCalendarVisible,
+  ] = useState(false);
+
+  const [
+    calendarType,
+    setCalendarType,
+  ] = useState(null);
+
+  const [
+    noteModalVisible,
+    setNoteModalVisible,
+  ] = useState(false);
+
+  const [
+    selectedClothing,
+    setSelectedClothing,
+  ] = useState(null);
+
+  const [noteText, setNoteText] =
+    useState('');
 
 
   // ==========================================================
@@ -131,582 +688,798 @@ export default function PackingModeScreen({ navigation, route }) {
 
   useEffect(() => {
     loadPackingData();
-  }, [user?.id, suitcaseId]);
+  }, [
+    user?.id,
+    suitcaseId,
+  ]);
 
 
-  const loadPackingData = async () => {
-    try {
-      setLoading(true);
+  const loadPackingData =
+    async () => {
+      try {
+        setLoading(true);
 
-      if (!user?.id) {
-        setClothes([]);
-        return;
-      }
-
-      // ------------------------------------------------------
-      // Cargar prendas del usuario
-      // ------------------------------------------------------
-
-      const userClothes = await getUserClothes(user.id);
-
-      setClothes(userClothes || []);
-
-
-      // ------------------------------------------------------
-      // Si estamos editando una maleta existente
-      // ------------------------------------------------------
-
-      if (suitcaseId) {
-
-        const suitcase = await getSuitcaseById(suitcaseId);
-
-        if (suitcase) {
-
-          setDestination(suitcase.destino || '');
-
-          setStartDate(formatDate(suitcase.fechaInicio));
-          setEndDate(formatDate(suitcase.fechaFin));
-
-          setStatus(suitcase.estado || 'Planificada');
-
-
-          // Convertimos:
-          //
-          // [
-          //   {
-          //      clothingId,
-          //      note,
-          //      packed
-          //   }
-          // ]
-          //
-          // en un objeto más cómodo para manejar desde React.
-
-          const itemsMap = {};
-
-          (suitcase.items || []).forEach((item) => {
-            itemsMap[item.clothingId] = {
-              packed: !!item.packed,
-              note: item.note || '',
-            };
-          });
-
-          setPackedItems(itemsMap);
+        if (!user?.id) {
+          setClothes([]);
+          return;
         }
 
-      } else {
+        const userClothes =
+          await getUserClothes(
+            user.id
+          );
 
-        // ----------------------------------------------------
-        // Maleta nueva
-        // ----------------------------------------------------
+        setClothes(
+          userClothes || []
+        );
 
-        setDestination('');
-        setStartDate('');
-        setEndDate('');
-        setStatus('Planificada');
 
-        setPackedItems({});
+        if (suitcaseId) {
+          const suitcase =
+            await getSuitcaseById(
+              suitcaseId
+            );
+
+          if (suitcase) {
+            setDestination(
+              suitcase.destino || ''
+            );
+
+            setStartDate(
+              parseStoredDate(
+                suitcase.fechaInicio
+              )
+            );
+
+            setEndDate(
+              parseStoredDate(
+                suitcase.fechaFin
+              )
+            );
+
+
+            const itemsMap = {};
+
+            (
+              suitcase.items || []
+            ).forEach(
+              (item) => {
+                itemsMap[
+                  item.clothingId
+                ] = {
+                  packed:
+                    !!item.packed,
+
+                  note:
+                    item.note || '',
+                };
+              }
+            );
+
+            setPackedItems(
+              itemsMap
+            );
+          }
+        } else {
+          setDestination('');
+          setStartDate(null);
+          setEndDate(null);
+          setPackedItems({});
+        }
+
+      } catch (error) {
+        console.log(
+          'Error cargando modo maleta:',
+          error
+        );
+
+        Alert.alert(
+          'Error',
+          'No se pudieron cargar los datos de la maleta.'
+        );
+
+      } finally {
+        setLoading(false);
       }
-
-    } catch (error) {
-
-      console.log('Error cargando modo maleta:', error);
-
-      Alert.alert(
-        'Error',
-        'No se pudieron cargar los datos de la maleta.'
-      );
-
-    } finally {
-      setLoading(false);
-    }
-  };
-
-
-  // ==========================================================
-  // PRENDAS QUE SE MOSTRARÁN
-  // ==========================================================
-
-  const visibleClothes = useMemo(() => {
-
-    // Todas las prendas del usuario forman parte de las opciones
-    // para empacar.
-
-    return clothes || [];
-
-  }, [clothes]);
-
-
-  // ==========================================================
-  // ESTADÍSTICAS DE EMPAQUE
-  // ==========================================================
-
-  const totalItems = visibleClothes.length;
-
-  const packedCount = visibleClothes.filter(
-    (item) => packedItems[item.id]?.packed
-  ).length;
-
-  const progress =
-    totalItems > 0
-      ? Math.round((packedCount / totalItems) * 100)
-      : 0;
-
-
-  // ==========================================================
-  // MARCAR / DESMARCAR PRENDA
-  // ==========================================================
-
-  const togglePacked = (clothingId) => {
-
-    setPackedItems((previous) => {
-
-      const current = previous[clothingId] || {
-        packed: false,
-        note: '',
-      };
-
-      return {
-        ...previous,
-        [clothingId]: {
-          ...current,
-          packed: !current.packed,
-        },
-      };
-
-    });
-  };
-
-
-  // ==========================================================
-  // EDITAR NOTA
-  // ==========================================================
-
-  const openNoteEditor = (clothing) => {
-
-    const current = packedItems[clothing.id] || {
-      packed: false,
-      note: '',
     };
 
-    setSelectedClothing(clothing);
-    setNoteText(current.note || '');
-    setNoteModalVisible(true);
-  };
+
+  // ==========================================================
+  // CALENDARIO
+  // ==========================================================
+
+  const openStartDatePicker =
+    () => {
+      setCalendarType('start');
+      setCalendarVisible(true);
+    };
 
 
-  const saveNote = () => {
+  const openEndDatePicker =
+    () => {
+      setCalendarType('end');
+      setCalendarVisible(true);
+    };
 
-    if (!selectedClothing) {
-      setNoteModalVisible(false);
+
+  const closeCalendar =
+    () => {
+      setCalendarVisible(false);
+      setCalendarType(null);
+    };
+
+
+const handleCalendarSelect =
+  (date) => {
+    if (!date) {
       return;
     }
 
-    setPackedItems((previous) => {
+    // El usuario modificó una fecha,
+    // por lo tanto la confirmación anterior
+    // deja de representar el estado actual.
+    setSuccessMessageVisible(false);
 
-      const current = previous[selectedClothing.id] || {
-        packed: false,
-        note: '',
-      };
+    if (
+      calendarType === 'start'
+    ) {
+      setStartDate(date);
+
+      if (
+        endDate &&
+        date > endDate
+      ) {
+        setEndDate(date);
+      }
+
+    } else if (
+      calendarType === 'end'
+    ) {
+      setEndDate(date);
+    }
+
+    closeCalendar();
+  };
+
+  const selectedCalendarDate =
+    calendarType === 'start'
+      ? startDate
+      : endDate;
+
+
+  // ==========================================================
+  // PRENDAS
+  // ==========================================================
+
+  const visibleClothes =
+    useMemo(
+      () => clothes || [],
+      [clothes]
+    );
+
+
+  // ESTE ES EL ÚNICO CONTADOR
+  // No hay límite de prendas.
+  const packedCount =
+    visibleClothes.filter(
+      (item) =>
+        packedItems[item.id]?.packed
+    ).length;
+
+
+  // ==========================================================
+  // ESTADO
+  // ==========================================================
+
+  const status =
+    getSuitcaseStatus(
+      startDate,
+      endDate
+    );
+
+
+  // ==========================================================
+  // EMPACAR / DESEMPACAR
+  // ==========================================================
+
+const togglePacked =
+  (clothingId) => {
+    // Cambiar el estado de una prenda
+    // significa modificar la maleta.
+    setSuccessMessageVisible(false);
+
+    setPackedItems(
+      (previous) => {
+        const current =
+          previous[
+            clothingId
+          ] || {
+            packed: false,
+            note: '',
+          };
+
+        return {
+          ...previous,
+
+          [clothingId]: {
+            ...current,
+
+            packed:
+              !current.packed,
+          },
+        };
+      }
+    );
+  };
+
+
+  // ==========================================================
+  // NOTAS
+  // ==========================================================
+
+  const openNoteEditor =
+    (clothing) => {
+      const current =
+        packedItems[
+          clothing.id
+        ] || {
+          packed: false,
+          note: '',
+        };
+
+      setSelectedClothing(
+        clothing
+      );
+
+      setNoteText(
+        current.note || ''
+      );
+
+      setNoteModalVisible(true);
+    };
+const saveNote = () => {
+  if (!selectedClothing) {
+    setNoteModalVisible(false);
+    return;
+  }
+
+  // Se confirmó una modificación de la nota,
+  // por lo tanto la maleta ya tiene cambios
+  // posteriores al último guardado.
+  setSuccessMessageVisible(false);
+
+  setPackedItems(
+    (previous) => {
+      const current =
+        previous[
+          selectedClothing.id
+        ] || {
+          packed: false,
+          note: '',
+        };
 
       return {
         ...previous,
+
         [selectedClothing.id]: {
           ...current,
-          note: noteText.trim(),
+
+          note:
+            noteText.trim(),
         },
       };
+    }
+  );
 
-    });
-
-    setNoteModalVisible(false);
-  };
-
-
+  setNoteModalVisible(false);
+};
   // ==========================================================
-  // CONSTRUIR ITEMS DE LA MALETA
+  // ITEMS PARA LA BASE DE DATOS
   // ==========================================================
 
-  const buildSuitcaseItems = () => {
+  const buildSuitcaseItems =
+    () => {
+      return visibleClothes.map(
+        (clothing) => {
+          const current =
+            packedItems[
+              clothing.id
+            ] || {
+              packed: false,
+              note: '',
+            };
 
-    return visibleClothes.map((clothing) => {
+          return {
+            clothingId:
+              clothing.id,
 
-      const current = packedItems[clothing.id] || {
-        packed: false,
-        note: '',
-      };
+            note:
+              current.note || '',
 
-      return {
-        clothingId: clothing.id,
-        note: current.note || '',
-        packed: !!current.packed,
-      };
-
-    });
-
-  };
+            packed:
+              !!current.packed,
+          };
+        }
+      );
+    };
 
 
   // ==========================================================
   // GUARDAR MALETA
   // ==========================================================
 
-  const handleSaveSuitcase = async () => {
-
-    // --------------------------------------------------------
-    // Validaciones
-    // --------------------------------------------------------
-
-    if (!destination.trim() || !startDate.trim() || !endDate.trim()) {
-
-      Alert.alert(
-        'Datos incompletos',
-        MESSAGES.REQUIRED_FIELDS
-      );
-
-      return;
-    }
-
-
-    try {
-
-      setSaving(true);
-
-      const suitcaseItems = buildSuitcaseItems();
-
-
-      // ------------------------------------------------------
-      // EDITAR MALETA EXISTENTE
-      // ------------------------------------------------------
-
-      if (suitcaseId) {
-
-        const result = await updateSuitcase(
-          suitcaseId,
-          {
-            destino: destination.trim(),
-            fechaInicio: normalizeDate(startDate.trim()),
-            fechaFin: normalizeDate(endDate.trim()),
-            estado: status,
-            items: suitcaseItems,
-          }
+  const handleSaveSuitcase =
+    async () => {
+      if (
+        !destination.trim() ||
+        !startDate ||
+        !endDate
+      ) {
+        Alert.alert(
+          'Datos incompletos',
+          MESSAGES.REQUIRED_FIELDS
         );
 
-
-        if (!result.success) {
-
-          Alert.alert(
-            'Error',
-            'No se pudo actualizar la maleta.'
-          );
-
-          return;
-        }
-
-      } else {
-
-        // ----------------------------------------------------
-        // CREAR MALETA NUEVA
-        // ----------------------------------------------------
-
-        const result = await addSuitcase({
-
-          userId: user.id,
-
-          destino: destination.trim(),
-
-          fechaInicio: normalizeDate(startDate.trim()),
-
-          fechaFin: normalizeDate(endDate.trim()),
-
-          estado: status,
-
-          items: suitcaseItems,
-
-        });
-
-
-        if (!result.success) {
-
-          Alert.alert(
-            'Error',
-            'No se pudo guardar la maleta.'
-          );
-
-          return;
-        }
+        return;
       }
 
 
-      // ------------------------------------------------------
-      // Mensaje definido en messages.js
-      // ------------------------------------------------------
+      if (
+        startDate > endDate
+      ) {
+        Alert.alert(
+          'Fechas incorrectas',
+          'La fecha de fin no puede ser anterior a la fecha de inicio.'
+        );
 
-      Alert.alert(
-        'Maleta',
-        MESSAGES.SUITCASE_SAVED,
-        [
-          {
-            text: 'Aceptar',
-            onPress: () => {
+        return;
+      }
 
-              if (navigation?.goBack) {
-                navigation.goBack();
+
+      try {
+        setSaving(true);
+
+        const suitcaseItems =
+          buildSuitcaseItems();
+
+        const savedStartDate =
+          normalizeDate(
+            startDate
+          );
+
+        const savedEndDate =
+          normalizeDate(
+            endDate
+          );
+
+
+        if (suitcaseId) {
+          const result =
+            await updateSuitcase(
+              suitcaseId,
+              {
+                destino:
+                  destination.trim(),
+
+                fechaInicio:
+                  savedStartDate,
+
+                fechaFin:
+                  savedEndDate,
+
+                estado:
+                  status,
+
+                items:
+                  suitcaseItems,
               }
+            );
 
-            },
-          },
-        ]
-      );
 
-    } catch (error) {
+          if (!result.success) {
+            Alert.alert(
+              'Error',
+              'No se pudo actualizar la maleta.'
+            );
 
-      console.log('Error guardando maleta:', error);
+            return;
+          }
 
-      Alert.alert(
-        'Error',
-        'No se pudo guardar la maleta. Intentá nuevamente.'
-      );
+        } else {
+          const result =
+            await addSuitcase({
+              userId:
+                user.id,
 
-    } finally {
+              destino:
+                destination.trim(),
 
-      setSaving(false);
+              fechaInicio:
+                savedStartDate,
 
-    }
+              fechaFin:
+                savedEndDate,
 
-  };
+              estado:
+                status,
+
+              items:
+                suitcaseItems,
+            });
+
+
+          if (!result.success) {
+            Alert.alert(
+              'Error',
+              'No se pudo guardar la maleta.'
+            );
+
+            return;
+          }
+        }
+
+setSuccessMessageVisible(true);
+
+
+
+      } catch (error) {
+        console.log(
+          'Error guardando maleta:',
+          error
+        );
+
+        Alert.alert(
+          'Error',
+          'No se pudo guardar la maleta. Intentá nuevamente.'
+        );
+
+      } finally {
+        setSaving(false);
+      }
+    };
 
 
   // ==========================================================
-  // RENDERIZAR IMAGEN DE PRENDA
+  // IMAGEN
   // ==========================================================
 
-  const renderClothingImage = (item) => {
-
-    if (item.imageUri) {
+  const renderClothingImage =
+    (item) => {
+      if (item.imageUri) {
+        return (
+          <Image
+            source={{
+              uri: item.imageUri,
+            }}
+            style={
+              styles.clothingImage
+            }
+            resizeMode="contain"
+          />
+        );
+      }
 
       return (
-        <Image
-          source={{ uri: item.imageUri }}
-          style={styles.clothingImage}
-          resizeMode="contain"
-        />
+        <View
+          style={
+            styles.imagePlaceholder
+          }
+        >
+          <Ionicons
+            name="shirt-outline"
+            size={30}
+            color={COLORS.icon}
+          />
+        </View>
       );
-
-    }
-
-    return (
-      <View style={styles.imagePlaceholder}>
-        <Ionicons
-          name="shirt-outline"
-          size={30}
-          color={COLORS.icon}
-        />
-      </View>
-    );
-  };
+    };
 
 
   // ==========================================================
   // TARJETA DE PRENDA
   // ==========================================================
 
-  const renderClothingCard = (item) => {
+  const renderClothingCard =
+    (item) => {
+      const itemState =
+        packedItems[
+          item.id
+        ] || {
+          packed: false,
+          note: '',
+        };
 
-    const itemState = packedItems[item.id] || {
-      packed: false,
-      note: '',
-    };
-
-    const isPacked = itemState.packed;
-
-    return (
-      <View
-        key={item.id}
-        style={[
-          styles.clothingCard,
-          isDesktop && styles.clothingCardDesktop,
-        ]}
-      >
-
-        {/* Imagen */}
-        <View style={styles.imageContainer}>
-          {renderClothingImage(item)}
-        </View>
+      const isPacked =
+        itemState.packed;
 
 
-        {/* Información de la prenda */}
-        <View style={styles.clothingInfo}>
+      return (
+        <View
+          key={item.id}
+          style={[
+            styles.clothingCard,
 
-          <Text
-            style={styles.clothingTitle}
-            numberOfLines={1}
+            isPacked &&
+              styles.clothingCardPacked,
+
+            isDesktop &&
+              styles.clothingCardDesktop,
+          ]}
+        >
+
+          <View
+            style={
+              styles.imageContainer
+            }
           >
-            {item.title || 'Prenda sin nombre'}
-          </Text>
-
-          <Text
-            style={styles.clothingCategory}
-            numberOfLines={1}
-          >
-            Categoría: {item.category || 'Sin categoría'}
-          </Text>
-
-
-          <View style={styles.colorRow}>
-
-            <View
-              style={[
-                styles.colorDot,
-                {
-                  backgroundColor: getColorDot(item.color),
-                },
-              ]}
-            />
-
-            <Text style={styles.colorText}>
-              {item.color || 'Sin color'}
-            </Text>
-
+            {renderClothingImage(
+              item
+            )}
           </View>
 
 
-          {/* Nota */}
-          {itemState.note ? (
-            <View style={styles.noteRow}>
+          <View
+            style={
+              styles.clothingInfo
+            }
+          >
+            <Text
+              style={
+                styles.clothingTitle
+              }
+              numberOfLines={1}
+            >
+              {item.title ||
+                'Prenda sin nombre'}
+            </Text>
 
-              <Ionicons
-                name="information-circle-outline"
-                size={14}
-                color={COLORS.icon}
+
+            <Text
+              style={
+                styles.clothingCategory
+              }
+              numberOfLines={1}
+            >
+              Categoría:{' '}
+              {item.category ||
+                'Sin categoría'}
+            </Text>
+
+
+            <View
+              style={
+                styles.colorRow
+              }
+            >
+              <View
+                style={[
+                  styles.colorDot,
+                  {
+                    backgroundColor:
+                      getColorDot(
+                        item.color
+                      ),
+                  },
+                ]}
               />
 
               <Text
-                style={styles.noteText}
-                numberOfLines={2}
+                style={
+                  styles.colorText
+                }
               >
-                Nota: {itemState.note}
+                {item.color ||
+                  'Sin color'}
               </Text>
-
             </View>
-          ) : null}
-
-        </View>
 
 
-        {/* Acciones */}
-        <View style={styles.clothingActions}>
-
-          {/* Editar nota */}
-          <TouchableOpacity
-            style={styles.editButton}
-            onPress={() => openNoteEditor(item)}
-          >
-            <Ionicons
-              name="pencil-outline"
-              size={18}
-              color={COLORS.textDark}
-            />
-
-            <Text style={styles.actionText}>
-              Nota
-            </Text>
-          </TouchableOpacity>
-
-
-          {/* Checkbox empacado */}
-          <TouchableOpacity
-            style={styles.packButton}
-            onPress={() => togglePacked(item.id)}
-          >
-
-            <View
-              style={[
-                styles.checkbox,
-                isPacked && styles.checkboxChecked,
-              ]}
-            >
-
-              {isPacked && (
+            {itemState.note ? (
+              <View
+                style={
+                  styles.noteRow
+                }
+              >
                 <Ionicons
-                  name="checkmark"
-                  size={15}
-                  color="#FFFFFF"
+                  name="information-circle-outline"
+                  size={14}
+                  color={COLORS.icon}
                 />
-              )}
 
-            </View>
+                <Text
+                  style={
+                    styles.noteText
+                  }
+                  numberOfLines={2}
+                >
+                  Nota:{' '}
+                  {itemState.note}
+                </Text>
+              </View>
+            ) : null}
+          </View>
 
-            <Text style={styles.actionText}>
-              Empacada
-            </Text>
 
-          </TouchableOpacity>
+          <View
+            style={
+              styles.clothingActions
+            }
+          >
 
+            <TouchableOpacity
+              style={
+                styles.editButton
+              }
+              onPress={() =>
+                openNoteEditor(
+                  item
+                )
+              }
+            >
+              <Ionicons
+                name="pencil-outline"
+                size={18}
+                color={
+                  COLORS.textDark
+                }
+              />
+
+              <Text
+                style={
+                  styles.actionText
+                }
+              >
+                Nota
+              </Text>
+            </TouchableOpacity>
+
+
+            <TouchableOpacity
+              style={
+                styles.packButton
+              }
+              onPress={() =>
+                togglePacked(
+                  item.id
+                )
+              }
+            >
+              <View
+                style={[
+                  styles.checkbox,
+
+                  isPacked &&
+                    styles.checkboxChecked,
+                ]}
+              >
+                {isPacked && (
+                  <Ionicons
+                    name="checkmark"
+                    size={15}
+                    color="#FFFFFF"
+                  />
+                )}
+              </View>
+
+              <Text
+                style={
+                  styles.actionText
+                }
+              >
+                Empacada
+              </Text>
+            </TouchableOpacity>
+
+          </View>
         </View>
-
-      </View>
-    );
-  };
+      );
+    };
 
 
   // ==========================================================
-  // LOADING
+  // CARGANDO
   // ==========================================================
 
   if (loading) {
-
     return (
-      <View style={styles.loadingContainer}>
-
+      <View
+        style={
+          styles.loadingContainer
+        }
+      >
         <Ionicons
           name="briefcase-outline"
           size={38}
           color={COLORS.primary}
         />
 
-        <Text style={styles.loadingText}>
+        <Text
+          style={
+            styles.loadingText
+          }
+        >
           Cargando maleta...
         </Text>
-
       </View>
     );
-
   }
 
 
   // ==========================================================
-  // RENDER PRINCIPAL
+  // RENDER
   // ==========================================================
 
   return (
-    <View style={styles.screen}>
+    <View
+      style={styles.screen}
+    >
+
+    
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[
           styles.contentContainer,
-          isDesktop && styles.contentContainerDesktop,
+
+          isDesktop &&
+            styles.contentContainerDesktop,
         ]}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={
+          false
+        }
       >
+{successMessageVisible && (
+  <View style={styles.successBanner}>
+    <View style={styles.successIcon}>
+      <Ionicons
+        name="checkmark"
+        size={17}
+        color={SUCCESS_TEXT}
+      />
+    </View>
 
+    <Text style={styles.successText}>
+      {MESSAGES.SUITCASE_SAVED ||
+        'Maleta guardada exitosamente.'}
+    </Text>
+  </View>
+)}
+{isEditing && (
+  <View style={styles.editingBanner}>
+    <Ionicons
+      name="create-outline"
+      size={17}
+      color="#6F4A8E"
+    />
 
-        {/* ==================================================
-            INFORMACIÓN DE LA MALETA
-        ================================================== */}
+    <Text style={styles.editingBannerText}>
+      Editando maleta
+    </Text>
+  </View>
+)}
+        {/* INFORMACIÓN */}
 
         <View
           style={[
             styles.infoCard,
-            isDesktop && styles.infoCardDesktop,
+
+            isDesktop &&
+              styles.infoCardDesktop,
           ]}
         >
 
           {/* DESTINO */}
-          <View style={styles.infoRow}>
 
-            <View style={styles.infoIcon}>
+          <View
+            style={
+              styles.infoRow
+            }
+          >
+            <View
+              style={
+                styles.infoIcon
+              }
+            >
               <Ionicons
                 name="location-outline"
                 size={18}
@@ -714,29 +1487,51 @@ export default function PackingModeScreen({ navigation, route }) {
               />
             </View>
 
-            <View style={styles.infoContent}>
-
-              <Text style={styles.infoLabel}>
+            <View
+              style={
+                styles.infoContent
+              }
+            >
+              <Text
+                style={
+                  styles.infoLabel
+                }
+              >
                 Destino
               </Text>
 
               <TextInput
-                value={destination}
-                onChangeText={setDestination}
+                value={
+                  destination
+                }
+               onChangeText={(text) => {
+  setDestination(text);
+  setSuccessMessageVisible(false);
+}}
                 placeholder="Ingresá el destino"
-                placeholderTextColor={COLORS.textLight}
-                style={styles.infoInput}
+                placeholderTextColor={
+                  COLORS.textLight
+                }
+                style={
+                  styles.infoInput
+                }
               />
-
             </View>
-
           </View>
 
 
-          {/* FECHA DE INICIO */}
-          <View style={styles.infoRow}>
+          {/* FECHA INICIO */}
 
-            <View style={styles.infoIcon}>
+          <View
+            style={
+              styles.infoRow
+            }
+          >
+            <View
+              style={
+                styles.infoIcon
+              }
+            >
               <Ionicons
                 name="calendar-outline"
                 size={18}
@@ -744,29 +1539,66 @@ export default function PackingModeScreen({ navigation, route }) {
               />
             </View>
 
-            <View style={styles.infoContent}>
-
-              <Text style={styles.infoLabel}>
+            <View
+              style={
+                styles.infoContent
+              }
+            >
+              <Text
+                style={
+                  styles.infoLabel
+                }
+              >
                 Fecha de inicio
               </Text>
 
-              <TextInput
-                value={startDate}
-                onChangeText={setStartDate}
-                placeholder="DD/MM/YYYY"
-                placeholderTextColor={COLORS.textLight}
-                style={styles.infoInput}
-              />
+              <TouchableOpacity
+                style={
+                  styles.dateButton
+                }
+                onPress={
+                  openStartDatePicker
+                }
+              >
+                <Text
+                  style={[
+                    styles.dateButtonText,
 
+                    !startDate &&
+                      styles.datePlaceholder,
+                  ]}
+                >
+                  {startDate
+                    ? formatDate(
+                        startDate
+                      )
+                    : 'DD/MM/YYYY'}
+                </Text>
+
+                <Ionicons
+                  name="calendar-outline"
+                  size={17}
+                  color={
+                    COLORS.icon
+                  }
+                />
+              </TouchableOpacity>
             </View>
-
           </View>
 
 
-          {/* FECHA DE FIN */}
-          <View style={styles.infoRow}>
+          {/* FECHA FIN */}
 
-            <View style={styles.infoIcon}>
+          <View
+            style={
+              styles.infoRow
+            }
+          >
+            <View
+              style={
+                styles.infoIcon
+              }
+            >
               <Ionicons
                 name="calendar-outline"
                 size={18}
@@ -774,29 +1606,67 @@ export default function PackingModeScreen({ navigation, route }) {
               />
             </View>
 
-            <View style={styles.infoContent}>
-
-              <Text style={styles.infoLabel}>
+            <View
+              style={
+                styles.infoContent
+              }
+            >
+              <Text
+                style={
+                  styles.infoLabel
+                }
+              >
                 Fecha de fin
               </Text>
 
-              <TextInput
-                value={endDate}
-                onChangeText={setEndDate}
-                placeholder="DD/MM/YYYY"
-                placeholderTextColor={COLORS.textLight}
-                style={styles.infoInput}
-              />
+              <TouchableOpacity
+                style={
+                  styles.dateButton
+                }
+                onPress={
+                  openEndDatePicker
+                }
+              >
+                <Text
+                  style={[
+                    styles.dateButtonText,
 
+                    !endDate &&
+                      styles.datePlaceholder,
+                  ]}
+                >
+                  {endDate
+                    ? formatDate(
+                        endDate
+                      )
+                    : 'DD/MM/YYYY'}
+                </Text>
+
+                <Ionicons
+                  name="calendar-outline"
+                  size={17}
+                  color={
+                    COLORS.icon
+                  }
+                />
+              </TouchableOpacity>
             </View>
-
           </View>
 
 
           {/* ESTADO */}
-          <View style={[styles.infoRow, styles.lastInfoRow]}>
 
-            <View style={styles.infoIcon}>
+          <View
+            style={[
+              styles.infoRow,
+              styles.lastInfoRow,
+            ]}
+          >
+            <View
+              style={
+                styles.infoIcon
+              }
+            >
               <MaterialCommunityIcons
                 name="briefcase-outline"
                 size={18}
@@ -804,228 +1674,319 @@ export default function PackingModeScreen({ navigation, route }) {
               />
             </View>
 
-            <View style={styles.infoContent}>
-
-              <Text style={styles.infoLabel}>
+            <View
+              style={
+                styles.infoContent
+              }
+            >
+              <Text
+                style={
+                  styles.infoLabel
+                }
+              >
                 Estado
               </Text>
 
-              <View style={styles.statusBadge}>
-                <Text style={styles.statusText}>
+              <View
+  style={[
+    styles.statusBadge,
+
+    status === 'Planificada' &&
+      styles.statusBadgePlanned,
+
+    status === 'En curso' &&
+      styles.statusBadgeActive,
+
+    status === 'Finalizada' &&
+      styles.statusBadgeFinished,
+  ]}
+>
+                <Text
+  style={[
+    styles.statusText,
+
+    status === 'Planificada' &&
+      styles.statusTextPlanned,
+
+    status === 'En curso' &&
+      styles.statusTextActive,
+
+    status === 'Finalizada' &&
+      styles.statusTextFinished,
+  ]}
+>
                   {status}
                 </Text>
               </View>
-
             </View>
-
           </View>
 
         </View>
 
 
-        {/* ==================================================
-            TÍTULO + PROGRESO
-        ================================================== */}
+        {/* PRENDAS */}
 
-        <View style={styles.sectionHeader}>
-
-          <Text style={styles.sectionTitle}>
+        <View
+          style={
+            styles.sectionHeader
+          }
+        >
+          <Text
+            style={
+              styles.sectionTitle
+            }
+          >
             Prendas de la maleta
           </Text>
-
         </View>
 
 
+        {/* CONTADOR */}
+
         <View
           style={[
-            styles.progressCard,
-            isDesktop && styles.progressCardDesktop,
+            styles.packedCountCard,
+
+            isDesktop &&
+              styles.packedCountCardDesktop,
           ]}
         >
-
-          <View style={styles.progressIcon}>
-
+          <View
+            style={
+              styles.packedCountIcon
+            }
+          >
             <Ionicons
               name="briefcase-outline"
               size={20}
               color={COLORS.icon}
             />
-
           </View>
 
-
-          <View style={styles.progressContent}>
-
-            <View style={styles.progressTopRow}>
-
-              <Text style={styles.progressText}>
-                Prendas empacadas:{' '}
-                <Text style={styles.progressStrong}>
-                  {packedCount} de {totalItems}
-                </Text>
-              </Text>
-
-              <Text style={styles.progressPercentage}>
-                {progress}%
-              </Text>
-
-            </View>
-
-
-            {/* Barra de progreso */}
-            <View style={styles.progressTrack}>
-
-              <View
-                style={[
-                  styles.progressFill,
-                  {
-                    width: `${progress}%`,
-                  },
-                ]}
-              />
-
-            </View>
-
-          </View>
-
+          <Text
+            style={
+              styles.packedCountText
+            }
+          >
+            Prendas cargadas:{' '}
+            <Text
+              style={
+                styles.packedCountNumber
+              }
+            >
+              {packedCount}
+            </Text>
+          </Text>
         </View>
 
 
-        {/* ==================================================
-            LISTADO DE PRENDAS
-        ================================================== */}
+        {/* LISTADO */}
 
         <View
           style={[
             styles.clothesList,
-            isDesktop && styles.clothesListDesktop,
+
+            isDesktop &&
+              styles.clothesListDesktop,
           ]}
         >
-
           {visibleClothes.length === 0 ? (
-
-            <View style={styles.emptyContainer}>
-
+            <View
+              style={
+                styles.emptyContainer
+              }
+            >
               <Ionicons
                 name="shirt-outline"
                 size={42}
                 color={COLORS.icon}
               />
 
-              <Text style={styles.emptyTitle}>
+              <Text
+                style={
+                  styles.emptyTitle
+                }
+              >
                 No tenés prendas registradas
               </Text>
 
-              <Text style={styles.emptyText}>
-                Agregá prendas a tu armario para poder
-                incluirlas en la maleta.
+              <Text
+                style={
+                  styles.emptyText
+                }
+              >
+                Agregá prendas a tu armario
+                para poder incluirlas
+                en la maleta.
               </Text>
-
             </View>
-
           ) : (
-
-            visibleClothes.map(renderClothingCard)
-
+            visibleClothes.map(
+              renderClothingCard
+            )
           )}
-
         </View>
 
 
-        {/* ==================================================
-            BOTÓN GUARDAR
-        ================================================== */}
+        {/* GUARDAR */}
 
         <TouchableOpacity
           style={[
             styles.saveButton,
-            saving && styles.saveButtonDisabled,
-            isDesktop && styles.saveButtonDesktop,
+
+            saving &&
+              styles.saveButtonDisabled,
+
+            isDesktop &&
+              styles.saveButtonDesktop,
           ]}
-          onPress={handleSaveSuitcase}
+          onPress={
+            handleSaveSuitcase
+          }
           disabled={saving}
         >
-
           <Ionicons
             name="briefcase-outline"
             size={18}
             color="#FFFFFF"
           />
 
-          <Text style={styles.saveButtonText}>
-            {saving ? 'Guardando...' : 'Guardar maleta'}
+          <Text
+            style={
+              styles.saveButtonText
+            }
+          >
+         {saving
+  ? 'Guardando...'
+  : isEditing
+    ? 'Guardar cambios'
+    : 'Guardar maleta'}
           </Text>
-
         </TouchableOpacity>
-
 
       </ScrollView>
 
 
-      {/* ====================================================
-          MODAL PARA NOTAS
-      ==================================================== */}
+      {/* CALENDARIO */}
+
+      <CalendarModal
+        visible={
+          calendarVisible
+        }
+        value={
+          selectedCalendarDate
+        }
+        onSelect={
+          handleCalendarSelect
+        }
+        onClose={
+          closeCalendar
+        }
+      />
+
+
+      {/* MODAL DE NOTAS */}
 
       <Modal
-        visible={noteModalVisible}
+        visible={
+          noteModalVisible
+        }
         transparent
         animationType="fade"
-        onRequestClose={() => setNoteModalVisible(false)}
+        onRequestClose={() =>
+          setNoteModalVisible(
+            false
+          )
+        }
       >
-
-        <View style={styles.modalOverlay}>
-
-          <View style={styles.noteModal}>
-
-            <Text style={styles.modalTitle}>
+        <View
+          style={
+            styles.modalOverlay
+          }
+        >
+          <View
+            style={
+              styles.noteModal
+            }
+          >
+            <Text
+              style={
+                styles.modalTitle
+              }
+            >
               Nota de la prenda
             </Text>
 
-            <Text style={styles.modalSubtitle}>
-              {selectedClothing?.title || ''}
+            <Text
+              style={
+                styles.modalSubtitle
+              }
+            >
+              {selectedClothing?.title ||
+                ''}
             </Text>
 
             <TextInput
-              value={noteText}
-              onChangeText={setNoteText}
-              placeholder="Ej.: Llevar por si hace frío..."
-              placeholderTextColor={COLORS.textLight}
+              value={
+                noteText
+              }
+              onChangeText={(text) => {
+  setNoteText(text);
+  setSuccessMessageVisible(false);
+}}
+placeholder="Ej.: Llevar por si hace frío..."
+              placeholderTextColor={
+                COLORS.textLight
+              }
               multiline
-              style={styles.noteInput}
+              style={
+                styles.noteInput
+              }
             />
 
-
-            <View style={styles.modalActions}>
-
+            <View
+              style={
+                styles.modalActions
+              }
+            >
               <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setNoteModalVisible(false)}
+                style={
+                  styles.cancelButton
+                }
+                onPress={() =>
+                  setNoteModalVisible(
+                    false
+                  )
+                }
               >
-
-                <Text style={styles.cancelButtonText}>
+                <Text
+                  style={
+                    styles.cancelButtonText
+                  }
+                >
                   Cancelar
                 </Text>
-
               </TouchableOpacity>
-
 
               <TouchableOpacity
-                style={styles.confirmButton}
-                onPress={saveNote}
+                style={
+                  styles.confirmButton
+                }
+                onPress={
+                  saveNote
+                }
               >
-
-                <Text style={styles.confirmButtonText}>
+                <Text
+                  style={
+                    styles.confirmButtonText
+                  }
+                >
                   Guardar
                 </Text>
-
               </TouchableOpacity>
-
             </View>
-
           </View>
-
         </View>
-
       </Modal>
 
     </View>
@@ -1037,536 +1998,959 @@ export default function PackingModeScreen({ navigation, route }) {
 // ESTILOS
 // ============================================================
 
-const styles = StyleSheet.create({
+const styles =
+  StyleSheet.create({
 
-  // ==========================================================
-  // PANTALLA GENERAL
-  // ==========================================================
-
-  screen: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-
-  scroll: {
-    flex: 1,
-  },
-
-  contentContainer: {
-    padding: 12,
-    paddingBottom: 30,
-  },
-
-  contentContainerDesktop: {
-    paddingHorizontal: 35,
-    paddingVertical: 25,
-    maxWidth: 1100,
-    width: '100%',
-    alignSelf: 'center',
-  },
-
-
-  // ==========================================================
-  // LOADING
-  // ==========================================================
-
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  loadingText: {
-    marginTop: 10,
-    color: COLORS.textLight,
-    fontSize: 14,
-    fontFamily: 'Poppins_400Regular',
-  },
-
-
-  // ==========================================================
-  // INFORMACIÓN DE LA MALETA
-  // ==========================================================
-
-  infoCard: {
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 5,
-
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
+    screen: {
+      flex: 1,
+      backgroundColor:
+        COLORS.background,
     },
-    shadowOpacity: 0.08,
-    shadowRadius: 5,
-    elevation: 2,
-  },
 
-  infoCardDesktop: {
-    paddingHorizontal: 22,
-    paddingVertical: 8,
-  },
-
-  infoRow: {
-    minHeight: 45,
-    flexDirection: 'row',
-    alignItems: 'center',
-
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0EAF8',
-  },
-
-  lastInfoRow: {
-    borderBottomWidth: 0,
-  },
-
-  infoIcon: {
-    width: 35,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  infoContent: {
-    flex: 1,
-    marginLeft: 3,
-  },
-
-  infoLabel: {
-    color: COLORS.textLight,
-    fontSize: 10,
-    fontFamily: 'Poppins_400Regular',
-  },
-
-  infoInput: {
-    color: COLORS.textDark,
-    fontSize: 12,
-    fontFamily: 'Poppins_600SemiBold',
-    paddingVertical: 1,
-  },
-
-  statusBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#F8F1FF',
-    borderWidth: 1,
-    borderColor: '#E8D9FA',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    marginTop: 1,
-  },
-
-  statusText: {
-    color: COLORS.buttonDark,
-    fontSize: 9,
-    fontFamily: 'Poppins_600SemiBold',
-  },
-
-
-  // ==========================================================
-  // SECCIÓN PRENDAS
-  // ==========================================================
-
-  sectionHeader: {
-    marginTop: 14,
-    marginBottom: 8,
-  },
-
-  sectionTitle: {
-    color: COLORS.textDark,
-    fontSize: 14,
-    fontFamily: 'Poppins_600SemiBold',
-  },
-
-
-  // ==========================================================
-  // PROGRESO
-  // ==========================================================
-
-  progressCard: {
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderRadius: 12,
-    padding: 11,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 9,
-  },
-
-  progressCardDesktop: {
-    padding: 15,
-  },
-
-  progressIcon: {
-    width: 35,
-    height: 35,
-    borderRadius: 8,
-    backgroundColor: '#F8F1FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-
-  progressContent: {
-    flex: 1,
-  },
-
-  progressTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-
-  progressText: {
-    color: COLORS.textDark,
-    fontSize: 10,
-    fontFamily: 'Poppins_400Regular',
-  },
-
-  progressStrong: {
-    color: COLORS.buttonDark,
-    fontFamily: 'Poppins_600SemiBold',
-  },
-
-  progressPercentage: {
-    color: COLORS.buttonDark,
-    fontSize: 9,
-    fontFamily: 'Poppins_600SemiBold',
-  },
-
-  progressTrack: {
-    height: 5,
-    borderRadius: 5,
-    backgroundColor: '#EDE7F3',
-    marginTop: 7,
-    overflow: 'hidden',
-  },
-
-  progressFill: {
-    height: '100%',
-    backgroundColor: COLORS.buttonDark,
-    borderRadius: 5,
-  },
-
-
-  // ==========================================================
-  // LISTADO
-  // ==========================================================
-
-  clothesList: {
-    gap: 7,
-  },
-
-  clothesListDesktop: {
-    gap: 10,
-  },
-
-
-  // ==========================================================
-  // TARJETA DE PRENDA
-  // ==========================================================
-
-  clothingCard: {
-    minHeight: 82,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderRadius: 10,
-
-    flexDirection: 'row',
-    alignItems: 'center',
-
-    padding: 7,
-
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
+    scroll: {
+      flex: 1,
     },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 1,
-  },
 
-  clothingCardDesktop: {
-    minHeight: 105,
-    padding: 10,
-  },
+editingBanner: {
+  flexDirection: 'row',
+  alignItems: 'center',
 
-  imageContainer: {
-    width: 65,
-    height: 68,
-    borderRadius: 8,
-    backgroundColor: '#F6F3F8',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
+  backgroundColor: '#F8F1FF',
 
-  clothingImage: {
-    width: '100%',
-    height: '100%',
-  },
+  borderWidth: 1,
+  borderColor: '#E8D9FA',
 
-  imagePlaceholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  borderRadius: 10,
 
-  clothingInfo: {
-    flex: 1,
-    marginLeft: 9,
-    minWidth: 0,
-  },
+  paddingHorizontal: 14,
+  paddingVertical: 10,
 
-  clothingTitle: {
-    color: COLORS.textDark,
-    fontSize: 11,
-    fontFamily: 'Poppins_600SemiBold',
-  },
+  marginBottom: 12,
+},
 
-  clothingCategory: {
-    color: COLORS.textLight,
-    fontSize: 8.5,
-    fontFamily: 'Poppins_400Regular',
-    marginTop: 1,
-  },
+editingBannerText: {
+  color: '#6F4A8E',
 
-  colorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
+  fontSize: 10.5,
 
-  colorDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#D7D1DD',
-    marginRight: 4,
-  },
+  fontFamily:
+    'Poppins_600SemiBold',
 
-  colorText: {
-    color: COLORS.textLight,
-    fontSize: 8.5,
-    fontFamily: 'Poppins_400Regular',
-  },
+  marginLeft: 8,
+},
 
 
-  // ==========================================================
-  // NOTAS
-  // ==========================================================
+successBanner: {
+  flexDirection: 'row',
+  alignItems: 'center',
 
-  noteRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginTop: 4,
-    paddingRight: 4,
-  },
+  backgroundColor: SUCCESS_BACKGROUND,
 
-  noteText: {
-    flex: 1,
-    color: COLORS.buttonDark,
-    fontSize: 7.5,
-    fontFamily: 'Poppins_400Regular',
-    marginLeft: 3,
-  },
+  borderWidth: 1,
+  borderColor: SUCCESS_BORDER,
 
+  borderRadius: 10,
 
-  // ==========================================================
-  // ACCIONES DE PRENDA
-  // ==========================================================
+  paddingHorizontal: 14,
+  paddingVertical: 10,
 
-  clothingActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 4,
-  },
+  marginBottom: 12,
+},
 
-  editButton: {
-    width: 43,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    successIcon: {
+  width: 27,
+  height: 27,
 
-  packButton: {
-    width: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  borderRadius: 14,
 
-  actionText: {
-    color: COLORS.textLight,
-    fontSize: 6.5,
-    fontFamily: 'Poppins_400Regular',
-    marginTop: 2,
-    textAlign: 'center',
-  },
+  backgroundColor: '#FFFFFF',
 
-  checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
+  alignItems: 'center',
+  justifyContent: 'center',
 
-    borderWidth: 1,
-    borderColor: '#A9A1B0',
+  marginRight: 9,
+},
 
-    justifyContent: 'center',
-    alignItems: 'center',
+    successText: {
+  flex: 1,
 
-    backgroundColor: '#FFFFFF',
-  },
+  color: SUCCESS_TEXT,
 
-  checkboxChecked: {
-    backgroundColor: COLORS.buttonDark,
-    borderColor: COLORS.buttonDark,
-  },
+  fontSize: 10.5,
 
+  fontFamily: 'Poppins_600SemiBold',
+},
 
-  // ==========================================================
-  // ESTADO VACÍO
-  // ==========================================================
+    contentContainer: {
+      padding: 12,
+      paddingBottom: 30,
+    },
 
-  emptyContainer: {
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderRadius: 12,
-    padding: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    contentContainerDesktop: {
+      paddingHorizontal: 35,
+      paddingVertical: 25,
 
-  emptyTitle: {
-    color: COLORS.textDark,
-    fontSize: 13,
-    fontFamily: 'Poppins_600SemiBold',
-    marginTop: 10,
-    textAlign: 'center',
-  },
+      maxWidth: 1100,
+      width: '100%',
 
-  emptyText: {
-    color: COLORS.textLight,
-    fontSize: 10,
-    fontFamily: 'Poppins_400Regular',
-    marginTop: 5,
-    textAlign: 'center',
-    maxWidth: 280,
-  },
+      alignSelf: 'center',
+    },
 
+    loadingContainer: {
+      flex: 1,
 
-  // ==========================================================
-  // BOTÓN GUARDAR
-  // ==========================================================
+      backgroundColor:
+        COLORS.background,
 
-  saveButton: {
-    height: 42,
-    backgroundColor: COLORS.buttonDark,
-    borderRadius: 8,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
 
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    loadingText: {
+      marginTop: 10,
 
-    marginTop: 10,
-  },
+      color:
+        COLORS.textLight,
 
-  saveButtonDesktop: {
-    height: 48,
-    borderRadius: 9,
-    marginTop: 15,
-  },
+      fontSize: 14,
 
-  saveButtonDisabled: {
-    opacity: 0.6,
-  },
+      fontFamily:
+        'Poppins_400Regular',
+    },
 
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontFamily: 'Poppins_600SemiBold',
-    marginLeft: 7,
-  },
+    infoCard: {
+      backgroundColor:
+        '#FFFFFF',
 
+      borderRadius: 14,
 
-  // ==========================================================
-  // MODAL DE NOTAS
-  // ==========================================================
+      paddingHorizontal: 14,
+      paddingVertical: 7,
 
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
+      shadowColor: '#000',
 
-  noteModal: {
-    width: '100%',
-    maxWidth: 420,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-  },
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
 
-  modalTitle: {
-    color: COLORS.textDark,
-    fontSize: 17,
-    fontFamily: 'Poppins_600SemiBold',
-  },
+      shadowOpacity: 0.08,
+      shadowRadius: 5,
 
-  modalSubtitle: {
-    color: COLORS.textLight,
-    fontSize: 11,
-    fontFamily: 'Poppins_400Regular',
-    marginTop: 3,
-    marginBottom: 12,
-  },
+      elevation: 2,
+    },
 
-  noteInput: {
-    minHeight: 90,
-    borderWidth: 1,
-    borderColor: '#E4DCEC',
-    borderRadius: 10,
+    infoCardDesktop: {
+      paddingHorizontal: 22,
+      paddingVertical: 10,
+    },
 
-    padding: 12,
+    infoRow: {
+      minHeight: 51,
 
-    color: COLORS.textDark,
-    fontSize: 12,
-    fontFamily: 'Poppins_400Regular',
+      flexDirection: 'row',
+      alignItems: 'center',
 
-    textAlignVertical: 'top',
-  },
+      borderBottomWidth: 1,
+      borderBottomColor:
+        '#F0EAF8',
+    },
 
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 15,
-    gap: 8,
-  },
+    lastInfoRow: {
+      borderBottomWidth: 0,
+    },
 
-  cancelButton: {
-    paddingHorizontal: 15,
-    paddingVertical: 9,
-    borderRadius: 8,
-    backgroundColor: '#F3EFF6',
-  },
+    infoIcon: {
+      width: 35,
 
-  cancelButtonText: {
-    color: COLORS.textLight,
-    fontSize: 10,
-    fontFamily: 'Poppins_600SemiBold',
-  },
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
 
-  confirmButton: {
-    paddingHorizontal: 18,
-    paddingVertical: 9,
-    borderRadius: 8,
-    backgroundColor: COLORS.buttonDark,
-  },
+    infoContent: {
+      flex: 1,
+      marginLeft: 3,
+    },
 
-  confirmButtonText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontFamily: 'Poppins_600SemiBold',
-  },
-});
+    infoLabel: {
+      color:
+        COLORS.textLight,
+
+      fontSize: 10,
+
+      fontFamily:
+        'Poppins_400Regular',
+    },
+
+    // IMPORTANTE:
+    // Sin background, border ni borderRadius.
+    // El destino vuelve a verse limpio.
+    infoInput: {
+      color:
+        COLORS.textDark,
+
+      fontSize: 12,
+
+      fontFamily:
+        'Poppins_600SemiBold',
+
+      paddingVertical: 1,
+      paddingHorizontal: 0,
+
+      marginTop: 1,
+
+      backgroundColor:
+        'transparent',
+    },
+
+    dateButton: {
+      minHeight: 30,
+
+      flexDirection: 'row',
+      alignItems: 'center',
+
+      justifyContent:
+        'space-between',
+
+      paddingVertical: 2,
+      paddingRight: 2,
+    },
+
+    dateButtonText: {
+      flex: 1,
+
+      color:
+        COLORS.textDark,
+
+      fontSize: 12,
+
+      fontFamily:
+        'Poppins_600SemiBold',
+    },
+
+    datePlaceholder: {
+      color:
+        COLORS.textLight,
+
+      fontFamily:
+        'Poppins_400Regular',
+    },
+
+   statusBadge: {
+  alignSelf: 'flex-start',
+
+  backgroundColor:
+    STATUS_PLANNED_BACKGROUND,
+
+  borderWidth: 1,
+
+  borderColor:
+    STATUS_PLANNED_BORDER,
+
+  borderRadius: 10,
+
+  paddingHorizontal: 10,
+  paddingVertical: 3,
+
+  marginTop: 1,
+},
+
+statusText: {
+  color:
+    STATUS_PLANNED_TEXT,
+
+  fontSize: 9,
+
+  fontFamily:
+    'Poppins_600SemiBold',
+},
+
+statusBadgePlanned: {
+  backgroundColor:
+    STATUS_PLANNED_BACKGROUND,
+
+  borderColor:
+    STATUS_PLANNED_BORDER,
+},
+
+statusTextPlanned: {
+  color:
+    STATUS_PLANNED_TEXT,
+},
+
+    statusBadgeActive: {
+      backgroundColor:
+        STATUS_ACTIVE_BACKGROUND,
+
+      borderColor:
+        STATUS_ACTIVE_BORDER,
+    },
+
+    statusTextActive: {
+      color:
+        STATUS_ACTIVE_TEXT,
+    },
+
+    statusBadgeFinished: {
+      backgroundColor:
+        STATUS_FINISHED_BACKGROUND,
+
+      borderColor:
+        STATUS_FINISHED_BORDER,
+    },
+
+    statusTextFinished: {
+      color:
+        STATUS_FINISHED_TEXT,
+    },
+
+    calendarOverlay: {
+      flex: 1,
+
+      backgroundColor:
+        'rgba(0,0,0,0.35)',
+
+      justifyContent: 'center',
+      alignItems: 'center',
+
+      padding: 20,
+    },
+
+    calendarModal: {
+      width: '100%',
+      maxWidth: 380,
+
+      backgroundColor:
+        '#FFFFFF',
+
+      borderRadius: 16,
+
+      padding: 18,
+    },
+
+    calendarHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+
+      justifyContent:
+        'space-between',
+
+      marginBottom: 15,
+    },
+
+    calendarArrow: {
+      width: 36,
+      height: 36,
+
+      borderRadius: 18,
+
+      backgroundColor:
+        '#F8F1FF',
+
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+
+    calendarMonthTitle: {
+      color:
+        COLORS.textDark,
+
+      fontSize: 15,
+
+      fontFamily:
+        'Poppins_600SemiBold',
+    },
+
+    weekDaysRow: {
+      flexDirection: 'row',
+      marginBottom: 5,
+    },
+
+    weekDay: {
+      width: '14.2857%',
+      height: 30,
+
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    weekDayText: {
+      color:
+        COLORS.textLight,
+
+      fontSize: 10,
+
+      fontFamily:
+        'Poppins_600SemiBold',
+    },
+
+    calendarGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+    },
+
+    calendarDay: {
+      width: '14.2857%',
+      height: 42,
+
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    calendarDayText: {
+      width: 32,
+      height: 32,
+
+      textAlign: 'center',
+      textAlignVertical: 'center',
+
+      color:
+        COLORS.textDark,
+
+      fontSize: 11,
+
+      fontFamily:
+        'Poppins_400Regular',
+
+      borderRadius: 16,
+
+      paddingTop: 7,
+    },
+
+    calendarDayTextSelected: {
+      color:
+        '#FFFFFF',
+
+      backgroundColor:
+        COLORS.buttonDark,
+
+      fontFamily:
+        'Poppins_600SemiBold',
+    },
+
+    calendarDayTextToday: {
+      color:
+        COLORS.buttonDark,
+
+      fontFamily:
+        'Poppins_600SemiBold',
+    },
+
+    calendarActions: {
+      alignItems: 'flex-end',
+      marginTop: 12,
+    },
+
+    calendarCancelButton: {
+      paddingHorizontal: 15,
+      paddingVertical: 8,
+
+      borderRadius: 8,
+
+      backgroundColor:
+        '#F3EFF6',
+    },
+
+    calendarCancelText: {
+      color:
+        COLORS.textLight,
+
+      fontSize: 10,
+
+      fontFamily:
+        'Poppins_600SemiBold',
+    },
+
+    sectionHeader: {
+      marginTop: 14,
+      marginBottom: 8,
+    },
+
+    sectionTitle: {
+      color:
+        COLORS.textDark,
+
+      fontSize: 14,
+
+      fontFamily:
+        'Poppins_600SemiBold',
+    },
+
+    // ========================================================
+    // CONTADOR DE PRENDAS
+    // ========================================================
+
+    packedCountCard: {
+      backgroundColor:
+        '#FFFFFF',
+
+      borderRadius: 14,
+
+      padding: 11,
+
+      flexDirection: 'row',
+      alignItems: 'center',
+
+      marginBottom: 9,
+    },
+
+    packedCountCardDesktop: {
+      padding: 15,
+    },
+
+    packedCountIcon: {
+      width: 38,
+      height: 38,
+
+      borderRadius: 10,
+
+      backgroundColor:
+        '#F8F1FF',
+
+      justifyContent: 'center',
+      alignItems: 'center',
+
+      marginRight: 10,
+    },
+
+    packedCountText: {
+      color:
+        COLORS.textDark,
+
+      fontSize: 10,
+
+      fontFamily:
+        'Poppins_400Regular',
+    },
+
+    packedCountNumber: {
+      color:
+        COLORS.buttonDark,
+
+      fontFamily:
+        'Poppins_600SemiBold',
+    },
+
+    clothesList: {
+      gap: 7,
+    },
+
+    clothesListDesktop: {
+      gap: 10,
+    },
+
+    clothingCard: {
+      minHeight: 82,
+
+      backgroundColor:
+        '#FFFFFF',
+
+      borderRadius: 12,
+
+      flexDirection: 'row',
+      alignItems: 'center',
+
+      padding: 7,
+
+      shadowColor: '#000',
+
+      shadowOffset: {
+        width: 0,
+        height: 1,
+      },
+
+      shadowOpacity: 0.06,
+      shadowRadius: 3,
+
+      elevation: 1,
+    },
+
+    clothingCardDesktop: {
+      minHeight: 105,
+      padding: 10,
+    },
+
+    clothingCardPacked: {
+      borderWidth: 1,
+
+      borderColor:
+        SUCCESS_BORDER,
+
+      backgroundColor:
+        '#FEFFFE',
+    },
+
+    imageContainer: {
+      width: 65,
+      height: 68,
+
+      borderRadius: 8,
+
+      backgroundColor:
+        '#F6F3F8',
+
+      justifyContent: 'center',
+      alignItems: 'center',
+
+      overflow: 'hidden',
+    },
+
+    clothingImage: {
+      width: '100%',
+      height: '100%',
+    },
+
+    imagePlaceholder: {
+      flex: 1,
+
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+
+    clothingInfo: {
+      flex: 1,
+
+      marginLeft: 9,
+
+      minWidth: 0,
+    },
+
+    clothingTitle: {
+      color:
+        COLORS.textDark,
+
+      fontSize: 11,
+
+      fontFamily:
+        'Poppins_600SemiBold',
+    },
+
+    clothingCategory: {
+      color:
+        COLORS.textLight,
+
+      fontSize: 8.5,
+
+      fontFamily:
+        'Poppins_400Regular',
+
+      marginTop: 1,
+    },
+
+    colorRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+
+      marginTop: 4,
+    },
+
+    colorDot: {
+      width: 8,
+      height: 8,
+
+      borderRadius: 4,
+
+      borderWidth: 1,
+      borderColor:
+        '#D7D1DD',
+
+      marginRight: 4,
+    },
+
+    colorText: {
+      color:
+        COLORS.textLight,
+
+      fontSize: 8.5,
+
+      fontFamily:
+        'Poppins_400Regular',
+    },
+
+    noteRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+
+      marginTop: 4,
+
+      paddingRight: 4,
+    },
+
+    noteText: {
+      flex: 1,
+
+      color:
+        COLORS.buttonDark,
+
+      fontSize: 7.5,
+
+      fontFamily:
+        'Poppins_400Regular',
+
+      marginLeft: 3,
+    },
+
+    clothingActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+
+      marginLeft: 4,
+    },
+
+    editButton: {
+      width: 43,
+
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    packButton: {
+      width: 52,
+
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    actionText: {
+      color:
+        COLORS.textLight,
+
+      fontSize: 6.5,
+
+      fontFamily:
+        'Poppins_400Regular',
+
+      marginTop: 2,
+
+      textAlign: 'center',
+    },
+
+    checkbox: {
+      width: 18,
+      height: 18,
+
+      borderRadius: 4,
+
+      borderWidth: 1,
+      borderColor:
+        '#A9A1B0',
+
+      justifyContent: 'center',
+      alignItems: 'center',
+
+      backgroundColor:
+        '#FFFFFF',
+    },
+
+    checkboxChecked: {
+      backgroundColor:
+        COLORS.buttonDark,
+
+      borderColor:
+        COLORS.buttonDark,
+    },
+
+    emptyContainer: {
+      backgroundColor:
+        'rgba(255,255,255,0.9)',
+
+      borderRadius: 12,
+
+      padding: 30,
+
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    emptyTitle: {
+      color:
+        COLORS.textDark,
+
+      fontSize: 13,
+
+      fontFamily:
+        'Poppins_600SemiBold',
+
+      marginTop: 10,
+
+      textAlign: 'center',
+    },
+
+    emptyText: {
+      color:
+        COLORS.textLight,
+
+      fontSize: 10,
+
+      fontFamily:
+        'Poppins_400Regular',
+
+      marginTop: 5,
+
+      textAlign: 'center',
+
+      maxWidth: 280,
+    },
+
+    saveButton: {
+      height: 42,
+
+      backgroundColor:
+        COLORS.buttonDark,
+
+      borderRadius: 8,
+
+      flexDirection: 'row',
+
+      justifyContent: 'center',
+      alignItems: 'center',
+
+      marginTop: 10,
+    },
+
+    saveButtonDesktop: {
+      height: 48,
+
+      borderRadius: 9,
+
+      marginTop: 15,
+    },
+
+    saveButtonDisabled: {
+      opacity: 0.6,
+    },
+
+    saveButtonText: {
+      color:
+        '#FFFFFF',
+
+      fontSize: 11,
+
+      fontFamily:
+        'Poppins_600SemiBold',
+
+      marginLeft: 7,
+    },
+
+    modalOverlay: {
+      flex: 1,
+
+      backgroundColor:
+        'rgba(0,0,0,0.35)',
+
+      justifyContent: 'center',
+      alignItems: 'center',
+
+      padding: 20,
+    },
+
+    noteModal: {
+      width: '100%',
+      maxWidth: 420,
+
+      backgroundColor:
+        '#FFFFFF',
+
+      borderRadius: 16,
+
+      padding: 20,
+    },
+
+    modalTitle: {
+      color:
+        COLORS.textDark,
+
+      fontSize: 17,
+
+      fontFamily:
+        'Poppins_600SemiBold',
+    },
+
+    modalSubtitle: {
+      color:
+        COLORS.textLight,
+
+      fontSize: 11,
+
+      fontFamily:
+        'Poppins_400Regular',
+
+      marginTop: 3,
+      marginBottom: 12,
+    },
+
+    noteInput: {
+      minHeight: 90,
+
+      borderWidth: 1,
+
+      borderColor:
+        '#E4DCEC',
+
+      borderRadius: 10,
+
+      padding: 12,
+
+      color:
+        COLORS.textDark,
+
+      fontSize: 12,
+
+      fontFamily:
+        'Poppins_400Regular',
+
+      textAlignVertical:
+        'top',
+    },
+
+    modalActions: {
+      flexDirection: 'row',
+
+      justifyContent:
+        'flex-end',
+
+      marginTop: 15,
+
+      gap: 8,
+    },
+
+    cancelButton: {
+      paddingHorizontal: 15,
+      paddingVertical: 9,
+
+      borderRadius: 8,
+
+      backgroundColor:
+        '#F3EFF6',
+    },
+
+    cancelButtonText: {
+      color:
+        COLORS.textLight,
+
+      fontSize: 10,
+
+      fontFamily:
+        'Poppins_600SemiBold',
+    },
+
+    confirmButton: {
+      paddingHorizontal: 18,
+      paddingVertical: 9,
+
+      borderRadius: 8,
+
+      backgroundColor:
+        COLORS.buttonDark,
+    },
+
+    confirmButtonText: {
+      color:
+        '#FFFFFF',
+
+      fontSize: 10,
+
+      fontFamily:
+        'Poppins_600SemiBold',
+    },
+  });

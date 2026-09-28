@@ -1,4 +1,5 @@
 import React from 'react';
+
 import {
   View,
   Text,
@@ -9,145 +10,200 @@ import {
   Image,
   useWindowDimensions,
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+
+import {
+  Ionicons,
+  MaterialCommunityIcons,
+} from '@expo/vector-icons';
+
 import { COLORS } from '../theme/colours';
 
-export default function AboutAppScreen({ navigation, route }) {
+export default function AboutAppScreen({
+  navigation,
+  route,
+}) {
   const { width } = useWindowDimensions();
+
   const isDesktop = width > 768;
 
-  // Usuario recibido desde la navegación, si existe.
-  const user = route?.params?.user;
+  const user =
+    route?.params?.user || null;
 
-  // ----------------------------------------------------------
+  // ==========================================================
   // VOLVER
-  // ----------------------------------------------------------
+  // ==========================================================
+
   const handleGoBack = () => {
     if (navigation?.canGoBack?.()) {
       navigation.goBack();
     }
   };
 
-  // ----------------------------------------------------------
-  // NAVEGACIÓN DEL SIDEBAR EN ESCRITORIO
-  // ----------------------------------------------------------
-  const navigateTo = (screen) => {
-    try {
-      navigation.navigate(screen, { user });
-    } catch (error) {
-      // Si la pantalla pertenece a MainTabNavigator,
-      // intentamos volver al navegador principal.
-      try {
-        navigation.navigate('Main', {
-          screen,
-          params: { user },
-        });
-      } catch (e) {
-        console.log(`No se pudo navegar a ${screen}:`, e);
-      }
-    }
+  // ==========================================================
+  // IR A UNA SECCIÓN PRINCIPAL
+  // ==========================================================
+
+  const navigateTo = (tabName) => {
+    navigation.navigate('Main', {
+      user,
+      initialTab: tabName,
+    });
   };
 
-  // ----------------------------------------------------------
+  // ==========================================================
+  // AGREGAR PRENDA
+  // ==========================================================
+
+  const handleAddClothing = () => {
+    navigation.navigate('AddClothing', {
+      user,
+    });
+  };
+
+  // ==========================================================
   // SIDEBAR DESKTOP
-  // ----------------------------------------------------------
+  // ==========================================================
+
   const DesktopSidebar = () => (
     <View style={styles.sidebar}>
+
       <TouchableOpacity
         style={styles.sidebarItem}
         onPress={() => navigateTo('Inicio')}
+        activeOpacity={0.75}
       >
         <Ionicons
           name="home-outline"
-          size={25}
-          color="#A0A0A0"
+          size={28}
+          color={COLORS.textDark}
         />
-        <Text style={styles.sidebarLabel}>Inicio</Text>
+
+        <Text style={styles.sidebarLabel}>
+          Inicio
+        </Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         style={styles.sidebarItem}
         onPress={() => navigateTo('Prendas')}
+        activeOpacity={0.75}
       >
         <Ionicons
           name="shirt-outline"
-          size={25}
-          color="#A0A0A0"
+          size={28}
+          color={COLORS.textDark}
         />
-        <Text style={styles.sidebarLabel}>Prendas</Text>
+
+        <Text style={styles.sidebarLabel}>
+          Prendas
+        </Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         style={styles.sidebarItem}
         onPress={() => navigateTo('Outfits')}
+        activeOpacity={0.75}
       >
         <MaterialCommunityIcons
           name="hanger"
-          size={26}
-          color="#A0A0A0"
+          size={29}
+          color={COLORS.textDark}
         />
-        <Text style={styles.sidebarLabel}>Outfits</Text>
+
+        <Text style={styles.sidebarLabel}>
+          Outfits
+        </Text>
       </TouchableOpacity>
 
       <TouchableOpacity
         style={styles.sidebarItem}
         onPress={() => navigateTo('Maleta')}
+        activeOpacity={0.75}
       >
         <Ionicons
           name="briefcase-outline"
-          size={25}
-          color="#A0A0A0"
+          size={28}
+          color={COLORS.textDark}
         />
-        <Text style={styles.sidebarLabel}>Maleta</Text>
+
+        <Text style={styles.sidebarLabel}>
+          Maleta
+        </Text>
       </TouchableOpacity>
+
+      <View style={styles.sidebarSpacer} />
 
       <TouchableOpacity
         style={styles.addButtonDesktop}
-        onPress={() => {
-          try {
-            navigation.navigate('AddClothing', { user });
-          } catch (error) {
-            console.log('No se pudo abrir agregar:', error);
-          }
-        }}
+        onPress={handleAddClothing}
+        activeOpacity={0.8}
       >
-        <Ionicons name="add" size={30} color="#FFFFFF" />
+        <Ionicons
+          name="add"
+          size={34}
+          color="#FFFFFF"
+        />
       </TouchableOpacity>
+
     </View>
   );
 
-  // ----------------------------------------------------------
-  // HEADER DESKTOP
-  // ----------------------------------------------------------
-  const DesktopHeader = () => (
-    <SafeAreaView style={styles.desktopHeaderSafeArea}>
-      <View style={styles.desktopHeader}>
-        <TouchableOpacity style={styles.menuButton}>
+  // ==========================================================
+  // HEADER
+  // ==========================================================
+
+  const Header = () => (
+    <SafeAreaView style={styles.headerSafeArea}>
+      <View style={styles.header}>
+
+        {/* VOLVER */}
+        <TouchableOpacity
+          style={styles.headerButton}
+          onPress={handleGoBack}
+          activeOpacity={0.75}
+        >
           <Ionicons
-            name="menu-outline"
-            size={28}
+            name="arrow-back"
+            size={30}
             color="#FFFFFF"
           />
         </TouchableOpacity>
 
-        <Text style={styles.desktopHeaderTitle}>
-          Acerca de la aplicación
+        {/* TÍTULO */}
+        <Text
+          style={styles.headerTitle}
+          numberOfLines={1}
+        >
+          Acerca la aplicación
         </Text>
 
-        <TouchableOpacity style={styles.avatarCircle}>
-          <Ionicons
-            name="person"
-            size={18}
-            color="#FFFFFF"
-          />
+        {/* PERFIL */}
+        <TouchableOpacity
+          style={styles.profileButton}
+          onPress={() =>
+            navigation.navigate('Profile', {
+              user,
+            })
+          }
+          activeOpacity={0.8}
+        >
+          <View style={styles.profileCircle}>
+            <Ionicons
+              name="person-outline"
+              size={21}
+              color={COLORS.buttonDark}
+            />
+          </View>
         </TouchableOpacity>
+
       </View>
     </SafeAreaView>
   );
 
-  // ----------------------------------------------------------
-  // CONTENIDO PRINCIPAL
-  // ----------------------------------------------------------
+  // ==========================================================
+  // CONTENIDO
+  // ==========================================================
+
   const AboutContent = () => (
     <ScrollView
       style={styles.scrollView}
@@ -159,54 +215,37 @@ export default function AboutAppScreen({ navigation, route }) {
       ]}
       showsVerticalScrollIndicator={false}
     >
-      {/* Flecha volver */}
-      <View
-        style={[
-          styles.backContainer,
-          isDesktop && styles.backContainerDesktop,
-        ]}
-      >
-        <TouchableOpacity
-          onPress={handleGoBack}
-          style={styles.backButton}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name="arrow-back"
-            size={32}
-            color={COLORS.primary}
-          />
-        </TouchableOpacity>
-      </View>
 
-      {/* Logo */}
+      {/* LOGO */}
       <Image
         source={require('../assets/logo.png')}
         style={[
           styles.logo,
-          isDesktop ? styles.logoDesktop : styles.logoMobile,
+          isDesktop
+            ? styles.logoDesktop
+            : styles.logoMobile,
         ]}
         resizeMode="contain"
       />
 
-      {/* Nombre de la aplicación */}
+      {/* NOMBRE */}
       <Text
         style={[
           styles.appName,
-          isDesktop ? styles.appNameDesktop : styles.appNameMobile,
+          isDesktop
+            ? styles.appNameDesktop
+            : styles.appNameMobile,
         ]}
       >
         Vestuario Digital
       </Text>
 
-      {/* Versión */}
+      {/* VERSIÓN */}
       <Text style={styles.version}>
         Versión 1.0 (MVP)
       </Text>
 
-      {/* -------------------------------------------------- */}
-      {/* TARJETA: INFORMACIÓN */}
-      {/* -------------------------------------------------- */}
+      {/* INFORMACIÓN */}
       <View
         style={[
           styles.infoCard,
@@ -215,6 +254,7 @@ export default function AboutAppScreen({ navigation, route }) {
             : styles.infoCardMobile,
         ]}
       >
+
         <View style={styles.iconContainer}>
           <Ionicons
             name="information-outline"
@@ -237,11 +277,10 @@ export default function AboutAppScreen({ navigation, route }) {
           clima y planificar la ropa para viajes mediante el
           modo maleta.
         </Text>
+
       </View>
 
-      {/* -------------------------------------------------- */}
-      {/* TARJETA: PROYECTO */}
-      {/* -------------------------------------------------- */}
+      {/* PROYECTO */}
       <View
         style={[
           styles.infoCard,
@@ -251,6 +290,7 @@ export default function AboutAppScreen({ navigation, route }) {
             : styles.projectCardMobile,
         ]}
       >
+
         <View style={styles.iconContainer}>
           <MaterialCommunityIcons
             name="school-outline"
@@ -260,6 +300,7 @@ export default function AboutAppScreen({ navigation, route }) {
         </View>
 
         <View style={styles.projectTextContainer}>
+
           <Text style={styles.projectTitle}>
             Proyecto
           </Text>
@@ -275,10 +316,12 @@ export default function AboutAppScreen({ navigation, route }) {
             Proyecto académico desarrollado durante el año
             2026.
           </Text>
+
         </View>
+
       </View>
 
-      {/* Copyright */}
+      {/* COPYRIGHT */}
       <Text
         style={[
           styles.copyright,
@@ -289,56 +332,136 @@ export default function AboutAppScreen({ navigation, route }) {
       >
         © 2026 Vestuario Digital
       </Text>
+
     </ScrollView>
+  );
+
+  // ==========================================================
+  // MENÚ INFERIOR MOBILE
+  // ==========================================================
+
+  const MobileBottomMenu = () => (
+    <View style={styles.mobileBottomBar}>
+
+      <TouchableOpacity
+        style={styles.mobileNavItem}
+        onPress={() => navigateTo('Inicio')}
+      >
+        <Ionicons
+          name="home-outline"
+          size={24}
+          color={COLORS.textDark}
+        />
+
+        <Text style={styles.mobileNavLabel}>
+          Inicio
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.mobileNavItem}
+        onPress={() => navigateTo('Prendas')}
+      >
+        <Ionicons
+          name="shirt-outline"
+          size={24}
+          color={COLORS.textDark}
+        />
+
+        <Text style={styles.mobileNavLabel}>
+          Prendas
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.mobileAddButtonContainer}
+        onPress={handleAddClothing}
+      >
+        <View style={styles.mobileAddButton}>
+          <Ionicons
+            name="add"
+            size={32}
+            color="#FFFFFF"
+          />
+        </View>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.mobileNavItem}
+        onPress={() => navigateTo('Outfits')}
+      >
+        <MaterialCommunityIcons
+          name="hanger"
+          size={25}
+          color={COLORS.textDark}
+        />
+
+        <Text style={styles.mobileNavLabel}>
+          Outfits
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.mobileNavItem}
+        onPress={() => navigateTo('Maleta')}
+      >
+        <Ionicons
+          name="briefcase-outline"
+          size={24}
+          color={COLORS.textDark}
+        />
+
+        <Text style={styles.mobileNavLabel}>
+          Maleta
+        </Text>
+      </TouchableOpacity>
+
+    </View>
   );
 
   // ==========================================================
   // DESKTOP
   // ==========================================================
+
   if (isDesktop) {
-    return (
-      <View style={styles.desktopRoot}>
+  return (
+    <View style={styles.desktopRoot}>
+
+      {/* HEADER COMPLETO */}
+      <Header />
+
+      {/* CUERPO */}
+      <View style={styles.desktopMain}>
+
+        {/* SIDEBAR */}
         <DesktopSidebar />
 
-        <View style={styles.desktopMain}>
-          <DesktopHeader />
-
-          <View style={styles.desktopBody}>
-            <AboutContent />
-          </View>
+        {/* CONTENIDO */}
+        <View style={styles.desktopBody}>
+          <AboutContent />
         </View>
+
       </View>
-    );
-  }
+
+    </View>
+  );
+}
 
   // ==========================================================
   // MOBILE
   // ==========================================================
+
   return (
     <SafeAreaView style={styles.mobileRoot}>
-      {/* Header */}
-      <View style={styles.mobileHeader}>
-        <TouchableOpacity
-          style={styles.mobileBackButton}
-          onPress={handleGoBack}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name="arrow-back"
-            size={32}
-            color="#FFFFFF"
-          />
-        </TouchableOpacity>
 
-        <Text style={styles.mobileHeaderTitle}>
-          Acerca de la aplicación
-        </Text>
+      <Header />
 
-        {/* Espaciador para centrar correctamente el título */}
-        <View style={styles.mobileHeaderSpacer} />
+      <View style={styles.mobileContent}>
+        <AboutContent />
       </View>
 
-      <AboutContent />
+      <MobileBottomMenu />
+
     </SafeAreaView>
   );
 }
@@ -348,9 +471,10 @@ export default function AboutAppScreen({ navigation, route }) {
 // ============================================================
 
 const styles = StyleSheet.create({
-  // ========================================================
+
+  // ==========================================================
   // GENERAL
-  // ========================================================
+  // ==========================================================
 
   scrollView: {
     flex: 1,
@@ -362,215 +486,185 @@ const styles = StyleSheet.create({
     paddingBottom: 45,
   },
 
-  // ========================================================
-  // DESKTOP ROOT
-  // ========================================================
+  // ==========================================================
+  // DESKTOP
+  // ==========================================================
 
   desktopRoot: {
     flex: 1,
-    flexDirection: 'row',
     backgroundColor: '#FAF8FC',
   },
 
   desktopMain: {
     flex: 1,
+      flexDirection: 'row',
   },
 
   desktopBody: {
     flex: 1,
   },
 
-  desktopHeaderSafeArea: {
-    backgroundColor: COLORS.primary,
-  },
-
-  desktopHeader: {
-    height: 70,
-    backgroundColor: COLORS.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-
-  menuButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  desktopHeaderTitle: {
-    flex: 1,
-    textAlign: 'center',
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontFamily: 'Poppins_400Regular',
-  },
-
-  avatarCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // ========================================================
-  // SIDEBAR DESKTOP
-  // ========================================================
-
   sidebar: {
     width: 110,
     backgroundColor: '#FFFFFF',
     borderRightWidth: 1,
     borderRightColor: '#F0EAF8',
-    paddingTop: 60,
+    paddingTop: 30,
+    paddingHorizontal: 0,
     alignItems: 'center',
   },
 
   sidebarItem: {
     width: '100%',
+    minHeight: 82,
     alignItems: 'center',
-    marginBottom: 32,
+    justifyContent: 'center',
   },
 
   sidebarLabel: {
-    color: '#6F6A78',
+    color: COLORS.textDark,
     fontSize: 12,
     marginTop: 6,
     fontFamily: 'Poppins_400Regular',
   },
 
+  sidebarSpacer: {
+    flex: 1,
+  },
+
   addButtonDesktop: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 10,
-
-    shadowColor: '#764DC6',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 5,
+    marginBottom: 25,
   },
 
-  // ========================================================
-  // DESKTOP CONTENT
-  // ========================================================
+  // ==========================================================
+  // HEADER
+  // ==========================================================
 
-  desktopContentContainer: {
-    paddingTop: 15,
-    paddingHorizontal: 40,
-    minHeight: '100%',
+  headerSafeArea: {
+    backgroundColor: COLORS.primary,
   },
 
-  backContainer: {
-    width: '100%',
-    alignItems: 'flex-start',
+ header: {
+  height: 82,
+  backgroundColor: COLORS.primary,
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  paddingHorizontal: 22,
+},
+
+  headerButton: {
+    width: 52,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
-  backContainerDesktop: {
-    marginBottom: -5,
+headerTitle: {
+  flex: 1,
+  textAlign: 'center',
+  color: '#FFFFFF',
+  fontSize: 22,
+  fontFamily: 'Poppins_400Regular',
+},
+
+  profileButton: {
+    width: 52,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
-  backButton: {
-    width: 45,
-    height: 45,
+  profileCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
   },
 
-  logoDesktop: {
-    width: 175,
-    height: 175,
-    marginTop: -5,
+  // ==========================================================
+  // CONTENIDO DESKTOP
+  // ==========================================================
+
+  desktopContentContainer: {
+    paddingTop: 25,
+    paddingBottom: 50,
+    paddingHorizontal: 40,
   },
 
-  appNameDesktop: {
-    fontSize: 34,
-    marginTop: 5,
-  },
-
-  // ========================================================
-  // MOBILE
-  // ========================================================
+  // ==========================================================
+  // CONTENIDO MOBILE
+  // ==========================================================
 
   mobileRoot: {
     flex: 1,
     backgroundColor: '#FAF8FC',
   },
 
-  mobileHeader: {
-    height: 70,
-    backgroundColor: COLORS.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-  },
-
-  mobileBackButton: {
-    width: 45,
-    height: 45,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  mobileHeaderTitle: {
+  mobileContent: {
     flex: 1,
-    textAlign: 'center',
-    color: '#FFFFFF',
-    fontSize: 19,
-    fontFamily: 'Poppins_400Regular',
-  },
-
-  mobileHeaderSpacer: {
-    width: 45,
   },
 
   mobileContentContainer: {
-    paddingTop: 45,
-    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingHorizontal: 18,
+    paddingBottom: 35,
+  },
+
+  // ==========================================================
+  // LOGO
+  // ==========================================================
+
+  logo: {
+    marginBottom: 8,
+  },
+
+  logoDesktop: {
+    width: 145,
+    height: 145,
   },
 
   logoMobile: {
-    width: 220,
-    height: 220,
+    width: 120,
+    height: 120,
   },
 
-  appNameMobile: {
-    fontSize: 32,
-    marginTop: 8,
-  },
-
-  // ========================================================
-  // TÍTULOS
-  // ========================================================
+  // ==========================================================
+  // NOMBRE
+  // ==========================================================
 
   appName: {
-    color: '#18213D',
-    textAlign: 'center',
+    color: COLORS.buttonDark,
     fontFamily: 'Poppins_700Bold',
   },
 
-  version: {
-    color: COLORS.primary,
-    fontSize: 18,
-    marginTop: 3,
-    marginBottom: 32,
-    textAlign: 'center',
-    fontFamily: 'Poppins_600SemiBold',
+  appNameDesktop: {
+    fontSize: 26,
   },
 
-  // ========================================================
+  appNameMobile: {
+    fontSize: 23,
+  },
+
+  version: {
+    color: COLORS.textLight,
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    marginTop: 4,
+    marginBottom: 25,
+  },
+
+  // ==========================================================
   // TARJETAS
-  // ========================================================
+  // ==========================================================
 
   infoCard: {
     width: '100%',
@@ -578,7 +672,6 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     flexDirection: 'row',
     alignItems: 'center',
-
     shadowColor: '#9B8AA8',
     shadowOffset: {
       width: 0,
@@ -623,10 +716,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
 
-  // ========================================================
-  // ICONOS DE LAS TARJETAS
-  // ========================================================
-
   iconContainer: {
     width: 66,
     height: 66,
@@ -636,10 +725,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexShrink: 0,
   },
-
-  // ========================================================
-  // TARJETA INFORMACIÓN
-  // ========================================================
 
   infoText: {
     flex: 1,
@@ -658,10 +743,6 @@ const styles = StyleSheet.create({
     lineHeight: 27,
     marginLeft: 20,
   },
-
-  // ========================================================
-  // PROYECTO
-  // ========================================================
 
   projectTextContainer: {
     flex: 1,
@@ -690,10 +771,6 @@ const styles = StyleSheet.create({
     lineHeight: 26,
   },
 
-  // ========================================================
-  // COPYRIGHT
-  // ========================================================
-
   copyright: {
     color: '#7D7484',
     textAlign: 'center',
@@ -709,4 +786,49 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 75,
   },
+
+  // ==========================================================
+  // MENÚ INFERIOR MOBILE
+  // ==========================================================
+
+  mobileBottomBar: {
+    height: 78,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E8E0F0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: 8,
+  },
+
+  mobileNavItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  mobileNavLabel: {
+    marginTop: 3,
+    fontSize: 11,
+    color: COLORS.textDark,
+    fontFamily: 'Poppins_400Regular',
+  },
+
+  mobileAddButtonContainer: {
+    width: 70,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  mobileAddButton: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: -25,
+  },
+
 });

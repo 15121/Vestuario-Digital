@@ -19,10 +19,13 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   getUserClothes,
   addOutfit,
+  addHistoryEntry,
 } from '../services/database';
-
 import { COLORS } from '../theme/colours';
 import { MESSAGES } from '../theme/messages';
+import {
+  OutfitScreenLayout,
+} from '../navigation/MainTabNavigator';
 
 // ============================================================
 // NORMALIZACIÓN DE CATEGORÍAS
@@ -45,21 +48,23 @@ const isUpper = (category) => {
   return [
     'superior',
     'superiores',
-    'camisa',
-    'camisas',
-    'remera',
-    'remeras',
     'camiseta',
     'camisetas',
+    'tops',
+    'camisetas / tops',
+    'camisa',
+    'camisas',
+    'camisas / blusas',
     'blusa',
     'blusas',
-    'top',
-    'tops',
-    'sweater',
+    'abrigo',
+    'abrigos',
     'buzo',
+    'buzos / sweaters',
+    'sweater',
+    'sweaters',
     'chaqueta',
     'campera',
-    'abrigo',
   ].includes(value);
 };
 
@@ -155,7 +160,7 @@ export default function CreateOutfitScreen({ navigation, route }) {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
+const [markAsUsed, setMarkAsUsed] = useState(false);
   // Modal para seleccionar/cambiar prendas
   const [selectorVisible, setSelectorVisible] = useState(false);
   const [selectorType, setSelectorType] = useState(null);
@@ -183,33 +188,7 @@ export default function CreateOutfitScreen({ navigation, route }) {
 
       setClothes(userClothes);
 
-      // ------------------------------------------------------
-      // PRIMER INGRESO:
-      // Se selecciona automáticamente una prenda de cada
-      // categoría obligatoria para que la pantalla se vea
-      // completa cuando existen prendas cargadas.
-      // ------------------------------------------------------
-
-      const firstUpper = userClothes.find((item) =>
-        isUpper(item.category)
-      );
-
-      const firstLower = userClothes.find((item) =>
-        isLower(item.category)
-      );
-
-      const firstShoes = userClothes.find((item) =>
-        isShoes(item.category)
-      );
-
-      const accessories = userClothes
-        .filter((item) => isAccessory(item.category))
-        .slice(0, 2);
-
-      setSelectedUpper(firstUpper || null);
-      setSelectedLower(firstLower || null);
-      setSelectedShoes(firstShoes || null);
-      setSelectedAccessories(accessories);
+      
     } catch (error) {
       console.log('Error cargando prendas:', error);
 
@@ -250,15 +229,10 @@ export default function CreateOutfitScreen({ navigation, route }) {
   // PROGRESO DE PRENDAS OBLIGATORIAS
   // ==========================================================
 
-  const completedRequired = [
-    selectedUpper,
-    selectedLower,
-    selectedShoes,
-  ].filter(Boolean).length;
-
-  const totalRequired = 3;
-
-  const isComplete = completedRequired === totalRequired;
+const isComplete =
+  Boolean(selectedUpper) &&
+  Boolean(selectedLower) &&
+  Boolean(selectedShoes);
 
   // ==========================================================
   // SELECTOR
@@ -435,7 +409,22 @@ export default function CreateOutfitScreen({ navigation, route }) {
       if (!result?.success) {
         throw new Error(result?.message || 'OUTFIT_ERROR');
       }
+if (markAsUsed) {
+  const historyResult = await addHistoryEntry({
+    userId: user.id,
+    outfitId: result.outfit?.id ?? result.id,
+    outfitName: outfitName.trim(),
+    imageUri: '',
+    note: '',
+  });
 
+  if (!historyResult?.success) {
+    console.log(
+      'El outfit se creó correctamente, pero no se pudo registrar como usado:',
+      historyResult?.message
+    );
+  }
+}
       Alert.alert(
         'Outfit creado',
         MESSAGES.OUTFIT_CREATED,
@@ -889,7 +878,12 @@ export default function CreateOutfitScreen({ navigation, route }) {
   // ==========================================================
 
   if (loading) {
-    return (
+  return (
+    <OutfitScreenLayout
+      title="Crear Outfit"
+      navigation={navigation}
+      user={user}
+    >
       <SafeAreaView style={styles.loadingContainer}>
         <ActivityIndicator
           size="large"
@@ -900,15 +894,20 @@ export default function CreateOutfitScreen({ navigation, route }) {
           Cargando tu armario...
         </Text>
       </SafeAreaView>
-    );
-  }
-
+    </OutfitScreenLayout>
+  );
+}
   // ==========================================================
   // RENDER
   // ==========================================================
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
+return (
+    <OutfitScreenLayout
+      title="Crear Outfit"
+      navigation={navigation}
+      user={user}
+    >
+      <SafeAreaView style={styles.safeArea}>
       <ScrollView
         style={styles.container}
         contentContainerStyle={[
@@ -1034,27 +1033,42 @@ export default function CreateOutfitScreen({ navigation, route }) {
               isDesktop && styles.rightColumnDesktop,
             ]}
           >
-            {/* PROGRESO */}
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBadge}>
-                <Ionicons
-                  name="checkmark-circle-outline"
-                  size={20}
-                  color={COLORS.buttonDark}
-                />
-
-                <Text style={styles.progressText}>
-                  {completedRequired} / {totalRequired}{' '}
-                  completadas
-                </Text>
-              </View>
-
-              <Text style={styles.progressSubtext}>
-                Prendas obligatorias
-              </Text>
-            </View>
 
             {renderPreview()}
+
+{/* MARCAR COMO USADO */}
+<TouchableOpacity
+  style={styles.useOutfitOption}
+  onPress={() => setMarkAsUsed((previous) => !previous)}
+  disabled={saving}
+  activeOpacity={0.8}
+>
+  <View
+    style={[
+      styles.checkbox,
+      markAsUsed && styles.checkboxChecked,
+    ]}
+  >
+    {markAsUsed && (
+      <Ionicons
+        name="checkmark"
+        size={17}
+        color="#FFFFFF"
+      />
+    )}
+  </View>
+
+  <View style={styles.useOutfitTextContainer}>
+    <Text style={styles.useOutfitTitle}>
+      Usar este outfit ahora
+    </Text>
+
+    <Text style={styles.useOutfitDescription}>
+      Se agregará al historial de outfits utilizados.
+    </Text>
+  </View>
+</TouchableOpacity>
+
 
             {/* BOTONES */}
             <View
@@ -1104,6 +1118,7 @@ export default function CreateOutfitScreen({ navigation, route }) {
 
       {renderSelectorModal()}
     </SafeAreaView>
+     </OutfitScreenLayout>
   );
 }
 
@@ -1777,4 +1792,48 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Poppins_600SemiBold',
   },
+  useOutfitOption: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#FFFFFF',
+  borderWidth: 1,
+  borderColor: '#E8E1ED',
+  borderRadius: 12,
+  paddingHorizontal: 14,
+  paddingVertical: 12,
+  marginBottom: 14,
+},
+
+checkbox: {
+  width: 24,
+  height: 24,
+  borderRadius: 6,
+  borderWidth: 2,
+  borderColor: COLORS.primary,
+  alignItems: 'center',
+  justifyContent: 'center',
+  marginRight: 12,
+},
+
+checkboxChecked: {
+  backgroundColor: COLORS.primary,
+},
+
+useOutfitTextContainer: {
+  flex: 1,
+},
+
+useOutfitTitle: {
+  color: COLORS.textDark,
+  fontSize: 14,
+  fontFamily: 'Poppins_600SemiBold',
+},
+
+useOutfitDescription: {
+  color: COLORS.textLight,
+  fontSize: 12,
+  lineHeight: 18,
+  marginTop: 2,
+  fontFamily: 'Poppins_400Regular',
+},
 });

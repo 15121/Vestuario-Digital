@@ -27,40 +27,111 @@ export default function LoginScreen({ navigation }) {
 
   const handleInputChange = (setter) => (value) => {
     setter(value);
-    if (alert.message) setAlert({ type: '', message: '' });
+
+    if (alert.message) {
+      setAlert({
+        type: '',
+        message: '',
+      });
+    }
   };
 
   const handleLogin = () => {
-    // 1. Validación de campos obligatorios
-    if (!email || !password) {
+    // =========================================
+    // 1. VALIDACIÓN DE CAMPOS OBLIGATORIOS
+    // =========================================
+
+    if (!email.trim() || !password) {
       setAlert({
         type: 'error',
-        message: MESSAGES.REQUIRED_FIELDS || 'Completá todos los campos obligatorios.',
+        message:
+          MESSAGES.REQUIRED_FIELDS ||
+          'Completá todos los campos obligatorios.',
       });
       return;
     }
 
-    // 2. Intento de inicio de sesión
+    // =========================================
+    // 2. INTENTO DE INICIO DE SESIÓN
+    // =========================================
+
     try {
-      const userResult = loginUser(email, password);
-      
+      const userResult = loginUser(
+        email.trim().toLowerCase(),
+        password
+      );
+
+      // =========================================
+      // 3. VERIFICAR EL ROL DEL USUARIO
+      // =========================================
+      //
+      // role === 'root'
+      //     → navegación administrativa
+      //
+      // role === 'user'
+      //     → navegación normal
+      //
+      // Si por alguna razón un usuario antiguo
+      // no tiene role, database.js debería
+      // normalizarlo como 'user'.
+      // =========================================
+
+      const userRole = userResult?.role || 'user';
+
       setAlert({
         type: 'success',
         message: '¡Inicio de sesión exitoso!',
       });
 
+      // =========================================
+      // 4. REDIRECCIÓN SEGÚN EL ROL
+      // =========================================
+
       setTimeout(() => {
-        // Redirige a Main enviando el usuario logueado
-        navigation?.navigate('Main', { user: userResult });
+        if (userRole === 'root') {
+          // ROOT / ADMINISTRADOR
+          navigation?.navigate('Root', {
+            user: userResult,
+          });
+        } else {
+          // USUARIO NORMAL
+          navigation?.navigate('Main', {
+            user: userResult,
+          });
+        }
       }, 1200);
 
     } catch (error) {
+      // =========================================
+      // 5. MANEJO DE ERRORES
+      // =========================================
+
+      let errorMessage =
+        MESSAGES.USER_NOT_FOUND ||
+        'Esta cuenta no existe.';
+
+      // Cuenta suspendida/inactiva
+      if (error?.message === 'USER_INACTIVE') {
+        errorMessage =
+          'Esta cuenta se encuentra suspendida.';
+      }
+
+      // Cuenta Root reservada
+      else if (error?.message === 'ROOT_EMAIL_RESERVED') {
+        errorMessage =
+          'Este correo está reservado para la cuenta Root.';
+      }
+
       setAlert({
         type: 'error',
-        message: MESSAGES.USER_NOT_FOUND || 'Esta cuenta no existe.',
+        message: errorMessage,
       });
     }
   };
+
+  // =========================================
+  // RECUPERAR CONTRASEÑA
+  // =========================================
 
   const goToForgotPassword = () => {
     try {
@@ -74,8 +145,16 @@ export default function LoginScreen({ navigation }) {
     <ResponsiveContainer>
       <View style={styles.container}>
 
-        {/* HEADER APLICADO IGUAL EN CELULAR Y EN PC */}
-        <View style={[styles.topBar, isDesktop && styles.desktopTopBar]}>
+        {/* =========================================
+            HEADER
+        ========================================= */}
+
+        <View
+          style={[
+            styles.topBar,
+            isDesktop && styles.desktopTopBar,
+          ]}
+        >
           <TouchableOpacity
             onPress={() => navigation?.goBack()}
             style={styles.backButton}
@@ -93,18 +172,51 @@ export default function LoginScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
-          <View style={[styles.mainContent, isDesktop && styles.desktopContent]}>
+          <View
+            style={[
+              styles.mainContent,
+              isDesktop && styles.desktopContent,
+            ]}
+          >
 
-            <View style={[styles.leftColumn, isDesktop && styles.desktopLeftColumn]}>
+            {/* =========================================
+                COLUMNA IZQUIERDA
+            ========================================= */}
 
-              <Text style={styles.title}>¡Bienvenido/a de nuevo!</Text>
-              <Text style={styles.subtitle}>Iniciá sesión para acceder a tu armario virtual.</Text>
+            <View
+              style={[
+                styles.leftColumn,
+                isDesktop && styles.desktopLeftColumn,
+              ]}
+            >
 
-              <AlertMessage type={alert.type} message={alert.message} />
+              <Text style={styles.title}>
+                ¡Bienvenido/a de nuevo!
+              </Text>
 
-              {/* INPUT CORREO */}
+              <Text style={styles.subtitle}>
+                Iniciá sesión para acceder a tu armario virtual.
+              </Text>
+
+              {/* ALERTA */}
+
+              <AlertMessage
+                type={alert.type}
+                message={alert.message}
+              />
+
+              {/* =========================================
+                  INPUT CORREO
+              ========================================= */}
+
               <View style={styles.inputContainer}>
-                <Ionicons name="mail-outline" size={20} color="#B87EEE" style={styles.inputIcon} />
+                <Ionicons
+                  name="mail-outline"
+                  size={20}
+                  color="#B87EEE"
+                  style={styles.inputIcon}
+                />
+
                 <TextInput
                   style={styles.input}
                   placeholder="Correo electrónico"
@@ -113,12 +225,22 @@ export default function LoginScreen({ navigation }) {
                   onChangeText={handleInputChange(setEmail)}
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  autoCorrect={false}
                 />
               </View>
 
-              {/* INPUT CONTRASEÑA */}
+              {/* =========================================
+                  INPUT CONTRASEÑA
+              ========================================= */}
+
               <View style={styles.inputContainer}>
-                <Ionicons name="lock-closed-outline" size={20} color="#B87EEE" style={styles.inputIcon} />
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={20}
+                  color="#B87EEE"
+                  style={styles.inputIcon}
+                />
+
                 <TextInput
                   style={styles.input}
                   placeholder="Contraseña"
@@ -126,44 +248,93 @@ export default function LoginScreen({ navigation }) {
                   value={password}
                   onChangeText={handleInputChange(setPassword)}
                   secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
                 />
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+
+                <TouchableOpacity
+                  onPress={() =>
+                    setShowPassword(!showPassword)
+                  }
+                  style={styles.passwordToggle}
+                >
                   <Ionicons
-                    name={showPassword ? 'eye-outline' : 'eye-off-outline'}
+                    name={
+                      showPassword
+                        ? 'eye-outline'
+                        : 'eye-off-outline'
+                    }
                     size={20}
                     color="#A0A0A0"
                   />
                 </TouchableOpacity>
               </View>
 
-              {/* RECUPERAR CONTRASEÑA */}
+              {/* =========================================
+                  RECUPERAR CONTRASEÑA
+              ========================================= */}
+
               <TouchableOpacity
                 style={styles.forgotPasswordContainer}
                 onPress={goToForgotPassword}
               >
-                <Text style={styles.forgotPasswordText}>¿Olvidaste tu contraseña?</Text>
+                <Text style={styles.forgotPasswordText}>
+                  ¿Olvidaste tu contraseña?
+                </Text>
               </TouchableOpacity>
 
-              {/* BOTÓN VIOLETA OSCURO (#764DC6) */}
-              <TouchableOpacity style={styles.submitButton} onPress={handleLogin}>
-                <Text style={styles.submitButtonText}>Iniciar sesión</Text>
+              {/* =========================================
+                  BOTÓN INICIAR SESIÓN
+              ========================================= */}
+
+              <TouchableOpacity
+                style={styles.submitButton}
+                onPress={handleLogin}
+              >
+                <Text style={styles.submitButtonText}>
+                  Iniciar sesión
+                </Text>
               </TouchableOpacity>
 
-              {/* PIE Y ENLACE ELEVADOS EN CELULAR */}
+              {/* =========================================
+                  DIVISOR
+              ========================================= */}
+
               <View style={styles.dividerContainer}>
                 <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>o</Text>
+
+                <Text style={styles.dividerText}>
+                  o
+                </Text>
+
                 <View style={styles.dividerLine} />
               </View>
 
+              {/* =========================================
+                  CREAR CUENTA
+              ========================================= */}
+
               <View style={styles.footerContainer}>
-                <Text style={styles.footerText}>¿No tenés cuenta? </Text>
-                <TouchableOpacity onPress={() => navigation?.navigate('Register')}>
-                  <Text style={styles.registerLink}>Crear cuenta</Text>
+                <Text style={styles.footerText}>
+                  ¿No tenés cuenta?{' '}
+                </Text>
+
+                <TouchableOpacity
+                  onPress={() =>
+                    navigation?.navigate('Register')
+                  }
+                >
+                  <Text style={styles.registerLink}>
+                    Crear cuenta
+                  </Text>
                 </TouchableOpacity>
               </View>
 
             </View>
+
+            {/* =========================================
+                ILUSTRACIÓN DESKTOP
+            ========================================= */}
 
             {isDesktop && (
               <View style={styles.desktopRightColumn}>
@@ -188,15 +359,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8E9FE',
   },
+
+  // =========================================
+  // HEADER
+  // =========================================
+
   topBar: {
     backgroundColor: '#B185DB',
     height: 85,
     justifyContent: 'center',
     paddingHorizontal: 16,
   },
+
   desktopTopBar: {
     height: 60,
   },
+
   backButton: {
     width: 36,
     height: 36,
@@ -204,10 +382,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 18,
   },
+
+  // =========================================
+  // SCROLL
+  // =========================================
+
   scrollContent: {
     flexGrow: 1,
     paddingBottom: 20,
   },
+
+  // =========================================
+  // CONTENIDO PRINCIPAL
+  // =========================================
+
   mainContent: {
     width: '100%',
     flexGrow: 1,
@@ -215,6 +403,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     justifyContent: 'center',
   },
+
   desktopContent: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -223,12 +412,23 @@ const styles = StyleSheet.create({
     gap: 60,
     paddingTop: 30,
   },
+
+  // =========================================
+  // COLUMNA IZQUIERDA
+  // =========================================
+
   leftColumn: {
     width: '100%',
   },
+
   desktopLeftColumn: {
     width: '45%',
   },
+
+  // =========================================
+  // TÍTULO
+  // =========================================
+
   title: {
     fontSize: 30,
     fontFamily: 'Poppins_700Bold',
@@ -236,6 +436,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 4,
   },
+
   subtitle: {
     fontSize: 14,
     fontFamily: 'Poppins_400Regular',
@@ -243,6 +444,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 16,
   },
+
+  // =========================================
+  // INPUTS
+  // =========================================
+
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -254,25 +460,42 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#EFEFEF',
   },
+
   inputIcon: {
     marginRight: 10,
   },
+
   input: {
     flex: 1,
     fontSize: 14,
     fontFamily: 'Poppins_400Regular',
     color: '#333333',
   },
+
+  passwordToggle: {
+    paddingLeft: 8,
+  },
+
+  // =========================================
+  // RECUPERAR CONTRASEÑA
+  // =========================================
+
   forgotPasswordContainer: {
     alignItems: 'flex-end',
     marginBottom: 14,
     marginTop: 2,
   },
+
   forgotPasswordText: {
     color: '#B87EEE',
     fontSize: 13,
     fontFamily: 'Poppins_600SemiBold',
   },
+
+  // =========================================
+  // BOTÓN
+  // =========================================
+
   submitButton: {
     backgroundColor: '#764DC6',
     height: 48,
@@ -281,48 +504,69 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 4,
   },
+
   submitButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontFamily: 'Poppins_600SemiBold',
   },
+
+  // =========================================
+  // DIVISOR
+  // =========================================
+
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     marginVertical: 10,
   },
+
   dividerLine: {
     flex: 1,
     height: 1,
     backgroundColor: '#E0E0E0',
   },
+
   dividerText: {
     marginHorizontal: 10,
     fontSize: 13,
     color: '#8A8A8A',
     fontFamily: 'Poppins_400Regular',
   },
+
+  // =========================================
+  // FOOTER
+  // =========================================
+
   footerContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 2,
   },
+
   footerText: {
     fontSize: 14,
     fontFamily: 'Poppins_400Regular',
     color: '#8A8A8A',
   },
+
   registerLink: {
     fontSize: 14,
     fontFamily: 'Poppins_600SemiBold',
     color: '#B87EEE',
   },
+
+  // =========================================
+  // DESKTOP
+  // =========================================
+
   desktopRightColumn: {
     width: '50%',
     alignItems: 'center',
     justifyContent: 'center',
   },
+
   illustrationImage: {
     width: '100%',
     height: 420,

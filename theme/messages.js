@@ -8,6 +8,10 @@ export const MESSAGES = {
   RECOVERY_SENT: 'Correo de recuperación enviado correctamente.',
   CHANGES_SAVED: 'Cambios guardados con éxito.',
 
+  // Avisos
+  TEMP_PASSWORD_WARNING:
+    'Estás usando la contraseña temporal que te enviamos por correo. Te recomendamos cambiarla por una nueva desde "Editar perfil".',
+
   // Errores
   USER_NOT_FOUND: 'Esta cuenta no existe.',
   EMAIL_EXISTS: 'Esta cuenta ya existe.',

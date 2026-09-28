@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+
 import {
   View,
   Text,
@@ -6,272 +7,252 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  Platform,
   useWindowDimensions,
 } from 'react-native';
+
 import { Ionicons } from '@expo/vector-icons';
 
 import { COLORS } from '../theme/colours';
+import { getUserById } from '../services/database';
+import { OutfitScreenLayout } from '../navigation/MainTabNavigator';
+
+
+// ============================================================
+// FORMATEAR FECHA
+// ============================================================
+
+const formatMemberSince = (dateValue) => {
+  if (!dateValue) {
+    return '—';
+  }
+
+  const date = new Date(dateValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return '—';
+  }
+
+  return date.toLocaleDateString('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+};
+
+
+// ============================================================
+// RECUPERAR FECHA DESDE ID WEB ANTIGUO
+// ============================================================
+
+const getLegacyCreatedAtFromId = (id) => {
+  if (typeof id !== 'number' || id < 100000000000) {
+    return null;
+  }
+
+  const date = new Date(id);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toISOString();
+};
+
+
+// ============================================================
+// PANTALLA
+// ============================================================
 
 export default function ViewProfileScreen({ navigation, route }) {
+
   const { width } = useWindowDimensions();
-
-  // Usuario recibido desde Login / MainTabNavigator
-  const user = route?.params?.user;
-
   const isDesktop = width > 768;
 
-  // ---------------------------------------------------------
-  // DATOS DEL USUARIO
-  // ---------------------------------------------------------
+  const routeUser = route?.params?.user || {};
 
-  const name = user?.name || '';
-  const lastname = user?.lastname || '';
-  const email = user?.email || '';
+  const [user, setUser] = useState(routeUser);
 
-  const fullName = `${name} ${lastname}`.trim() || 'Usuario';
 
-  // ---------------------------------------------------------
-  // FECHA DE REGISTRO
-  // ---------------------------------------------------------
-  // database.js actualmente no guarda createdAt en users.
-  // Si en el futuro existe, la mostramos.
-  const formatMemberDate = (date) => {
-    if (!date) {
-      return '—';
-    }
+  // ==========================================================
+  // CARGAR USUARIO ACTUAL
+  // ==========================================================
 
-    const parsedDate = new Date(date);
+  useEffect(() => {
+    let mounted = true;
 
-    if (Number.isNaN(parsedDate.getTime())) {
-      return '—';
-    }
+    const loadUser = async () => {
+      if (!routeUser?.id) {
+        return;
+      }
 
-    return parsedDate.toLocaleDateString('es-AR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    });
-  };
+      try {
+        const result = await getUserById(routeUser.id);
 
-  const memberSince = formatMemberDate(user?.createdAt);
+        if (mounted && result) {
+          setUser({ ...routeUser, ...result });
+        }
+      } catch (error) {
+        console.log('Error al cargar usuario en perfil:', error);
+      }
+    };
 
-  // ---------------------------------------------------------
+    loadUser();
+
+    return () => {
+      mounted = false;
+    };
+  }, [routeUser?.id]);
+
+
+  // ==========================================================
+  // DATOS
+  // ==========================================================
+
+  const fullName = [user?.name, user?.lastname]
+    .filter(Boolean)
+    .join(' ');
+
+  const createdAt =
+    user?.createdAt || getLegacyCreatedAtFromId(user?.id);
+
+  const memberSince = formatMemberSince(createdAt);
+
+
+  // ==========================================================
   // EDITAR PERFIL
-  // ---------------------------------------------------------
+  // ==========================================================
 
   const handleEditProfile = () => {
-    navigation.navigate('EditProfile', {
-      user,
-    });
+    navigation.navigate('EditProfile', { user });
   };
 
-  // ---------------------------------------------------------
-  // CERRAR SESIÓN
-  // ---------------------------------------------------------
+
+  // ==========================================================
+  // LOGOUT (arreglado para que también funcione en web)
+  // ==========================================================
 
   const handleLogout = () => {
+    const doLogout = () => {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('¿Querés cerrar tu sesión?')) {
+        doLogout();
+      }
+      return;
+    }
+
     Alert.alert(
       'Cerrar sesión',
-      '¿Querés cerrar la sesión?',
+      '¿Querés cerrar tu sesión?',
       [
-        {
-          text: 'Cancelar',
-          style: 'cancel',
-        },
-        {
-          text: 'Cerrar sesión',
-          style: 'destructive',
-          onPress: () => {
-            navigation.reset({
-              index: 0,
-              routes: [
-                {
-                  name: 'Welcome',
-                },
-              ],
-            });
-          },
-        },
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Cerrar sesión', style: 'destructive', onPress: doLogout },
       ]
     );
   };
 
-  // ---------------------------------------------------------
-  // FILA DE INFORMACIÓN
-  // ---------------------------------------------------------
 
-  const ProfileRow = ({
-    icon,
-    label,
-    value,
-    last = false,
-  }) => {
-    return (
-      <View
-        style={[
-          styles.infoRow,
-          last && styles.infoRowLast,
-        ]}
-      >
-        <View style={styles.infoIconBox}>
-          <Ionicons
-            name={icon}
-            size={22}
-            color={COLORS.primary}
-          />
-        </View>
-
-        <Text style={styles.infoLabel}>
-          {label}
-        </Text>
-
-        <Text
-          style={styles.infoValue}
-          numberOfLines={1}
-        >
-          {value || '—'}
-        </Text>
-      </View>
-    );
-  };
-
-  // ---------------------------------------------------------
-  // PANTALLA
-  // ---------------------------------------------------------
+  // ==========================================================
+  // RENDER
+  // ==========================================================
 
   return (
-    <View style={styles.container}>
+    <OutfitScreenLayout
+      title="Perfil"
+      navigation={navigation}
+      user={user}
+      activeTab=""
+    >
       <ScrollView
+        style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
           isDesktop && styles.scrollContentDesktop,
         ]}
         showsVerticalScrollIndicator={false}
       >
+        <View style={styles.profileContainer}>
 
-        {/* ==================================================
-            CABECERA DEL PERFIL
-        ================================================== */}
-
-        <View style={styles.profileHeader}>
-
-          {/* Avatar */}
-          <View style={styles.avatar}>
-            <Ionicons
-              name="person"
-              size={78}
-              color="#FFFFFF"
-            />
+          {/* AVATAR */}
+          <View style={styles.avatarLarge}>
+            <Ionicons name="person" size={58} color={COLORS.primary} />
           </View>
 
-          {/* Nombre */}
+          {/* NOMBRE */}
           <Text style={styles.profileName}>
-            {fullName}
+            {fullName || 'Usuario'}
           </Text>
 
-          {/* Email */}
+          {/* EMAIL */}
           <Text style={styles.profileEmail}>
-            {email}
+            {user?.email || '—'}
           </Text>
 
-        </View>
+          {/* INFORMACIÓN PERSONAL */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Información personal</Text>
 
-        {/* ==================================================
-            TARJETA INFORMACIÓN PERSONAL
-        ================================================== */}
-
-        <View style={styles.infoCard}>
-
-          {/* Título */}
-          <View style={styles.infoHeader}>
-            <View style={styles.infoHeaderIcon}>
-              <Ionicons
-                name="person-outline"
-                size={23}
-                color={COLORS.primary}
-              />
-            </View>
-
-            <Text style={styles.infoHeaderTitle}>
-              Información personal
-            </Text>
+            <ProfileRow icon="person-outline" label="Nombre" value={user?.name || '—'} />
+            <ProfileRow icon="person-outline" label="Apellido" value={user?.lastname || '—'} />
+            <ProfileRow icon="mail-outline" label="Correo electrónico" value={user?.email || '—'} />
+            <ProfileRow icon="calendar-outline" label="Miembro desde" value={memberSince} last />
           </View>
 
-          {/* Nombre */}
-          <ProfileRow
-            icon="person-outline"
-            label="Nombre"
-            value={name}
-          />
+          {/* BOTONES */}
+          <View style={[styles.actions, isDesktop && styles.actionsDesktop]}>
 
-          {/* Apellido */}
-          <ProfileRow
-            icon="people-outline"
-            label="Apellido"
-            value={lastname}
-          />
+            <TouchableOpacity
+              style={styles.primaryButton}
+              activeOpacity={0.85}
+              onPress={handleEditProfile}
+            >
+              <Ionicons name="create-outline" size={20} color="#FFFFFF" />
+              <Text style={styles.primaryButtonText}>Editar perfil</Text>
+            </TouchableOpacity>
 
-          {/* Email */}
-          <ProfileRow
-            icon="mail-outline"
-            label="Correo electrónico"
-            value={email}
-          />
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              activeOpacity={0.85}
+              onPress={handleLogout}
+            >
+              <Ionicons name="log-out-outline" size={20} color={COLORS.buttonDark} />
+              <Text style={styles.secondaryButtonText}>Cerrar sesión</Text>
+            </TouchableOpacity>
 
-          {/* Fecha */}
-          <ProfileRow
-            icon="calendar-outline"
-            label="Miembro desde"
-            value={memberSince}
-            last
-          />
+          </View>
 
         </View>
-
-        {/* ==================================================
-            BOTÓN EDITAR
-        ================================================== */}
-
-        <TouchableOpacity
-          style={styles.editButton}
-          activeOpacity={0.8}
-          onPress={handleEditProfile}
-        >
-          <Ionicons
-            name="create-outline"
-            size={23}
-            color="#FFFFFF"
-          />
-
-          <Text style={styles.editButtonText}>
-            Editar perfil
-          </Text>
-        </TouchableOpacity>
-
-        {/* ==================================================
-            BOTÓN CERRAR SESIÓN
-        ================================================== */}
-
-        <TouchableOpacity
-          style={styles.logoutButton}
-          activeOpacity={0.8}
-          onPress={handleLogout}
-        >
-          <Ionicons
-            name="log-out-outline"
-            size={24}
-            color={COLORS.primary}
-          />
-
-          <Text style={styles.logoutButtonText}>
-            Cerrar sesión
-          </Text>
-        </TouchableOpacity>
-
       </ScrollView>
+    </OutfitScreenLayout>
+  );
+}
+
+
+// ============================================================
+// FILA DE INFORMACIÓN
+// ============================================================
+
+function ProfileRow({ icon, label, value, last }) {
+  return (
+    <View style={[styles.infoRow, !last && styles.infoRowBorder]}>
+      <View style={styles.infoIcon}>
+        <Ionicons name={icon} size={21} color={COLORS.primary} />
+      </View>
+
+      <View style={styles.infoTextContainer}>
+        <Text style={styles.infoLabel}>{label}</Text>
+        <Text style={styles.infoValue} numberOfLines={1}>{value}</Text>
+      </View>
     </View>
   );
 }
+
 
 // ============================================================
 // ESTILOS
@@ -279,240 +260,160 @@ export default function ViewProfileScreen({ navigation, route }) {
 
 const styles = StyleSheet.create({
 
-  // ----------------------------------------------------------
-  // CONTENEDOR
-  // ----------------------------------------------------------
-
-  container: {
+  scroll: {
     flex: 1,
-    backgroundColor: '#FAF8FC',
+    backgroundColor: COLORS.background,
   },
 
   scrollContent: {
-    paddingHorizontal: 10,
-    paddingTop: 28,
-    paddingBottom: 35,
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 35,
+    paddingBottom: 45,
   },
 
   scrollContentDesktop: {
-    paddingHorizontal: 24,
+    alignItems: 'center',
+    paddingHorizontal: 40,
     paddingTop: 45,
-    paddingBottom: 50,
+  },
+
+  profileContainer: {
+    width: '100%',
+    maxWidth: 850,
     alignItems: 'center',
   },
 
-  // ----------------------------------------------------------
-  // HEADER PERFIL
-  // ----------------------------------------------------------
-
-  profileHeader: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-
-  avatar: {
-    width: 116,
-    height: 116,
-    borderRadius: 58,
-
-    backgroundColor: '#BDBDBD',
-
+  avatarLarge: {
+    width: 112,
+    height: 112,
+    borderRadius: 56,
+    backgroundColor: '#FFFFFF',
     borderWidth: 3,
     borderColor: COLORS.primary,
-
-    alignItems: 'center',
     justifyContent: 'center',
-
-    marginBottom: 14,
+    alignItems: 'center',
+    marginBottom: 18,
   },
 
   profileName: {
-    fontFamily: 'Poppins_700Bold',
-    fontSize: 26,
-    color: '#17131C',
+    fontSize: 25,
+    color: COLORS.textDark,
+    fontFamily: 'Poppins_600SemiBold',
     textAlign: 'center',
   },
 
   profileEmail: {
-    fontFamily: 'Poppins_400Regular',
-    fontSize: 15,
-    color: COLORS.textLight,
-    marginTop: 3,
-    textAlign: 'center',
-  },
-
-  // ----------------------------------------------------------
-  // TARJETA
-  // ----------------------------------------------------------
-
-  infoCard: {
-    width: '100%',
-    maxWidth: 1020,
-
-    backgroundColor: '#FFFFFF',
-
-    borderRadius: 14,
-
-    overflow: 'hidden',
-
-    borderWidth: 1,
-    borderColor: '#F0ECF5',
-
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.06,
-    shadowRadius: 5,
-    elevation: 2,
-
-    marginBottom: 20,
-  },
-
-  // ----------------------------------------------------------
-  // ENCABEZADO DE LA TARJETA
-  // ----------------------------------------------------------
-
-  infoHeader: {
-    height: 72,
-
-    flexDirection: 'row',
-    alignItems: 'center',
-
-    paddingHorizontal: 34,
-
-    borderBottomWidth: 1,
-    borderBottomColor: '#EAE7EF',
-  },
-
-  infoHeaderIcon: {
-    width: 40,
-    height: 40,
-
-    borderRadius: 8,
-
-    backgroundColor: '#F3EDFF',
-
-    alignItems: 'center',
-    justifyContent: 'center',
-
-    marginRight: 16,
-  },
-
-  infoHeaderTitle: {
-    fontFamily: 'Poppins_600SemiBold',
-    fontSize: 17,
-    color: '#211B28',
-  },
-
-  // ----------------------------------------------------------
-  // FILAS
-  // ----------------------------------------------------------
-
-  infoRow: {
-    minHeight: 59,
-
-    flexDirection: 'row',
-    alignItems: 'center',
-
-    marginHorizontal: 20,
-
-    borderBottomWidth: 1,
-    borderBottomColor: '#EAE7EF',
-  },
-
-  infoRowLast: {
-    borderBottomWidth: 0,
-  },
-
-  infoIconBox: {
-    width: 40,
-    height: 40,
-
-    borderRadius: 8,
-
-    backgroundColor: '#F3EDFF',
-
-    alignItems: 'center',
-    justifyContent: 'center',
-
-    marginRight: 17,
-  },
-
-  infoLabel: {
-    fontFamily: 'Poppins_400Regular',
     fontSize: 14,
     color: COLORS.textLight,
+    fontFamily: 'Poppins_400Regular',
+    marginTop: 3,
+    marginBottom: 28,
+  },
 
+  card: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingHorizontal: 22,
+    paddingTop: 22,
+    paddingBottom: 5,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+
+  cardTitle: {
+    fontSize: 18,
+    color: COLORS.textDark,
+    fontFamily: 'Poppins_600SemiBold',
+    marginBottom: 5,
+  },
+
+  infoRow: {
+    minHeight: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  infoRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEE6F2',
+  },
+
+  infoIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: COLORS.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+
+  infoTextContainer: {
     flex: 1,
   },
 
+  infoLabel: {
+    fontSize: 11,
+    color: COLORS.textLight,
+    fontFamily: 'Poppins_400Regular',
+    marginBottom: 2,
+  },
+
   infoValue: {
-    fontFamily: 'Poppins_600SemiBold',
     fontSize: 14,
-    color: '#29222F',
-
-    maxWidth: '55%',
-    textAlign: 'right',
+    color: COLORS.textDark,
+    fontFamily: 'Poppins_500Medium',
   },
 
-  // ----------------------------------------------------------
-  // BOTÓN EDITAR
-  // ----------------------------------------------------------
-
-  editButton: {
+  actions: {
     width: '100%',
-    maxWidth: 1020,
-    minHeight: 54,
+    marginTop: 25,
+    gap: 12,
+  },
 
+  actionsDesktop: {
+    flexDirection: 'row',
+  },
+
+  primaryButton: {
+    minHeight: 52,
+    flex: 1,
+    borderRadius: 14,
     backgroundColor: COLORS.buttonDark,
-
-    borderRadius: 9,
-
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'center',
-
-    marginBottom: 15,
+    alignItems: 'center',
+    gap: 8,
   },
 
-  editButtonText: {
-    fontFamily: 'Poppins_500Medium',
-    fontSize: 16,
+  primaryButtonText: {
     color: '#FFFFFF',
-
-    marginLeft: 12,
-  },
-
-  // ----------------------------------------------------------
-  // BOTÓN LOGOUT
-  // ----------------------------------------------------------
-
-  logoutButton: {
-    width: '100%',
-    maxWidth: 1020,
-    minHeight: 54,
-
-    backgroundColor: '#FFFFFF',
-
-    borderRadius: 9,
-
-    borderWidth: 1.5,
-    borderColor: '#B78AE8',
-
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-
-    marginBottom: 10,
-  },
-
-  logoutButtonText: {
+    fontSize: 14,
     fontFamily: 'Poppins_500Medium',
-    fontSize: 16,
-    color: COLORS.primary,
-
-    marginLeft: 12,
   },
+
+  secondaryButton: {
+    minHeight: 52,
+    flex: 1,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: COLORS.buttonDark,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  secondaryButtonText: {
+    color: COLORS.buttonDark,
+    fontSize: 14,
+    fontFamily: 'Poppins_500Medium',
+  },
+
 });
