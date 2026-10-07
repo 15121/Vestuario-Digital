@@ -1,126 +1,179 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   Pressable,
+  Image,
   useWindowDimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { COLORS } from '../theme/colours';
+import { getUserHistory } from '../services/database';
 
-export default function HistoryClothingScreen({ navigation }) {
+export default function HistoryClothingScreen({ navigation, route }) {
   const { width } = useWindowDimensions();
 
   const isDesktop = width >= 768;
 
+  // Usuario recibido desde MainTabNavigator / navegación principal.
+  const user = route?.params?.user;
+
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // ============================================================
+  // CARGAR HISTORIAL
+  // ============================================================
+
+  const loadHistory = useCallback(async () => {
+    try {
+      setLoading(true);
+
+      if (!user?.id) {
+        setHistory([]);
+        return;
+      }
+
+      const data = await getUserHistory(user.id);
+
+      setHistory(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.log('Error al cargar historial:', error);
+      setHistory([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  // Se carga cada vez que la pantalla vuelve a enfocarse.
+  React.useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
+  // ============================================================
+  // ÚLTIMO OUTFIT
+  // ============================================================
+
+  const lastHistoryEntry = history.length > 0 ? history[0] : null;
+
+  // ============================================================
+  // VOLVER
+  // ============================================================
+
   const handleBack = () => {
-    if (navigation && navigation.canGoBack()) {
+    if (navigation?.canGoBack?.()) {
       navigation.goBack();
     }
   };
 
+  // ============================================================
+  // NAVEGACIÓN PRINCIPAL
+  // ============================================================
+
+  const navigateToMainSection = (section) => {
+    try {
+      // Si la sección existe directamente en el navegador actual.
+      navigation.navigate(section, {
+        user,
+      });
+      return;
+    } catch (error) {
+      // Si estamos dentro del MainTabNavigator,
+      // intentamos navegar hacia Main.
+    }
+
+    try {
+      navigation.navigate('Main', {
+        screen: section,
+        params: {
+          user,
+        },
+      });
+    } catch (error) {
+      console.log(`No se pudo navegar a ${section}:`, error);
+    }
+  };
+
+  // ============================================================
+  // LOADING
+  // ============================================================
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        {isDesktop ? (
+          <DesktopTopBar
+            navigation={navigation}
+            navigateToMainSection={navigateToMainSection}
+          />
+        ) : (
+          <MobileHeader onBack={handleBack} />
+        )}
+
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator
+            size="large"
+            color={COLORS.buttonDark}
+          />
+
+          <Text style={styles.loadingText}>
+            Cargando historial...
+          </Text>
+        </View>
+
+        {!isDesktop && (
+          <MobileBottomNavigation
+            navigation={navigation}
+            user={user}
+            navigateToMainSection={navigateToMainSection}
+          />
+        )}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
 
-      {/* =========================
-          VERSIÓN ESCRITORIO
-      ========================== */}
+      {/* ========================================================
+          PC
+      ======================================================== */}
+
       {isDesktop && (
-        <View style={styles.desktopTopBar}>
-
-          <Pressable style={styles.menuButton}>
-            <Ionicons
-              name="menu-outline"
-              size={34}
-              color="#FFFFFF"
-            />
-          </Pressable>
-
-          <Text style={styles.desktopTitle}>
-            Historial
-          </Text>
-
-          <View style={styles.profileCircle}>
-            <Ionicons
-              name="person"
-              size={25}
-              color="#FFFFFF"
-            />
-          </View>
-
-        </View>
+        <DesktopTopBar
+          navigation={navigation}
+          navigateToMainSection={navigateToMainSection}
+        />
       )}
 
       <View style={isDesktop ? styles.desktopBody : styles.mobileBody}>
 
-        {/* =========================
-            MENÚ LATERAL PC
-        ========================== */}
+        {/* ======================================================
+            SIDEBAR PC
+        ====================================================== */}
+
         {isDesktop && (
-          <View style={styles.sidebar}>
-
-            <SidebarItem
-              icon="home-outline"
-              text="Inicio"
-            />
-
-            <SidebarItem
-              icon="shirt-outline"
-              text="Prendas"
-            />
-
-            <SidebarItem
-              icon="shirt"
-              text="Outfits"
-              active
-            />
-
-            <SidebarItem
-              icon="briefcase-outline"
-              text="Maleta"
-            />
-
-            <Pressable style={styles.addButton}>
-              <Ionicons
-                name="add"
-                size={38}
-                color="#FFFFFF"
-              />
-            </Pressable>
-
-          </View>
+          <DesktopSidebar
+            navigation={navigation}
+            user={user}
+            navigateToMainSection={navigateToMainSection}
+          />
         )}
 
-        {/* =========================
+        {/* ======================================================
             CONTENIDO
-        ========================== */}
+        ====================================================== */}
+
         <View style={styles.content}>
 
-          {/* Header móvil */}
+          {/* HEADER MOBILE */}
+
           {!isDesktop && (
-            <View style={styles.mobileHeader}>
-
-              <Pressable
-                onPress={handleBack}
-                style={styles.backButton}
-              >
-                <Ionicons
-                  name="arrow-back"
-                  size={24}
-                  color="#FFFFFF"
-                />
-              </Pressable>
-
-              <Text style={styles.mobileTitle}>
-                Historial
-              </Text>
-
-              <View style={styles.headerSpace} />
-
-            </View>
+            <MobileHeader onBack={handleBack} />
           )}
 
           <ScrollView
@@ -132,92 +185,243 @@ export default function HistoryClothingScreen({ navigation }) {
             }
           >
 
-            {/* =========================
-                ESTADO VACÍO
-            ========================== */}
-            <View style={styles.emptyHistory}>
+            {/* ==================================================
+                HISTORIAL VACÍO
+            ================================================== */}
 
-              <View style={styles.clockCircle}>
-                <Ionicons
-                  name="time-outline"
-                  size={42}
-                  color={COLORS.buttonDark}
+            {history.length === 0 ? (
+              <EmptyHistory />
+            ) : (
+
+              <>
+                {/* ==============================================
+                    ÚLTIMO OUTFIT UTILIZADO
+                ============================================== */}
+
+                <LastUsedCard
+                  historyEntry={lastHistoryEntry}
+                  isDesktop={isDesktop}
                 />
-              </View>
 
-              <Text style={styles.emptyTitle}>
-                Aún no hay outfits utilizados
-              </Text>
+                {/* ==============================================
+                    TÍTULO
+                ============================================== */}
 
-              <Text style={styles.emptyText}>
-                Cuando utilices un outfit, aparecerá aquí.
-              </Text>
+                <Text
+                  style={
+                    isDesktop
+                      ? styles.desktopSectionTitle
+                      : styles.mobileSectionTitle
+                  }
+                >
+                  Outfits utilizados
+                </Text>
 
-            </View>
+                {/* ==============================================
+                    LISTADO
+                ============================================== */}
+
+                <View
+                  style={
+                    isDesktop
+                      ? styles.historyGrid
+                      : styles.historyList
+                  }
+                >
+                  {history.map((item) => (
+                    <HistoryCard
+                      key={item.id}
+                      item={item}
+                      isDesktop={isDesktop}
+                    />
+                  ))}
+                </View>
+              </>
+            )}
 
           </ScrollView>
-
         </View>
       </View>
 
-      {/* =========================
-          NAVEGACIÓN MÓVIL
-      ========================== */}
+      {/* ========================================================
+          NAVEGACIÓN MOBILE
+      ======================================================== */}
+
       {!isDesktop && (
-        <View style={styles.bottomNavigation}>
-
-          <BottomItem
-            icon="home-outline"
-            text="Inicio"
-          />
-
-          <BottomItem
-            icon="shirt-outline"
-            text="Prendas"
-          />
-
-          <Pressable style={styles.mobileAddButton}>
-            <Ionicons
-              name="add"
-              size={34}
-              color="#FFFFFF"
-            />
-          </Pressable>
-
-          <BottomItem
-            icon="shirt"
-            text="Outfits"
-            active
-          />
-
-          <BottomItem
-            icon="briefcase-outline"
-            text="Maleta"
-          />
-
-        </View>
+        <MobileBottomNavigation
+          navigation={navigation}
+          user={user}
+          navigateToMainSection={navigateToMainSection}
+        />
       )}
 
     </View>
   );
 }
 
+/* =============================================================
+   HEADER PC
+============================================================= */
 
-/* =====================================
-   ITEM MENÚ LATERAL
-===================================== */
+function DesktopTopBar({
+  navigation,
+  navigateToMainSection,
+}) {
+  return (
+    <View style={styles.desktopTopBar}>
 
-function SidebarItem({ icon, text, active }) {
+      <Pressable
+        style={styles.menuButton}
+        onPress={() => {
+          // El menú queda como elemento visual del mockup.
+        }}
+      >
+        <Ionicons
+          name="menu-outline"
+          size={34}
+          color="#FFFFFF"
+        />
+      </Pressable>
+
+      <Text style={styles.desktopTitle}>
+        Historial
+      </Text>
+
+      <Pressable
+        style={styles.profileCircle}
+        onPress={() => {
+          try {
+            navigation.navigate('Profile');
+          } catch (error) {
+            console.log('No se pudo abrir Profile:', error);
+          }
+        }}
+      >
+        <Ionicons
+          name="person"
+          size={24}
+          color="#FFFFFF"
+        />
+      </Pressable>
+
+    </View>
+  );
+}
+
+/* =============================================================
+   HEADER MOBILE
+============================================================= */
+
+function MobileHeader({ onBack }) {
+  return (
+    <View style={styles.mobileHeader}>
+
+      <Pressable
+        onPress={onBack}
+        style={styles.backButton}
+        hitSlop={10}
+      >
+        <Ionicons
+          name="arrow-back"
+          size={30}
+          color="#FFFFFF"
+        />
+      </Pressable>
+
+      <Text style={styles.mobileTitle}>
+        Historial
+      </Text>
+
+    </View>
+  );
+}
+
+/* =============================================================
+   SIDEBAR PC
+============================================================= */
+
+function DesktopSidebar({
+  navigation,
+  user,
+  navigateToMainSection,
+}) {
+  return (
+    <View style={styles.sidebar}>
+
+      <SidebarItem
+        icon="home-outline"
+        text="Inicio"
+        onPress={() => navigateToMainSection('Inicio')}
+      />
+
+      <SidebarItem
+        icon="shirt-outline"
+        text="Prendas"
+        onPress={() => navigateToMainSection('Prendas')}
+      />
+
+      <SidebarItem
+        icon="shirt"
+        text="Outfits"
+        active
+        onPress={() => navigateToMainSection('Outfits')}
+      />
+
+      <SidebarItem
+        icon="briefcase-outline"
+        text="Maleta"
+        onPress={() => navigateToMainSection('Maleta')}
+      />
+
+      <Pressable
+        style={styles.addButton}
+        onPress={() => {
+          try {
+           navigation.navigate('CreateOutfit', { user });
+          } catch (error) {
+            try {
+              navigation.navigate('Main', {
+                screen: 'Outfits',
+                params: { user },
+              });
+            } catch (e) {
+              console.log('No se pudo abrir crear outfit:', e);
+            }
+          }
+        }}
+      >
+        <Ionicons
+          name="add"
+          size={42}
+          color="#FFFFFF"
+        />
+      </Pressable>
+
+    </View>
+  );
+}
+
+/* =============================================================
+   ITEM SIDEBAR
+============================================================= */
+
+function SidebarItem({
+  icon,
+  text,
+  active = false,
+  onPress,
+}) {
   return (
     <Pressable
       style={[
         styles.sidebarItem,
         active && styles.sidebarItemActive,
       ]}
+      onPress={onPress}
     >
       <Ionicons
         name={icon}
-        size={34}
+        size={32}
         color={
           active
             ? COLORS.buttonDark
@@ -237,18 +441,242 @@ function SidebarItem({ icon, text, active }) {
   );
 }
 
+/* =============================================================
+   TARJETA ÚLTIMO OUTFIT
+============================================================= */
 
-/* =====================================
-   ITEM NAVEGACIÓN MÓVIL
-===================================== */
-
-function BottomItem({ icon, text, active }) {
+function LastUsedCard({
+  historyEntry,
+  isDesktop,
+}) {
   return (
-    <Pressable style={styles.bottomItem}>
+    <View
+      style={[
+        styles.lastUsedCard,
+        isDesktop
+          ? styles.lastUsedCardDesktop
+          : styles.lastUsedCardMobile,
+      ]}
+    >
+
+      <View style={styles.lastUsedIconCircle}>
+        <Ionicons
+          name="time-outline"
+          size={42}
+          color={COLORS.buttonDark}
+        />
+      </View>
+
+      <View style={styles.lastUsedInfo}>
+
+        <Text style={styles.lastUsedTitle}>
+          Último outfit utilizado
+        </Text>
+
+        <Text style={styles.lastUsedDate}>
+          {formatLongDate(historyEntry?.date)}
+        </Text>
+
+      </View>
+
+    </View>
+  );
+}
+
+/* =============================================================
+   TARJETA DE HISTORIAL
+============================================================= */
+
+function HistoryCard({
+  item,
+  isDesktop,
+}) {
+  return (
+    <View
+      style={
+        isDesktop
+          ? styles.historyCardWrapperDesktop
+          : styles.historyCardWrapperMobile
+      }
+    >
+
+      {/* FECHA ARRIBA DE LA TARJETA */}
+      <View style={styles.historyDateBadge}>
+        <Ionicons
+          name="calendar-outline"
+          size={18}
+          color={COLORS.buttonDark}
+        />
+
+        <Text style={styles.historyDateBadgeText}>
+          Usado el {formatShortDate(item?.date)}
+        </Text>
+      </View>
+
+      {/* TARJETA */}
+      <View style={styles.historyCard}>
+
+        {/* IMAGEN */}
+        <View
+          style={
+            isDesktop
+              ? styles.historyImageContainerDesktop
+              : styles.historyImageContainerMobile
+          }
+        >
+          {item?.imageUri ? (
+            <Image
+              source={{ uri: item.imageUri }}
+              style={styles.historyImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <Ionicons
+                name="shirt-outline"
+                size={42}
+                color={COLORS.primary}
+              />
+            </View>
+          )}
+        </View>
+
+        {/* INFORMACIÓN */}
+        <View style={styles.historyInfo}>
+
+          <Text
+            style={styles.historyName}
+            numberOfLines={2}
+          >
+            {item?.outfitName || 'Outfit sin nombre'}
+          </Text>
+
+          {/* NOTA */}
+          {!!item?.note && (
+            <View style={styles.infoRow}>
+
+              <Ionicons
+                name="document-text-outline"
+                size={22}
+                color={COLORS.buttonDark}
+              />
+
+              <Text style={styles.infoText}>
+                <Text style={styles.noteLabel}>
+                  Nota:
+                </Text>{' '}
+                {item.note}
+              </Text>
+
+            </View>
+          )}
+
+        </View>
+
+      </View>
+    </View>
+  );
+}
+
+/* =============================================================
+   ESTADO VACÍO
+============================================================= */
+
+function EmptyHistory() {
+  return (
+    <View style={styles.emptyHistory}>
+
+      <View style={styles.clockCircle}>
+        <Ionicons
+          name="time-outline"
+          size={42}
+          color={COLORS.buttonDark}
+        />
+      </View>
+
+      <Text style={styles.emptyTitle}>
+        Aún no hay outfits utilizados
+      </Text>
+
+      <Text style={styles.emptyText}>
+        Cuando utilices un outfit, aparecerá aquí.
+      </Text>
+
+    </View>
+  );
+}
+
+/* =============================================================
+   NAVEGACIÓN MOBILE
+============================================================= */
+
+function MobileBottomNavigation({
+  navigateToMainSection,
+}) {
+  return (
+    <View style={styles.bottomNavigation}>
+
+      <BottomItem
+        icon="home-outline"
+        text="Inicio"
+        onPress={() => navigateToMainSection('Inicio')}
+      />
+
+      <BottomItem
+        icon="shirt-outline"
+        text="Prendas"
+        onPress={() => navigateToMainSection('Prendas')}
+      />
+
+      <Pressable
+        style={styles.mobileAddButtonContainer}
+        onPress={() => navigateToMainSection('Outfits')}
+      >
+        <View style={styles.mobileAddButton}>
+          <Ionicons
+            name="add"
+            size={36}
+            color="#FFFFFF"
+          />
+        </View>
+      </Pressable>
+
+      <BottomItem
+        icon="shirt"
+        text="Outfits"
+        active
+        onPress={() => navigateToMainSection('Outfits')}
+      />
+
+      <BottomItem
+        icon="briefcase-outline"
+        text="Maleta"
+        onPress={() => navigateToMainSection('Maleta')}
+      />
+
+    </View>
+  );
+}
+
+/* =============================================================
+   ITEM NAVEGACIÓN MOBILE
+============================================================= */
+
+function BottomItem({
+  icon,
+  text,
+  active = false,
+  onPress,
+}) {
+  return (
+    <Pressable
+      style={styles.bottomItem}
+      onPress={onPress}
+    >
 
       <Ionicons
         name={icon}
-        size={22}
+        size={25}
         color={
           active
             ? COLORS.buttonDark
@@ -269,50 +697,76 @@ function BottomItem({ icon, text, active }) {
   );
 }
 
+/* =============================================================
+   FECHAS
+============================================================= */
 
-/* =====================================
+function formatShortDate(dateValue) {
+  if (!dateValue) {
+    return '--/--/----';
+  }
+
+  const date = new Date(dateValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return '--/--/----';
+  }
+
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+
+  return `${day}/${month}/${year}`;
+}
+
+function formatLongDate(dateValue) {
+  if (!dateValue) {
+    return '--';
+  }
+
+  const date = new Date(dateValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return '--';
+  }
+
+  const months = [
+    'enero',
+    'febrero',
+    'marzo',
+    'abril',
+    'mayo',
+    'junio',
+    'julio',
+    'agosto',
+    'septiembre',
+    'octubre',
+    'noviembre',
+    'diciembre',
+  ];
+
+  return `${date.getDate()} de ${
+    months[date.getMonth()]
+  } de ${date.getFullYear()}`;
+}
+
+/* =============================================================
    ESTILOS
-===================================== */
+============================================================= */
 
 const styles = StyleSheet.create({
+
+  /* ==========================================================
+     GENERAL
+  ========================================================== */
 
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
 
-  /* ---------- PC ---------- */
-
-  desktopTopBar: {
-    height: 78,
-    backgroundColor: COLORS.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-
-  menuButton: {
-    position: 'absolute',
-    left: 35,
-    top: 21,
-  },
-
-  desktopTitle: {
-    color: '#FFFFFF',
-    fontFamily: 'Poppins_400Regular',
-    fontSize: 22,
-  },
-
-  profileCircle: {
-    position: 'absolute',
-    right: 30,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#FFFFFF55',
-    alignItems: 'center',
-    justifyContent: 'center',
+  content: {
+    flex: 1,
   },
 
   desktopBody: {
@@ -324,11 +778,53 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
+  /* ==========================================================
+     HEADER PC
+  ========================================================== */
+
+  desktopTopBar: {
+    height: 78,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+
+  menuButton: {
+    position: 'absolute',
+    left: 34,
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  desktopTitle: {
+    color: '#FFFFFF',
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 22,
+  },
+
+  profileCircle: {
+    position: 'absolute',
+    right: 28,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  /* ==========================================================
+     SIDEBAR PC
+  ========================================================== */
+
   sidebar: {
     width: 138,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
-    paddingTop: 35,
+    paddingTop: 30,
     borderRightWidth: 1,
     borderRightColor: '#EEEEF4',
   },
@@ -356,7 +852,7 @@ const styles = StyleSheet.create({
   },
 
   addButton: {
-    marginTop: 20,
+    marginTop: 18,
     width: 64,
     height: 64,
     borderRadius: 32,
@@ -365,68 +861,306 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  /* ---------- CONTENIDO ---------- */
-
-  content: {
-    flex: 1,
-  },
-
-  desktopScrollContent: {
-    flexGrow: 1,
-    padding: 40,
-    paddingTop: 40,
-    paddingBottom: 50,
-  },
-
-  mobileScrollContent: {
-    flexGrow: 1,
-    padding: 14,
-    paddingBottom: 90,
-  },
-
-  /* ---------- HEADER MÓVIL ---------- */
+  /* ==========================================================
+     HEADER MOBILE
+  ========================================================== */
 
   mobileHeader: {
-    height: 54,
+    height: 72,
     backgroundColor: COLORS.primary,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
   },
 
   backButton: {
     position: 'absolute',
-    left: 12,
-    padding: 5,
+    left: 22,
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   mobileTitle: {
     color: '#FFFFFF',
     fontFamily: 'Poppins_400Regular',
-    fontSize: 14,
+    fontSize: 22,
   },
 
-  headerSpace: {
-    width: 35,
+  /* ==========================================================
+     SCROLL
+  ========================================================== */
+
+  desktopScrollContent: {
+    paddingHorizontal: 44,
+    paddingTop: 40,
+    paddingBottom: 50,
   },
 
-  /* ---------- ESTADO VACÍO ---------- */
+  mobileScrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 28,
+    paddingBottom: 30,
+  },
 
-  emptyHistory: {
-    flex: 1,
+  /* ==========================================================
+     ÚLTIMO OUTFIT
+  ========================================================== */
+
+  lastUsedCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 80,
+
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+
+    elevation: 3,
   },
 
-  clockCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+  lastUsedCardDesktop: {
+    minHeight: 122,
+    paddingHorizontal: 20,
+    marginBottom: 38,
+  },
+
+  lastUsedCardMobile: {
+    minHeight: 138,
+    paddingHorizontal: 18,
+    marginBottom: 42,
+  },
+
+  lastUsedIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: '#F2E9FF',
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 20,
+  },
+
+  lastUsedInfo: {
+    flex: 1,
+  },
+
+  lastUsedTitle: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: 20,
+    color: COLORS.textDark,
+    marginBottom: 3,
+  },
+
+  lastUsedDate: {
+    fontFamily: 'Poppins_600SemiBold',
+    fontSize: 18,
+    color: COLORS.buttonDark,
+  },
+
+  /* ==========================================================
+     TÍTULOS
+  ========================================================== */
+
+  desktopSectionTitle: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: 21,
+    color: COLORS.textDark,
     marginBottom: 18,
+  },
+
+  mobileSectionTitle: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: 21,
+    color: COLORS.textDark,
+    marginBottom: 18,
+    marginLeft: 8,
+  },
+
+  /* ==========================================================
+     GRILLA PC
+  ========================================================== */
+
+  historyGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+historyCardDesktop: {
+  width: '23.5%',
+  minWidth: 220,
+},
+
+historyCardWrapperDesktop: {
+  width: '23.5%',
+  minWidth: 220,
+  marginBottom: 30,
+},
+  /* ==========================================================
+     LISTA MOBILE
+  ========================================================== */
+
+ historyList: {
+  width: '100%',
+},
+
+historyCardWrapperMobile: {
+  width: '100%',
+  marginBottom: 26,
+},
+
+historyCardMobile: {
+  width: '100%',
+  minHeight: 180,
+  flexDirection: 'row',
+  alignItems: 'center',
+},
+  /* ==========================================================
+     TARJETA GENERAL
+  ========================================================== */
+historyDateBadge: {
+  alignSelf: 'flex-start',
+  flexDirection: 'row',
+  alignItems: 'center',
+
+  backgroundColor: '#F2E9FF',
+
+  paddingHorizontal: 12,
+  paddingVertical: 6,
+
+  borderTopLeftRadius: 10,
+  borderTopRightRadius: 10,
+
+  marginLeft: 12,
+  marginBottom: 6,
+},
+
+historyDateBadgeText: {
+  marginLeft: 6,
+
+  fontFamily: 'Poppins_600SemiBold',
+  fontSize: 12,
+
+  color: COLORS.buttonDark,
+},
+
+
+
+  historyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.07,
+    shadowRadius: 7,
+
+    elevation: 2,
+    overflow: 'hidden',
+  },
+
+  /* ==========================================================
+     IMÁGENES PC
+  ========================================================== */
+
+  historyImageContainerDesktop: {
+    width: '100%',
+    aspectRatio: 1.38,
+    backgroundColor: '#F3F1F5',
+    padding: 14,
+  },
+
+  /* ==========================================================
+     IMÁGENES MOBILE
+  ========================================================== */
+
+  historyImageContainerMobile: {
+    width: 195,
+    height: 155,
+    margin: 14,
+    backgroundColor: '#F3F1F5',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+
+  historyImage: {
+    width: '100%',
+    height: '100%',
+  },
+
+  imagePlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F1F5',
+  },
+
+  /* ==========================================================
+     INFORMACIÓN
+  ========================================================== */
+
+  historyInfo: {
+    paddingHorizontal: 18,
+    paddingVertical: 15,
+    flex: 1,
+  },
+
+
+  historyName: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: 17,
+    color: COLORS.textDark,
+    marginBottom: 12,
+  },
+
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 9,
+  },
+
+  infoText: {
+    flex: 1,
+    marginLeft: 9,
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#687084',
+  },
+
+  noteLabel: {
+    fontFamily: 'Poppins_600SemiBold',
+    color: COLORS.buttonDark,
+  },
+
+  /* ==========================================================
+     ESTADO VACÍO
+  ========================================================== */
+
+  emptyHistory: {
+    minHeight: 520,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+
+  clockCircle: {
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    backgroundColor: '#F2E9FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
   },
 
   emptyTitle: {
@@ -446,10 +1180,29 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
 
-  /* ---------- NAV MÓVIL ---------- */
+  /* ==========================================================
+     LOADING
+  ========================================================== */
+
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  loadingText: {
+    marginTop: 12,
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 14,
+    color: COLORS.textLight,
+  },
+
+  /* ==========================================================
+     NAV MOBILE
+  ========================================================== */
 
   bottomNavigation: {
-    height: 63,
+    height: 76,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#EEEEF4',
@@ -460,16 +1213,17 @@ const styles = StyleSheet.create({
   },
 
   bottomItem: {
-    width: 52,
+    width: 58,
+    height: 62,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   bottomText: {
     fontFamily: 'Poppins_400Regular',
-    fontSize: 9,
+    fontSize: 10,
     color: '#687084',
-    marginTop: 2,
+    marginTop: 3,
   },
 
   bottomTextActive: {
@@ -477,13 +1231,30 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
   },
 
+  mobileAddButtonContainer: {
+    width: 62,
+    height: 76,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
   mobileAddButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -20,
+
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.18,
+    shadowRadius: 5,
+
+    elevation: 5,
   },
+
 });
