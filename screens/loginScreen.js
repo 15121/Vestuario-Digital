@@ -1,0 +1,587 @@
+import React, { useState } from 'react';
+
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  Image,
+  ScrollView,
+} from 'react-native';
+
+import { Ionicons } from '@expo/vector-icons';
+import ResponsiveContainer from '../components/ResponsiveContainer';
+import AlertMessage from '../components/AlertMessage';
+import { MESSAGES } from '../theme/messages';
+import { loginUser } from '../services/database';
+import { isTemporaryPassword } from '../components/ForceChangePasswordModal';
+
+const getLoginErrorMessage = (error) => {
+  const code = String(error?.message || error);
+
+  if (code.includes('USER_INACTIVE')) {
+    return 'Esta cuenta se encuentra suspendida.';
+  }
+
+  if (code.includes('TOO_MANY_REQUESTS')) {
+    return 'Demasiados intentos. Esperá unos minutos e intentá de nuevo.';
+  }
+
+  if (
+    code.includes('Failed to fetch') ||
+    code.includes('Network request failed') ||
+    code.includes('TIMEOUT')
+  ) {
+    return 'No se pudo conectar con el servidor.';
+  }
+
+  return 'Correo o contraseña incorrectos.';
+};
+
+export default function LoginScreen({ navigation }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [alert, setAlert] = useState({
+    type: '',
+    message: '',
+  });
+  const [loading, setLoading] = useState(false);
+
+  const { width } = useWindowDimensions();
+  const isDesktop = width > 768;
+
+  const handleInputChange = (setter) => (value) => {
+    setter(value);
+
+    if (alert.message) {
+      setAlert({
+        type: '',
+        message: '',
+      });
+    }
+  };
+
+  const handleLogin = async () => {
+    if (loading) return;
+
+    if (!email.trim() || !password) {
+      setAlert({
+        type: 'error',
+        message: MESSAGES.REQUIRED_FIELDS,
+      });
+
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const userResult = await loginUser(
+        email.trim().toLowerCase(),
+        password
+      );
+
+      const userRole = userResult?.role || 'user';
+
+      setAlert({
+        type: 'success',
+        message: '¡Inicio de sesión exitoso!',
+      });
+
+      // reset: el Login deja de estar en la pila
+      // (Atrás no vuelve acá)
+      setTimeout(() => {
+        if (userRole === 'root') {
+          navigation.reset({
+            index: 0,
+            routes: [
+              {
+                name: 'Root',
+                params: {
+                  user: userResult,
+                },
+              },
+            ],
+          });
+        } else {
+          navigation.reset({
+            index: 0,
+            routes: [
+              {
+                name: 'Main',
+                params: {
+                  user: userResult,
+                  isTempPassword:
+                    !!userResult?.mustChangePassword ||
+                    isTemporaryPassword(password),
+                },
+              },
+            ],
+          });
+        }
+      }, 1000);
+    } catch (error) {
+      setAlert({
+        type: 'error',
+        message: getLoginErrorMessage(error),
+      });
+
+      setLoading(false);
+    }
+  };
+
+  // =========================================
+  // RECUPERAR CONTRASEÑA
+  // =========================================
+
+  const goToForgotPassword = () => {
+    try {
+      navigation.navigate('ForgotPassword');
+    } catch (e) {
+      navigation.navigate('ForgotPasswordScreen');
+    }
+  };
+
+  return (
+    <ResponsiveContainer>
+      <View style={styles.container}>
+
+        {/* =========================================
+            HEADER
+        ========================================= */}
+
+        <View
+          style={[
+            styles.topBar,
+            isDesktop && styles.desktopTopBar,
+          ]}
+        >
+          <TouchableOpacity
+            onPress={() => navigation?.goBack()}
+            style={styles.backButton}
+          >
+            <Ionicons
+              name="arrow-back"
+              size={isDesktop ? 26 : 22}
+              color="#FFFFFF"
+            />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View
+            style={[
+              styles.mainContent,
+              isDesktop && styles.desktopContent,
+            ]}
+          >
+
+            {/* =========================================
+                COLUMNA IZQUIERDA
+            ========================================= */}
+
+            <View
+              style={[
+                styles.leftColumn,
+                isDesktop && styles.desktopLeftColumn,
+              ]}
+            >
+
+              <Text style={styles.title}>
+                ¡Bienvenido/a de nuevo!
+              </Text>
+
+              <Text style={styles.subtitle}>
+                Iniciá sesión para acceder a tu armario virtual.
+              </Text>
+
+              {/* ALERTA */}
+
+              <AlertMessage
+                type={alert.type}
+                message={alert.message}
+              />
+
+              {/* =========================================
+                  INPUT CORREO
+              ========================================= */}
+
+              <View style={styles.inputContainer}>
+                <Ionicons
+                  name="mail-outline"
+                  size={20}
+                  color="#B87EEE"
+                  style={styles.inputIcon}
+                />
+
+                <TextInput
+                  style={styles.input}
+                  placeholder="Correo electrónico"
+                  placeholderTextColor="#A0A0A0"
+                  value={email}
+                  onChangeText={handleInputChange(setEmail)}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+
+              {/* =========================================
+                  INPUT CONTRASEÑA
+              ========================================= */}
+
+              <View style={styles.inputContainer}>
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={20}
+                  color="#B87EEE"
+                  style={styles.inputIcon}
+                />
+
+                <TextInput
+                  style={styles.input}
+                  placeholder="Contraseña"
+                  placeholderTextColor="#A0A0A0"
+                  value={password}
+                  onChangeText={handleInputChange(setPassword)}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onSubmitEditing={handleLogin}
+                  returnKeyType="done"
+                />
+
+                <TouchableOpacity
+                  onPress={() =>
+                    setShowPassword(!showPassword)
+                  }
+                  style={styles.passwordToggle}
+                >
+                  <Ionicons
+                    name={
+                      showPassword
+                        ? 'eye-outline'
+                        : 'eye-off-outline'
+                    }
+                    size={20}
+                    color="#A0A0A0"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {/* =========================================
+                  RECUPERAR CONTRASEÑA
+              ========================================= */}
+
+              <TouchableOpacity
+                style={styles.forgotPasswordContainer}
+                onPress={goToForgotPassword}
+              >
+                <Text style={styles.forgotPasswordText}>
+                  ¿Olvidaste tu contraseña?
+                </Text>
+              </TouchableOpacity>
+
+              {/* =========================================
+                  BOTÓN INICIAR SESIÓN
+              ========================================= */}
+
+              <TouchableOpacity
+                style={[
+                  styles.submitButton,
+                  loading && { opacity: 0.7 },
+                ]}
+                onPress={handleLogin}
+                disabled={loading}
+              >
+                <Text style={styles.submitButtonText}>
+                  {loading
+                    ? 'Ingresando...'
+                    : 'Iniciar sesión'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* =========================================
+                  DIVISOR
+              ========================================= */}
+
+              <View style={styles.dividerContainer}>
+                <View style={styles.dividerLine} />
+
+                <Text style={styles.dividerText}>
+                  o
+                </Text>
+
+                <View style={styles.dividerLine} />
+              </View>
+
+              {/* =========================================
+                  CREAR CUENTA
+              ========================================= */}
+
+              <View style={styles.footerContainer}>
+                <Text style={styles.footerText}>
+                  ¿No tenés cuenta?{' '}
+                </Text>
+
+                <TouchableOpacity
+                  onPress={() =>
+                    navigation?.navigate('Register')
+                  }
+                >
+                  <Text style={styles.registerLink}>
+                    Crear cuenta
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+            </View>
+
+            {/* =========================================
+                ILUSTRACIÓN DESKTOP
+            ========================================= */}
+
+            {isDesktop && (
+              <View style={styles.desktopRightColumn}>
+                <Image
+                  source={require('../assets/ilustracion.png')}
+                  style={styles.illustrationImage}
+                  resizeMode="contain"
+                />
+              </View>
+            )}
+
+          </View>
+        </ScrollView>
+
+      </View>
+    </ResponsiveContainer>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F8E9FE',
+  },
+
+  // =========================================
+  // HEADER
+  // =========================================
+
+  topBar: {
+    backgroundColor: '#B185DB',
+    height: 85,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+
+  desktopTopBar: {
+    height: 60,
+  },
+
+  backButton: {
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 18,
+  },
+
+  // =========================================
+  // SCROLL
+  // =========================================
+
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 20,
+  },
+
+  // =========================================
+  // CONTENIDO PRINCIPAL
+  // =========================================
+
+  mainContent: {
+    width: '100%',
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingTop: 10,
+    justifyContent: 'center',
+  },
+
+  desktopContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: '8%',
+    gap: 60,
+    paddingTop: 30,
+  },
+
+  // =========================================
+  // COLUMNA IZQUIERDA
+  // =========================================
+
+  leftColumn: {
+    width: '100%',
+  },
+
+  desktopLeftColumn: {
+    width: '45%',
+  },
+
+  // =========================================
+  // TÍTULO
+  // =========================================
+
+  title: {
+    fontSize: 30,
+    fontFamily: 'Poppins_700Bold',
+    color: '#B87EEE',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+
+  subtitle: {
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: '#7A6889',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+
+  // =========================================
+  // INPUTS
+  // =========================================
+
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 48,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#EFEFEF',
+  },
+
+  inputIcon: {
+    marginRight: 10,
+  },
+
+  input: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: '#333333',
+  },
+
+  passwordToggle: {
+    paddingLeft: 8,
+  },
+
+  // =========================================
+  // RECUPERAR CONTRASEÑA
+  // =========================================
+
+  forgotPasswordContainer: {
+    alignItems: 'flex-end',
+    marginBottom: 14,
+    marginTop: 2,
+  },
+
+  forgotPasswordText: {
+    color: '#B87EEE',
+    fontSize: 13,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+
+  // =========================================
+  // BOTÓN
+  // =========================================
+
+  submitButton: {
+    backgroundColor: '#764DC6',
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+
+  submitButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+
+  // =========================================
+  // DIVISOR
+  // =========================================
+
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E0E0E0',
+  },
+
+  dividerText: {
+    marginHorizontal: 10,
+    fontSize: 13,
+    color: '#8A8A8A',
+    fontFamily: 'Poppins_400Regular',
+  },
+
+  // =========================================
+  // FOOTER
+  // =========================================
+
+  footerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+
+  footerText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: '#8A8A8A',
+  },
+
+  registerLink: {
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    color: '#B87EEE',
+  },
+
+  // =========================================
+  // DESKTOP
+  // =========================================
+
+  desktopRightColumn: {
+    width: '50%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  illustrationImage: {
+    width: '100%',
+    height: 420,
+  },
+});
