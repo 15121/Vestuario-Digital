@@ -5,9 +5,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
-  Alert,
-  Platform,
   useWindowDimensions,
 } from 'react-native';
 
@@ -16,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../theme/colours';
 import { getUserById } from '../services/database';
 import { OutfitScreenLayout } from '../navigation/MainTabNavigator';
+import { confirmLogout } from '../services/session';
 
 
 // ============================================================
@@ -61,7 +59,7 @@ const getLegacyCreatedAtFromId = (id) => {
 
 
 // ============================================================
-// PANTALLA
+// PANTALLA (TODO EN UNA SOLA VISTA, SIN SCROLL)
 // ============================================================
 
 export default function ViewProfileScreen({ navigation, route }) {
@@ -120,41 +118,15 @@ export default function ViewProfileScreen({ navigation, route }) {
 
 
   // ==========================================================
-  // EDITAR PERFIL
+  // ACCIONES
   // ==========================================================
 
   const handleEditProfile = () => {
     navigation.navigate('EditProfile', { user });
   };
 
-
-  // ==========================================================
-  // LOGOUT (arreglado para que también funcione en web)
-  // ==========================================================
-
   const handleLogout = () => {
-    const doLogout = () => {
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Login' }],
-      });
-    };
-
-    if (Platform.OS === 'web') {
-      if (window.confirm('¿Querés cerrar tu sesión?')) {
-        doLogout();
-      }
-      return;
-    }
-
-    Alert.alert(
-      'Cerrar sesión',
-      '¿Querés cerrar tu sesión?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Cerrar sesión', style: 'destructive', onPress: doLogout },
-      ]
-    );
+    confirmLogout(navigation);
   };
 
 
@@ -169,28 +141,26 @@ export default function ViewProfileScreen({ navigation, route }) {
       user={user}
       activeTab=""
     >
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.scrollContent,
-          isDesktop && styles.scrollContentDesktop,
+      <View
+        style={[
+          styles.screen,
+          isDesktop && styles.screenDesktop,
         ]}
-        showsVerticalScrollIndicator={false}
       >
         <View style={styles.profileContainer}>
 
           {/* AVATAR */}
           <View style={styles.avatarLarge}>
-            <Ionicons name="person" size={58} color={COLORS.primary} />
+            <Ionicons name="person" size={40} color={COLORS.primary} />
           </View>
 
           {/* NOMBRE */}
-          <Text style={styles.profileName}>
+          <Text style={styles.profileName} numberOfLines={1}>
             {fullName || 'Usuario'}
           </Text>
 
           {/* EMAIL */}
-          <Text style={styles.profileEmail}>
+          <Text style={styles.profileEmail} numberOfLines={1}>
             {user?.email || '—'}
           </Text>
 
@@ -212,7 +182,7 @@ export default function ViewProfileScreen({ navigation, route }) {
               activeOpacity={0.85}
               onPress={handleEditProfile}
             >
-              <Ionicons name="create-outline" size={20} color="#FFFFFF" />
+              <Ionicons name="create-outline" size={19} color="#FFFFFF" />
               <Text style={styles.primaryButtonText}>Editar perfil</Text>
             </TouchableOpacity>
 
@@ -221,14 +191,14 @@ export default function ViewProfileScreen({ navigation, route }) {
               activeOpacity={0.85}
               onPress={handleLogout}
             >
-              <Ionicons name="log-out-outline" size={20} color={COLORS.buttonDark} />
+              <Ionicons name="log-out-outline" size={19} color={COLORS.buttonDark} />
               <Text style={styles.secondaryButtonText}>Cerrar sesión</Text>
             </TouchableOpacity>
 
           </View>
 
         </View>
-      </ScrollView>
+      </View>
     </OutfitScreenLayout>
   );
 }
@@ -242,7 +212,7 @@ function ProfileRow({ icon, label, value, last }) {
   return (
     <View style={[styles.infoRow, !last && styles.infoRowBorder]}>
       <View style={styles.infoIcon}>
-        <Ionicons name={icon} size={21} color={COLORS.primary} />
+        <Ionicons name={icon} size={18} color={COLORS.primary} />
       </View>
 
       <View style={styles.infoTextContainer}>
@@ -260,22 +230,18 @@ function ProfileRow({ icon, label, value, last }) {
 
 const styles = StyleSheet.create({
 
-  scroll: {
+  // Pantalla fija: el contenido se centra y NO se desplaza
+  screen: {
     flex: 1,
     backgroundColor: COLORS.background,
-  },
-
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 20,
-    paddingTop: 35,
-    paddingBottom: 45,
-  },
-
-  scrollContentDesktop: {
+    justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+
+  screenDesktop: {
     paddingHorizontal: 40,
-    paddingTop: 45,
   },
 
   profileContainer: {
@@ -285,39 +251,41 @@ const styles = StyleSheet.create({
   },
 
   avatarLarge: {
-    width: 112,
-    height: 112,
-    borderRadius: 56,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     backgroundColor: '#FFFFFF',
     borderWidth: 3,
     borderColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 18,
+    marginBottom: 8,
   },
 
   profileName: {
-    fontSize: 25,
+    fontSize: 20,
     color: COLORS.textDark,
     fontFamily: 'Poppins_600SemiBold',
     textAlign: 'center',
+    maxWidth: '100%',
   },
 
   profileEmail: {
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.textLight,
     fontFamily: 'Poppins_400Regular',
-    marginTop: 3,
-    marginBottom: 28,
+    marginTop: 1,
+    marginBottom: 12,
+    maxWidth: '100%',
   },
 
   card: {
     width: '100%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    paddingHorizontal: 22,
-    paddingTop: 22,
-    paddingBottom: 5,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 2,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08,
@@ -326,14 +294,14 @@ const styles = StyleSheet.create({
   },
 
   cardTitle: {
-    fontSize: 18,
+    fontSize: 15,
     color: COLORS.textDark,
     fontFamily: 'Poppins_600SemiBold',
-    marginBottom: 5,
+    marginBottom: 2,
   },
 
   infoRow: {
-    minHeight: 72,
+    minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -344,13 +312,13 @@ const styles = StyleSheet.create({
   },
 
   infoIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: COLORS.background,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 14,
+    marginRight: 12,
   },
 
   infoTextContainer: {
@@ -361,19 +329,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.textLight,
     fontFamily: 'Poppins_400Regular',
-    marginBottom: 2,
+    marginBottom: 1,
   },
 
   infoValue: {
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.textDark,
     fontFamily: 'Poppins_500Medium',
   },
 
   actions: {
     width: '100%',
-    marginTop: 25,
-    gap: 12,
+    marginTop: 14,
+    gap: 10,
   },
 
   actionsDesktop: {
@@ -381,7 +349,7 @@ const styles = StyleSheet.create({
   },
 
   primaryButton: {
-    minHeight: 52,
+    minHeight: 46,
     flex: 1,
     borderRadius: 14,
     backgroundColor: COLORS.buttonDark,
@@ -398,7 +366,7 @@ const styles = StyleSheet.create({
   },
 
   secondaryButton: {
-    minHeight: 52,
+    minHeight: 46,
     flex: 1,
     borderRadius: 14,
     backgroundColor: '#FFFFFF',

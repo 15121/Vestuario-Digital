@@ -7,6 +7,7 @@ export const MESSAGES = {
   SUITCASE_SAVED: 'Maleta guardada correctamente.',
   RECOVERY_SENT: 'Correo de recuperación enviado correctamente.',
   CHANGES_SAVED: 'Cambios guardados con éxito.',
+    ITEM_UPDATED: 'Prenda actualizada correctamente.',
 
   // Avisos
   TEMP_PASSWORD_WARNING:
@@ -21,4 +22,11 @@ export const MESSAGES = {
   PROFILE_ERROR: 'No fue posible actualizar el perfil.',
   REQUIRED_FIELDS: 'Completá todos los campos obligatorios.',
   NETWORK_ERROR: 'Error de conexión. Intentá nuevamente.',
+    ITEM_DUPLICATED: 'La prenda ya existe en tu armario.',
+  CLOTHING_TITLE_REQUIRED: 'Ingresá un nombre para la prenda.',
+  CLOTHING_IMAGE_REQUIRED: 'Seleccioná o tomá una foto de la prenda.',
+  CLOTHING_CATEGORY_REQUIRED: 'Seleccioná una categoría.',
+  CLOTHING_COLOR_REQUIRED: 'Seleccioná el color de la prenda.',
+  CLOTHING_SEASON_REQUIRED: 'Seleccioná una temporada.',
+  CLOTHING_OCASION_REQUIRED: 'Seleccioná una ocasión.',
 };

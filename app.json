@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Vestuario-Digital",
+    "name": "Vestuario Digital",
     "slug": "Vestuario-Digital",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,9 +13,13 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.iara.vestuariodigital",
+      "buildNumber": "1"
     },
     "android": {
+      "package": "com.iara.vestuariodigital",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -28,7 +32,13 @@
     "plugins": [
       "expo-sqlite",
       "expo-font",
-      "expo-status-bar"
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Usamos tus fotos para registrar tus prendas.",
+          "cameraPermission": "Usamos la cámara para fotografiar tus prendas."
+        }
+      ]
     ]
   }
 }

@@ -1,4 +1,3 @@
-
 import React, {
   useState,
   useCallback,
@@ -17,168 +16,155 @@ import {
   Alert,
   useWindowDimensions,
   Modal,
-  Pressable,
   ScrollView,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
- 
+import { formatDateOnly as formatDate } from '../utils/dateUtils';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../theme/colours';
 import { getUserClothes, deleteClothingItem } from '../services/database';
- 
+import { getColorHex } from '../utils/colorutils';
+
 // ============================================================
 // CONFIGURACIÓN DE CATEGORÍAS Y COLORES
 // ============================================================
- 
-const CATEGORY_FILTERS = [
-  { key: 'Todas', label: 'Todas' },
-  { key: 'Superior', label: 'Superiores' },
-  { key: 'Inferior', label: 'Inferiores' },
-  { key: 'Calzado', label: 'Calzado' },
-  { key: 'Accesorio', label: 'Accesorios' },
+
+// Las categorías reales son "Camisetas / Tops", "Pantalones", "Accesorios"...
+// (y además hay categorías personalizadas), así que se elige el ícono
+// por palabras clave y no por coincidencia exacta.
+const normalizeForIcon = (value) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+const CATEGORY_ICON_RULES = [
+  { icon: 'footsteps-outline', words: ['calzad', 'zapat', 'bota', 'sandali', 'ojota', 'chancl', 'mocasin', 'zueco'] },
+  { icon: 'watch-outline', words: ['accesor', 'bolso', 'cartera', 'mochila', 'reloj', 'cinturon', 'gorra', 'sombrer', 'bufanda', 'lente', 'collar', 'pulsera', 'anillo', 'corbata'] },
+  { icon: 'body-outline', words: ['pantal', 'short', 'falda', 'poller', 'jean', 'bermuda', 'calza', 'legging', 'jogger', 'inferior'] },
+  { icon: 'shirt-outline', words: ['camis', 'remera', 'blusa', 'top', 'buzo', 'sweater', 'abrigo', 'campera', 'chaqueta', 'vestido', 'traje', 'conjunto', 'ropa interior', 'superior'] },
 ];
- 
-const CATEGORY_ICONS = {
-  Superior: 'shirt-outline',
-  Inferior: 'body-outline',
-  Calzado: 'footsteps-outline',
-  Accesorio: 'watch-outline',
+
+const getCategoryIcon = (category) => {
+  const text = normalizeForIcon(category);
+
+  const rule = CATEGORY_ICON_RULES.find((item) =>
+    item.words.some((word) => text.includes(word))
+  );
+
+  return rule ? rule.icon : 'pricetag-outline';
 };
- 
+
+
 const SEASON_ICONS = {
   Verano: 'sunny-outline',
   Invierno: 'snow-outline',
   Otoño: 'leaf-outline',
   Primavera: 'flower-outline',
 };
- 
-const COLOR_HEX_MAP = {
-  Blanco: '#FFFFFF',
-  Negro: '#000000',
-  Azul: '#3B6FD6',
-  Beige: '#D8C3A5',
-  Rojo: '#E53935',
-  Verde: '#43A047',
-  Amarillo: '#FDD835',
-  Gris: '#9E9E9E',
-  Marrón: '#795548',
-  Rosa: '#EC407A',
-  Violeta: '#8E44AD',
-  Naranja: '#FB8C00',
-};
- 
-// Formatea una fecha ISO a DD/MM/AAAA
-const formatDate = (isoString) => {
-  if (!isoString) return '';
-  const date = new Date(isoString);
-  if (isNaN(date.getTime())) return isoString; // por si ya viene formateada
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const year = date.getFullYear();
-  return `${day}/${month}/${year}`;
-};
- 
+
 // ============================================================
 // PANTALLA DE PRENDAS
 // ============================================================
- 
+
 export default function ClothingScreen({ navigation, route }) {
   const user = route?.params?.user;
- 
-const [clothes, setClothes] = useState([]);
-const [loading, setLoading] = useState(true);
 
-const [searchText, setSearchText] = useState('');
+  const [clothes, setClothes] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-const [activeCategory, setActiveCategory] = useState('Todas');
+  const [searchText, setSearchText] = useState('');
 
-const [sortOrder, setSortOrder] = useState('recientes');
-const [sortMenuVisible, setSortMenuVisible] = useState(false);
+  const [activeCategory, setActiveCategory] = useState('Todas');
 
-// ==========================================================
-// FILTROS AVANZADOS
-// ==========================================================
+  const [sortOrder, setSortOrder] = useState('recientes');
+  const [sortMenuVisible, setSortMenuVisible] = useState(false);
 
-const [filtersVisible, setFiltersVisible] = useState(false);
+  // ==========================================================
+  // FILTROS AVANZADOS
+  // ==========================================================
 
-const [selectedColor, setSelectedColor] = useState('Todos');
-const [selectedSeason, setSelectedSeason] = useState('Todas');
-const [selectedOccasion, setSelectedOccasion] = useState('Todas');
- 
+  const [filtersVisible, setFiltersVisible] = useState(false);
+
+  const [selectedColor, setSelectedColor] = useState('Todos');
+  const [selectedSeason, setSelectedSeason] = useState('Todas');
+  const [selectedOccasion, setSelectedOccasion] = useState('Todas');
+
   const { width } = useWindowDimensions();
   const isDesktop = width > 768;
+
   // ==========================================================
-// OPCIONES REALES BASADAS EN LAS PRENDAS DEL USUARIO
-// ==========================================================
+  // OPCIONES REALES BASADAS EN LAS PRENDAS DEL USUARIO
+  // ==========================================================
 
-const getUniqueValues = useCallback(
-  (field) => {
-    return Array.from(
-      new Set(
-        clothes
-          .map((item) =>
-            String(item?.[field] || '').trim()
-          )
-          .filter(Boolean)
+  const getUniqueValues = useCallback(
+    (field) => {
+      return Array.from(
+        new Set(
+          clothes
+            .map((item) =>
+              String(item?.[field] || '').trim()
+            )
+            .filter(Boolean)
+        )
+      );
+    },
+    [clothes]
+  );
+
+  const categoryFilters = useMemo(() => {
+    const categories = getUniqueValues('category');
+
+    return [
+      { key: 'Todas', label: 'Todas' },
+      ...categories.map((category) => ({
+        key: category,
+        label: category,
+      })),
+    ];
+  }, [getUniqueValues]);
+
+  const seasonOptions = useMemo(() => {
+    const seasons = getUniqueValues('season')
+      .filter((season) => season !== 'Todas');
+
+    return ['Todas', ...seasons];
+  }, [getUniqueValues]);
+
+  const colorOptions = useMemo(() => {
+    return ['Todos', ...getUniqueValues('color')];
+  }, [getUniqueValues]);
+
+  const occasionOptions = useMemo(() => {
+    return ['Todas', ...getUniqueValues('ocasion')];
+  }, [getUniqueValues]);
+
+  // Si una categoría deja de existir porque se eliminó
+  // una prenda, volvemos automáticamente a "Todas".
+  useEffect(() => {
+    if (
+      activeCategory !== 'Todas' &&
+      !categoryFilters.some(
+        (item) => item.key === activeCategory
       )
-    );
-  },
-  [clothes]
-);
+    ) {
+      setActiveCategory('Todas');
+    }
+  }, [activeCategory, categoryFilters]);
 
-const categoryFilters = useMemo(() => {
-  const categories = getUniqueValues('category');
-
-  return [
-    { key: 'Todas', label: 'Todas' },
-    ...categories.map((category) => ({
-      key: category,
-      label: category,
-    })),
-  ];
-}, [getUniqueValues]);
-
-const seasonOptions = useMemo(() => {
-  const seasons = getUniqueValues('season')
-    .filter((season) => season !== 'Todas');
-
-  return ['Todas', ...seasons];
-}, [getUniqueValues]);
-
-const colorOptions = useMemo(() => {
-  return ['Todos', ...getUniqueValues('color')];
-}, [getUniqueValues]);
-
-const occasionOptions = useMemo(() => {
-  return ['Todas', ...getUniqueValues('ocasion')];
-}, [getUniqueValues]);
-
-// Si una categoría deja de existir porque se eliminó
-// una prenda, volvemos automáticamente a "Todas".
-useEffect(() => {
-  if (
-    activeCategory !== 'Todas' &&
-    !categoryFilters.some(
-      (item) => item.key === activeCategory
-    )
-  ) {
-    setActiveCategory('Todas');
-  }
-}, [activeCategory, categoryFilters]);
- 
   // ----------------------------------------------------------
-  // CARGA DE PRENDAS (se repite cada vez que la pantalla toma foco,
-  // por ejemplo al volver de agregar/editar una prenda)
+  // CARGA DE PRENDAS
   // ----------------------------------------------------------
- 
+
   const loadClothes = useCallback(async () => {
     if (!user?.id) {
       setClothes([]);
       setLoading(false);
       return;
     }
- 
+
     setLoading(true);
+
     try {
       const data = await getUserClothes(user.id);
       setClothes(data || []);
@@ -189,146 +175,141 @@ useEffect(() => {
       setLoading(false);
     }
   }, [user?.id]);
- 
+
   useFocusEffect(
     useCallback(() => {
       loadClothes();
     }, [loadClothes])
   );
- 
-  // ----------------------------------------------------------
-  // FILTRADO Y ORDEN
-  // ----------------------------------------------------------
- 
-// ==========================================================
-// NORMALIZAR TEXTO
-// Permite buscar sin importar mayúsculas/minúsculas
-// ni diferencias de acentos.
-// ==========================================================
 
-const normalizeText = (value) => {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim();
-};
+  // ==========================================================
+  // NORMALIZAR TEXTO
+  // Permite buscar sin importar mayúsculas/minúsculas
+  // ni diferencias de acentos.
+  // ==========================================================
 
+  const normalizeText = (value) => {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  };
 
-// ==========================================================
-// FILTRADO + BÚSQUEDA + ORDEN
-// ==========================================================
+  // ==========================================================
+  // FILTRADO + BÚSQUEDA + ORDEN
+  // ==========================================================
 
-const filteredClothes = clothes
-  .filter((item) => {
-    // ------------------------------------------------------
-    // CATEGORÍA
-    // ------------------------------------------------------
+  const filteredClothes = clothes
+    .filter((item) => {
+      // ------------------------------------------------------
+      // CATEGORÍA
+      // ------------------------------------------------------
 
-    if (
-      activeCategory !== 'Todas' &&
-      String(item.category || '').trim() !== activeCategory
-    ) {
-      return false;
-    }
+      if (
+        activeCategory !== 'Todas' &&
+        String(item.category || '').trim() !== activeCategory
+      ) {
+        return false;
+      }
 
-    // ------------------------------------------------------
-    // COLOR
-    // ------------------------------------------------------
+      // ------------------------------------------------------
+      // COLOR
+      // ------------------------------------------------------
 
-    if (
-      selectedColor !== 'Todos' &&
-      String(item.color || '').trim() !== selectedColor
-    ) {
-      return false;
-    }
+      if (
+        selectedColor !== 'Todos' &&
+        String(item.color || '').trim() !== selectedColor
+      ) {
+        return false;
+      }
 
-    // ------------------------------------------------------
-    // TEMPORADA
-    // ------------------------------------------------------
+      // ------------------------------------------------------
+      // TEMPORADA
+      // ------------------------------------------------------
 
-    if (
-      selectedSeason !== 'Todas' &&
-      String(item.season || '').trim() !== selectedSeason
-    ) {
-      return false;
-    }
+      if (
+        selectedSeason !== 'Todas' &&
+        String(item.season || '').trim() !== selectedSeason
+      ) {
+        return false;
+      }
 
-    // ------------------------------------------------------
-    // OCASIÓN
-    // ------------------------------------------------------
+      // ------------------------------------------------------
+      // OCASIÓN
+      // ------------------------------------------------------
 
-    if (
-      selectedOccasion !== 'Todas' &&
-      String(item.ocasion || '').trim() !== selectedOccasion
-    ) {
-      return false;
-    }
+      if (
+        selectedOccasion !== 'Todas' &&
+        String(item.ocasion || '').trim() !== selectedOccasion
+      ) {
+        return false;
+      }
 
-    // ------------------------------------------------------
-    // BUSCADOR
-    // Busca en TODOS los datos visibles de la prenda.
-    // ------------------------------------------------------
+      // ------------------------------------------------------
+      // BUSCADOR
+      // Busca en TODOS los datos visibles de la prenda.
+      // ------------------------------------------------------
 
-    const search = normalizeText(searchText);
+      const search = normalizeText(searchText);
 
-    if (!search) {
-      return true;
-    }
+      if (!search) {
+        return true;
+      }
 
-    const searchableText = [
-      item.title,
-      item.category,
-      item.color,
-      item.season,
-      item.ocasion,
-      item.description,
-    ]
-      .map(normalizeText)
-      .join(' ');
+      const searchableText = [
+        item.title,
+        item.category,
+        item.color,
+        item.season,
+        item.ocasion,
+        item.description,
+      ]
+        .map(normalizeText)
+        .join(' ');
 
-    return searchableText.includes(search);
-  })
-  .slice()
-  .sort((a, b) => {
-    const dateA = new Date(a.createdAt).getTime();
-    const dateB = new Date(b.createdAt).getTime();
+      return searchableText.includes(search);
+    })
+    .slice()
+    .sort((a, b) => {
+      const dateA = new Date(a.createdAt).getTime();
+      const dateB = new Date(b.createdAt).getTime();
 
-    const safeDateA = Number.isNaN(dateA) ? 0 : dateA;
-    const safeDateB = Number.isNaN(dateB) ? 0 : dateB;
+      const safeDateA = Number.isNaN(dateA) ? 0 : dateA;
+      const safeDateB = Number.isNaN(dateB) ? 0 : dateB;
 
-    return sortOrder === 'recientes'
-      ? safeDateB - safeDateA
-      : safeDateA - safeDateB;
-  });
- 
-  // ----------------------------------------------------------
+      return sortOrder === 'recientes'
+        ? safeDateB - safeDateA
+        : safeDateA - safeDateB;
+    });
+
+  // ==========================================================
   // ACCIONES POR PRENDA
-  // ----------------------------------------------------------
- 
+  // ==========================================================
+
   const goToDetail = (item) => {
     try {
       navigation.navigate('ClothingDetail', {
+        user,
         prenda: {
           id: item.id,
+          userId: item.userId,
           title: item.title,
           category: item.category,
           color: item.color,
           season: item.season,
           ocasion: item.ocasion,
           description: item.description,
-          createdAt: formatDate(item.createdAt),
+          createdAt: item.createdAt,
           images: item.imageUri ? [item.imageUri] : [],
         },
       });
     } catch (e) {
       // Si el nombre de la ruta de detalle es distinto en tu Stack,
-      // avisame para ajustarlo.
+      // ajustar acá.
     }
   };
- 
- 
- 
+
   const confirmDelete = (item) => {
     Alert.alert(
       'Eliminar prenda',
@@ -340,128 +321,221 @@ const filteredClothes = clothes
           style: 'destructive',
           onPress: async () => {
             const result = await deleteClothingItem(item.id);
+
             if (result.success) {
-              setClothes((prev) => prev.filter((c) => c.id !== item.id));
+              setClothes((prev) =>
+                prev.filter((c) => c.id !== item.id)
+              );
             } else {
-              Alert.alert('Error', 'No fue posible eliminar la prenda.');
+              Alert.alert(
+                'Error',
+                'No fue posible eliminar la prenda.'
+              );
             }
           },
         },
       ]
     );
   };
- 
-  // ----------------------------------------------------------
+
+  // ==========================================================
   // RENDER DE CADA TARJETA
-  // ----------------------------------------------------------
- 
+  // ==========================================================
+
   const renderCard = ({ item }) => {
-    const colorHex = COLOR_HEX_MAP[item.color] || '#CCCCCC';
-    const categoryIcon = CATEGORY_ICONS[item.category] || 'pricetag-outline';
-    const seasonIcon = SEASON_ICONS[item.season] || 'calendar-outline';
- 
+    // El nombre del color se mantiene como dato.
+    // Solo se convierte a HEX para mostrar el punto visual.
+    const colorHex = getColorHex(item.color, '#CCCCCC');
+
+    const categoryIcon = getCategoryIcon(item.category);
+
+    const seasonIcon =
+      SEASON_ICONS[item.season] || 'calendar-outline';
+
     return (
       <TouchableOpacity
-        style={[styles.card, isDesktop && styles.cardDesktop]}
+        style={[
+          styles.card,
+          isDesktop && styles.cardDesktop,
+        ]}
         onPress={() => goToDetail(item)}
         activeOpacity={0.8}
       >
         <View style={styles.cardImageWrapper}>
           {item.imageUri ? (
-            <Image source={{ uri: item.imageUri }} style={styles.cardImage} resizeMode="cover" />
+            <Image
+              source={{ uri: item.imageUri }}
+              style={styles.cardImage}
+              resizeMode="cover"
+            />
           ) : (
             <View style={styles.cardImagePlaceholder}>
-              <Ionicons name="shirt-outline" size={28} color={COLORS.icon} />
+              <Ionicons
+                name="shirt-outline"
+                size={28}
+                color={COLORS.icon}
+              />
             </View>
           )}
         </View>
- 
+
         <View style={styles.cardInfo}>
-         <View style={styles.cardTitleRow}>
-  <Text style={styles.cardTitle} numberOfLines={1}>
-    {item.title}
-  </Text>
-</View>
- 
+          <View style={styles.cardTitleRow}>
+            <Text
+              style={styles.cardTitle}
+              numberOfLines={1}
+            >
+              {item.title}
+            </Text>
+          </View>
+
           <View style={styles.cardTagsRow}>
             <View style={styles.cardTag}>
-              <Ionicons name={categoryIcon} size={14} color="#8A8A8A" />
-              <Text style={styles.cardTagText}>{item.category}</Text>
+              <Ionicons
+                name={categoryIcon}
+                size={14}
+                color="#8A8A8A"
+              />
+
+              <Text style={styles.cardTagText}>
+                {item.category}
+              </Text>
             </View>
- 
+
             {!!item.color && (
               <View style={styles.cardTag}>
-                <View style={[styles.colorDot, { backgroundColor: colorHex }]} />
-                <Text style={styles.cardTagText}>{item.color}</Text>
+                <View
+                  style={[
+                    styles.colorDot,
+                    {
+                      backgroundColor: colorHex,
+                    },
+                  ]}
+                />
+
+                <Text style={styles.cardTagText}>
+                  {item.color}
+                </Text>
               </View>
             )}
- 
+
             {!!item.season && (
               <View style={styles.cardTag}>
-                <Ionicons name={seasonIcon} size={14} color="#8A8A8A" />
-                <Text style={styles.cardTagText}>{item.season}</Text>
+                <Ionicons
+                  name={seasonIcon}
+                  size={14}
+                  color="#8A8A8A"
+                />
+
+                <Text style={styles.cardTagText}>
+                  {item.season}
+                </Text>
               </View>
             )}
           </View>
- 
+
           {!!item.ocasion && (
             <View style={styles.cardTagsRow}>
               <View style={styles.cardTag}>
-                <Ionicons name="sparkles-outline" size={14} color="#8A8A8A" />
-                <Text style={styles.cardTagText}>{item.ocasion}</Text>
+                <Ionicons
+                  name="sparkles-outline"
+                  size={14}
+                  color="#8A8A8A"
+                />
+
+                <Text style={styles.cardTagText}>
+                  {item.ocasion}
+                </Text>
               </View>
             </View>
           )}
- 
-          <Text style={styles.cardDate}>Agregada el {formatDate(item.createdAt)}</Text>
+
+          <Text style={styles.cardDate}>
+            Agregada el {formatDate(item.createdAt)}
+          </Text>
         </View>
       </TouchableOpacity>
     );
   };
- 
-  // ----------------------------------------------------------
-  // ESTADO VACÍO (usuario sin prendas cargadas)
-  // ----------------------------------------------------------
- 
+
+  // ==========================================================
+  // ESTADO VACÍO
+  // ==========================================================
+
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
       <View style={styles.emptyIconCircle}>
-        <Ionicons name="shirt-outline" size={48} color={COLORS.icon} />
+        <Ionicons
+          name="shirt-outline"
+          size={48}
+          color={COLORS.icon}
+        />
       </View>
-      <Text style={styles.emptyTitle}>Todavía no tenés prendas</Text>
-      <Text style={styles.emptySubtitle}>
-        Tus prendas van a aparecer acá apenas las registres en tu armario.
+
+      <Text style={styles.emptyTitle}>
+        Todavía no tenés prendas
       </Text>
+
+      <Text style={styles.emptySubtitle}>
+        Tus prendas van a aparecer acá apenas las registres
+        en tu armario.
+      </Text>
+
       <TouchableOpacity
         style={styles.emptyButton}
         onPress={() => {
           try {
             navigation.navigate('AddClothing', { user });
           } catch (e) {
-            Alert.alert('Próximamente', 'La pantalla para agregar prendas se implementará pronto.');
+            Alert.alert(
+              'Próximamente',
+              'La pantalla para agregar prendas se implementará pronto.'
+            );
           }
         }}
       >
-        <Ionicons name="add" size={18} color="#FFFFFF" />
-        <Text style={styles.emptyButtonText}>Agregar mi primera prenda</Text>
+        <Ionicons
+          name="add"
+          size={18}
+          color="#FFFFFF"
+        />
+
+        <Text style={styles.emptyButtonText}>
+          Agregar mi primera prenda
+        </Text>
       </TouchableOpacity>
     </View>
   );
- 
+
   // ==========================================================
   // INTERFAZ
   // ==========================================================
- 
+
   return (
     <View style={styles.container}>
-      <View style={[styles.topSection, isDesktop && styles.topSectionDesktop]}>
- 
+      <View
+        style={[
+          styles.topSection,
+          isDesktop && styles.topSectionDesktop,
+        ]}
+      >
         {/* ================================================
             BUSCADOR + FILTROS
             ================================================ */}
-        <View style={[styles.searchRow, isDesktop && styles.searchRowDesktop]}>
+
+        <View
+          style={[
+            styles.searchRow,
+            isDesktop && styles.searchRowDesktop,
+          ]}
+        >
           <View style={styles.searchInputContainer}>
-            <Ionicons name="search-outline" size={18} color={COLORS.icon} />
+            <Ionicons
+              name="search-outline"
+              size={18}
+              color={COLORS.icon}
+            />
+
             <TextInput
               style={styles.searchInput}
               placeholder="Buscar prendas..."
@@ -470,74 +544,90 @@ const filteredClothes = clothes
               onChangeText={setSearchText}
             />
           </View>
- 
-          <TouchableOpacity
-  style={styles.filtersButton}
-  onPress={() => setFiltersVisible(true)}
->
-  <Ionicons
-    name="filter-outline"
-    size={16}
-    color={COLORS.buttonDark}
-  />
 
-  <Text style={styles.filtersButtonText}>
-    Filtros
-  </Text>
-</TouchableOpacity>
+          <TouchableOpacity
+            style={styles.filtersButton}
+            onPress={() => setFiltersVisible(true)}
+          >
+            <Ionicons
+              name="filter-outline"
+              size={16}
+              color={COLORS.buttonDark}
+            />
+
+            <Text style={styles.filtersButtonText}>
+              Filtros
+            </Text>
+          </TouchableOpacity>
         </View>
- 
+
         {/* ================================================
             CHIPS DE CATEGORÍA
             ================================================ */}
-      <View style={styles.chipsRow}>
-  {categoryFilters.map((filter) => {
-    const isActive =
-      activeCategory === filter.key;
 
-    return (
-      <TouchableOpacity
-        key={filter.key}
-        style={[
-          styles.chip,
-          isActive && styles.chipActive,
-        ]}
-        onPress={() =>
-          setActiveCategory(filter.key)
-        }
-      >
-        <Text
-          style={[
-            styles.chipText,
-            isActive && styles.chipTextActive,
-          ]}
-        >
-          {filter.label}
-        </Text>
-      </TouchableOpacity>
-    );
-  })}
-</View>
- 
+        <View style={styles.chipsRow}>
+          {categoryFilters.map((filter) => {
+            const isActive =
+              activeCategory === filter.key;
+
+            return (
+              <TouchableOpacity
+                key={filter.key}
+                style={[
+                  styles.chip,
+                  isActive && styles.chipActive,
+                ]}
+                onPress={() =>
+                  setActiveCategory(filter.key)
+                }
+              >
+                <Text
+                  style={[
+                    styles.chipText,
+                    isActive && styles.chipTextActive,
+                  ]}
+                >
+                  {filter.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
         {/* ================================================
             CONTADOR + ORDEN
             ================================================ */}
+
         {!loading && clothes.length > 0 && (
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryText}>{filteredClothes.length} prendas</Text>
- 
+            <Text style={styles.summaryText}>
+              {filteredClothes.length} prendas
+            </Text>
+
             <View>
               <TouchableOpacity
                 style={styles.sortButton}
-                onPress={() => setSortMenuVisible((prev) => !prev)}
+                onPress={() =>
+                  setSortMenuVisible((prev) => !prev)
+                }
               >
-                <Text style={styles.summaryText}>Ordenar por </Text>
-                <Text style={styles.sortValueText}>
-                  {sortOrder === 'recientes' ? 'Más recientes' : 'Más antiguas'}
+                <Text style={styles.summaryText}>
+                  Ordenar por{' '}
                 </Text>
-                <Ionicons name="chevron-down" size={14} color={COLORS.primary} />
+
+                <Text style={styles.sortValueText}>
+                  {sortOrder === 'recientes'
+                    ? 'Más recientes'
+                    : 'Más antiguas'}
+                </Text>
+
+                <Ionicons
+                  name="chevron-down"
+                  size={14}
+                  color={COLORS.primary}
+                />
               </TouchableOpacity>
- 
+
               {sortMenuVisible && (
                 <View style={styles.sortMenu}>
                   <TouchableOpacity
@@ -547,8 +637,11 @@ const filteredClothes = clothes
                       setSortMenuVisible(false);
                     }}
                   >
-                    <Text style={styles.sortMenuItemText}>Más recientes</Text>
+                    <Text style={styles.sortMenuItemText}>
+                      Más recientes
+                    </Text>
                   </TouchableOpacity>
+
                   <TouchableOpacity
                     style={styles.sortMenuItem}
                     onPress={() => {
@@ -556,7 +649,9 @@ const filteredClothes = clothes
                       setSortMenuVisible(false);
                     }}
                   >
-                    <Text style={styles.sortMenuItemText}>Más antiguas</Text>
+                    <Text style={styles.sortMenuItemText}>
+                      Más antiguas
+                    </Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -564,11 +659,11 @@ const filteredClothes = clothes
           </View>
         )}
       </View>
- 
+
       {/* ==================================================
           LISTADO / GRILLA / ESTADO VACÍO
           ================================================== */}
- 
+
       {!loading && clothes.length === 0 ? (
         renderEmptyState()
       ) : (
@@ -578,7 +673,9 @@ const filteredClothes = clothes
           keyExtractor={(item) => String(item.id)}
           renderItem={renderCard}
           numColumns={isDesktop ? 2 : 1}
-          columnWrapperStyle={isDesktop ? styles.columnWrapper : undefined}
+          columnWrapperStyle={
+            isDesktop ? styles.columnWrapper : undefined
+          }
           contentContainerStyle={[
             styles.listContent,
             isDesktop && styles.listContentDesktop,
@@ -586,7 +683,8 @@ const filteredClothes = clothes
           showsVerticalScrollIndicator={false}
         />
       )}
-            {/* ==================================================
+
+      {/* ==================================================
           MODAL DE FILTROS AVANZADOS
           ================================================== */}
 
@@ -600,7 +698,6 @@ const filteredClothes = clothes
       >
         <View style={styles.filterModalOverlay}>
           <View style={styles.filterModalCard}>
-
             <View style={styles.filterModalHeader}>
               <Text style={styles.filterModalTitle}>
                 Filtros
@@ -622,7 +719,6 @@ const filteredClothes = clothes
             <ScrollView
               showsVerticalScrollIndicator={false}
             >
-
               {/* ================================
                   COLOR
                   ================================ */}
@@ -661,7 +757,6 @@ const filteredClothes = clothes
                   );
                 })}
               </View>
-
 
               {/* ================================
                   TEMPORADA
@@ -702,7 +797,6 @@ const filteredClothes = clothes
                 })}
               </View>
 
-
               {/* ================================
                   OCASIÓN
                   ================================ */}
@@ -741,16 +835,13 @@ const filteredClothes = clothes
                   );
                 })}
               </View>
-
             </ScrollView>
-
 
             {/* ================================
                 ACCIONES
                 ================================ */}
 
             <View style={styles.filterActionsRow}>
-
               <TouchableOpacity
                 style={styles.filterClearButton}
                 onPress={() => {
@@ -776,51 +867,55 @@ const filteredClothes = clothes
                   Aplicar
                 </Text>
               </TouchableOpacity>
-
             </View>
-
           </View>
         </View>
       </Modal>
     </View>
   );
 }
- 
+
 // ============================================================
 // ESTILOS
 // ============================================================
- 
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
+
   topSection: {
-  paddingHorizontal: 16,
-  paddingTop: 16,
-  position: 'relative',
-  zIndex: 20,
-  elevation: 20,
-},
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    position: 'relative',
+    zIndex: 20,
+    elevation: 20,
+  },
+
   topSectionDesktop: {
-  paddingHorizontal: 24,
-  paddingTop: 20,
-  position: 'relative',
-  zIndex: 20,
-  elevation: 20,
-},
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    position: 'relative',
+    zIndex: 20,
+    elevation: 20,
+  },
+
   // ----------------------------------------------------------
   // BUSCADOR + FILTROS
   // ----------------------------------------------------------
+
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     marginBottom: 14,
   },
+
   searchRowDesktop: {
     marginBottom: 18,
   },
+
   searchInputContainer: {
     flex: 1,
     flexDirection: 'row',
@@ -833,12 +928,14 @@ const styles = StyleSheet.create({
     borderColor: '#EFEFEF',
     gap: 8,
   },
+
   searchInput: {
     flex: 1,
     fontSize: 14,
     fontFamily: 'Poppins_400Regular',
     color: '#333',
   },
+
   filtersButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -850,21 +947,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     gap: 6,
   },
+
   filtersButtonText: {
     color: COLORS.buttonDark,
     fontSize: 14,
     fontFamily: 'Poppins_600SemiBold',
   },
- 
+
   // ----------------------------------------------------------
   // CHIPS DE CATEGORÍA
   // ----------------------------------------------------------
+
   chipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
     marginBottom: 14,
   },
+
   chip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -873,47 +973,55 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#EFEFEF',
   },
+
   chipActive: {
     backgroundColor: COLORS.primary,
     borderColor: COLORS.primary,
   },
+
   chipText: {
     fontSize: 13,
     fontFamily: 'Poppins_400Regular',
     color: COLORS.textLight,
   },
+
   chipTextActive: {
     color: '#FFFFFF',
     fontFamily: 'Poppins_600SemiBold',
   },
- 
+
   // ----------------------------------------------------------
   // CONTADOR + ORDEN
   // ----------------------------------------------------------
- summaryRow: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  marginBottom: 12,
-  position: 'relative',
-  zIndex: 30,
-  elevation: 30,
-},
+
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    position: 'relative',
+    zIndex: 30,
+    elevation: 30,
+  },
+
   summaryText: {
     fontSize: 13,
     fontFamily: 'Poppins_400Regular',
     color: COLORS.textLight,
   },
+
   sortButton: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+
   sortValueText: {
     fontSize: 13,
     fontFamily: 'Poppins_600SemiBold',
     color: COLORS.primary,
     marginRight: 4,
   },
+
   sortMenu: {
     position: 'absolute',
     top: 26,
@@ -927,33 +1035,39 @@ const styles = StyleSheet.create({
     zIndex: 10,
     elevation: 4,
   },
+
   sortMenuItem: {
     paddingVertical: 8,
     paddingHorizontal: 14,
   },
+
   sortMenuItemText: {
     fontSize: 13,
     fontFamily: 'Poppins_400Regular',
     color: COLORS.textDark,
   },
- 
+
   // ----------------------------------------------------------
   // LISTADO / GRILLA
   // ----------------------------------------------------------
+
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 24,
   },
+
   listContentDesktop: {
     paddingHorizontal: 24,
   },
+
   columnWrapper: {
     justifyContent: 'space-between',
   },
- 
+
   // ----------------------------------------------------------
   // TARJETA DE PRENDA
   // ----------------------------------------------------------
+
   card: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
@@ -966,9 +1080,11 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 1,
   },
+
   cardDesktop: {
     width: '48.5%',
   },
+
   cardImageWrapper: {
     width: 72,
     height: 72,
@@ -976,10 +1092,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginRight: 12,
   },
+
   cardImage: {
     width: '100%',
     height: '100%',
   },
+
   cardImagePlaceholder: {
     width: '100%',
     height: '100%',
@@ -987,15 +1105,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+
   cardInfo: {
     flex: 1,
   },
+
   cardTitleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 4,
   },
+
   cardTitle: {
     flex: 1,
     fontSize: 15,
@@ -1003,22 +1124,26 @@ const styles = StyleSheet.create({
     color: COLORS.textDark,
     marginRight: 8,
   },
+
   cardTagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
     marginBottom: 2,
   },
+
   cardTag: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
+
   cardTagText: {
     fontSize: 12,
     fontFamily: 'Poppins_400Regular',
     color: '#8A8A8A',
   },
+
   colorDot: {
     width: 10,
     height: 10,
@@ -1026,22 +1151,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#DDD',
   },
+
   cardDate: {
     fontSize: 11,
     fontFamily: 'Poppins_400Regular',
     color: '#B0B0B0',
     marginTop: 4,
   },
- 
+
   // ----------------------------------------------------------
   // ESTADO VACÍO
   // ----------------------------------------------------------
+
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
   },
+
   emptyIconCircle: {
     width: 96,
     height: 96,
@@ -1051,6 +1179,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
+
   emptyTitle: {
     fontSize: 18,
     fontFamily: 'Poppins_600SemiBold',
@@ -1058,6 +1187,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     textAlign: 'center',
   },
+
   emptySubtitle: {
     fontSize: 14,
     fontFamily: 'Poppins_400Regular',
@@ -1066,6 +1196,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 24,
   },
+
   emptyButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1075,12 +1206,14 @@ const styles = StyleSheet.create({
     height: 48,
     gap: 8,
   },
+
   emptyButtonText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontFamily: 'Poppins_600SemiBold',
   },
-    // ==========================================================
+
+  // ==========================================================
   // MODAL DE FILTROS
   // ==========================================================
 
@@ -1191,18 +1324,3 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
- 
-
-
-
-
-
-
-
-
-
-
-
-
-
-

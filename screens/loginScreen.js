@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+
 import {
   View,
   Text,
@@ -15,12 +16,39 @@ import ResponsiveContainer from '../components/ResponsiveContainer';
 import AlertMessage from '../components/AlertMessage';
 import { MESSAGES } from '../theme/messages';
 import { loginUser } from '../services/database';
+import { isTemporaryPassword } from '../components/ForceChangePasswordModal';
+
+const getLoginErrorMessage = (error) => {
+  const code = String(error?.message || error);
+
+  if (code.includes('USER_INACTIVE')) {
+    return 'Esta cuenta se encuentra suspendida.';
+  }
+
+  if (code.includes('TOO_MANY_REQUESTS')) {
+    return 'Demasiados intentos. Esperá unos minutos e intentá de nuevo.';
+  }
+
+  if (
+    code.includes('Failed to fetch') ||
+    code.includes('Network request failed') ||
+    code.includes('TIMEOUT')
+  ) {
+    return 'No se pudo conectar con el servidor.';
+  }
+
+  return 'Correo o contraseña incorrectos.';
+};
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [alert, setAlert] = useState({ type: '', message: '' });
+  const [alert, setAlert] = useState({
+    type: '',
+    message: '',
+  });
+  const [loading, setLoading] = useState(false);
 
   const { width } = useWindowDimensions();
   const isDesktop = width > 768;
@@ -36,45 +64,25 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
-  const handleLogin = () => {
-    // =========================================
-    // 1. VALIDACIÓN DE CAMPOS OBLIGATORIOS
-    // =========================================
+  const handleLogin = async () => {
+    if (loading) return;
 
     if (!email.trim() || !password) {
       setAlert({
         type: 'error',
-        message:
-          MESSAGES.REQUIRED_FIELDS ||
-          'Completá todos los campos obligatorios.',
+        message: MESSAGES.REQUIRED_FIELDS,
       });
+
       return;
     }
 
-    // =========================================
-    // 2. INTENTO DE INICIO DE SESIÓN
-    // =========================================
-
     try {
-      const userResult = loginUser(
+      setLoading(true);
+
+      const userResult = await loginUser(
         email.trim().toLowerCase(),
         password
       );
-
-      // =========================================
-      // 3. VERIFICAR EL ROL DEL USUARIO
-      // =========================================
-      //
-      // role === 'root'
-      //     → navegación administrativa
-      //
-      // role === 'user'
-      //     → navegación normal
-      //
-      // Si por alguna razón un usuario antiguo
-      // no tiene role, database.js debería
-      // normalizarlo como 'user'.
-      // =========================================
 
       const userRole = userResult?.role || 'user';
 
@@ -83,49 +91,45 @@ export default function LoginScreen({ navigation }) {
         message: '¡Inicio de sesión exitoso!',
       });
 
-      // =========================================
-      // 4. REDIRECCIÓN SEGÚN EL ROL
-      // =========================================
-
+      // reset: el Login deja de estar en la pila
+      // (Atrás no vuelve acá)
       setTimeout(() => {
         if (userRole === 'root') {
-          // ROOT / ADMINISTRADOR
-          navigation?.navigate('Root', {
-            user: userResult,
+          navigation.reset({
+            index: 0,
+            routes: [
+              {
+                name: 'Root',
+                params: {
+                  user: userResult,
+                },
+              },
+            ],
           });
         } else {
-          // USUARIO NORMAL
-          navigation?.navigate('Main', {
-            user: userResult,
+          navigation.reset({
+            index: 0,
+            routes: [
+              {
+                name: 'Main',
+                params: {
+                  user: userResult,
+                  isTempPassword:
+                    !!userResult?.mustChangePassword ||
+                    isTemporaryPassword(password),
+                },
+              },
+            ],
           });
         }
-      }, 1200);
-
+      }, 1000);
     } catch (error) {
-      // =========================================
-      // 5. MANEJO DE ERRORES
-      // =========================================
-
-      let errorMessage =
-        MESSAGES.USER_NOT_FOUND ||
-        'Esta cuenta no existe.';
-
-      // Cuenta suspendida/inactiva
-      if (error?.message === 'USER_INACTIVE') {
-        errorMessage =
-          'Esta cuenta se encuentra suspendida.';
-      }
-
-      // Cuenta Root reservada
-      else if (error?.message === 'ROOT_EMAIL_RESERVED') {
-        errorMessage =
-          'Este correo está reservado para la cuenta Root.';
-      }
-
       setAlert({
         type: 'error',
-        message: errorMessage,
+        message: getLoginErrorMessage(error),
       });
+
+      setLoading(false);
     }
   };
 
@@ -171,6 +175,7 @@ export default function LoginScreen({ navigation }) {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           bounces={false}
+          keyboardShouldPersistTaps="handled"
         >
           <View
             style={[
@@ -250,6 +255,8 @@ export default function LoginScreen({ navigation }) {
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  onSubmitEditing={handleLogin}
+                  returnKeyType="done"
                 />
 
                 <TouchableOpacity
@@ -288,11 +295,17 @@ export default function LoginScreen({ navigation }) {
               ========================================= */}
 
               <TouchableOpacity
-                style={styles.submitButton}
+                style={[
+                  styles.submitButton,
+                  loading && { opacity: 0.7 },
+                ]}
                 onPress={handleLogin}
+                disabled={loading}
               >
                 <Text style={styles.submitButtonText}>
-                  Iniciar sesión
+                  {loading
+                    ? 'Ingresando...'
+                    : 'Iniciar sesión'}
                 </Text>
               </TouchableOpacity>
 

@@ -1,8 +1,12 @@
 import React, {
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
+
+import { useFocusEffect } from '@react-navigation/native';
 
 import {
   View,
@@ -21,9 +25,10 @@ import {
   Ionicons,
   MaterialCommunityIcons,
 } from '@expo/vector-icons';
-
+import AlertMessage from '../components/AlertMessage';
 import { COLORS } from '../theme/colours';
 import { MESSAGES } from '../theme/messages';
+import { getColorHex } from '../utils/colorutils';
 
 import {
   getUserClothes,
@@ -224,55 +229,7 @@ const getSuitcaseStatus = (
 // COLOR DE LA PRENDA
 // ============================================================
 
-const getColorDot = (color) => {
-  const value =
-    String(color || '').toLowerCase();
-
-  if (value.includes('negro')) {
-    return '#111111';
-  }
-
-  if (value.includes('azul')) {
-    return '#4169E1';
-  }
-
-  if (value.includes('rojo')) {
-    return '#D94A4A';
-  }
-
-  if (value.includes('verde')) {
-    return '#5BAE72';
-  }
-
-  if (value.includes('amarillo')) {
-    return '#E8C547';
-  }
-
-  if (value.includes('rosa')) {
-    return '#E58BB5';
-  }
-
-  if (
-    value.includes('violeta') ||
-    value.includes('morado')
-  ) {
-    return '#8B5CC7';
-  }
-
-  if (value.includes('gris')) {
-    return '#A5A5A5';
-  }
-
-  if (value.includes('beige')) {
-    return '#C8B89A';
-  }
-
-  if (value.includes('blanco')) {
-    return '#FFFFFF';
-  }
-
-  return '#FFFFFF';
-};
+const getColorDot = (color) => getColorHex(color, '#FFFFFF');
 
 
 // ============================================================
@@ -616,6 +573,7 @@ function CalendarModal({
 export default function PackingModeScreen({
   navigation,
   route,
+  onExitEdit,
 }) {
   const { width } =
     useWindowDimensions();
@@ -629,8 +587,15 @@ export default function PackingModeScreen({
 const suitcaseId =
   route?.params?.suitcaseId;
 
+// Id de la maleta que se está editando. Si se crea una nueva y se guarda,
+// pasa a tener id y el siguiente "Guardar" actualiza en vez de duplicar.
+const [currentSuitcaseId, setCurrentSuitcaseId] =
+  useState(suitcaseId ?? null);
+
+const activeSuitcaseId = currentSuitcaseId;
+
 const isEditing =
-  !!suitcaseId;
+  !!activeSuitcaseId;
 
   const [clothes, setClothes] =
     useState([]);
@@ -681,7 +646,54 @@ const isEditing =
   const [noteText, setNoteText] =
     useState('');
 
+  // ==========================================================
+  // VOLVER A MODO "CREAR MALETA"
+  // ==========================================================
 
+  const activeIdRef = useRef(null);
+  const onExitEditRef = useRef(onExitEdit);
+
+  activeIdRef.current = activeSuitcaseId;
+  onExitEditRef.current = onExitEdit;
+
+  const resetToNewSuitcase = () => {
+    setCurrentSuitcaseId(null);
+    setDestination('');
+    setStartDate(null);
+    setEndDate(null);
+    setPackedItems({});
+    setSuccessMessageVisible(false);
+  };
+
+  const handleNewSuitcase = () => {
+    resetToNewSuitcase();
+    onExitEditRef.current?.();
+  };
+
+  // Al salir de la pantalla estando en modo edición, se limpia
+  // para que la próxima vez que entres puedas crear una maleta nueva.
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        if (activeIdRef.current) {
+          resetToNewSuitcase();
+          onExitEditRef.current?.();
+        }
+      };
+    }, [])
+    
+  );
+// El mensaje de guardado se oculta solo después de unos segundos
+useEffect(() => {
+  if (!successMessageVisible) return undefined;
+
+  const timer = setTimeout(
+    () => setSuccessMessageVisible(false),
+    3500
+  );
+
+  return () => clearTimeout(timer);
+}, [successMessageVisible]);
   // ==========================================================
   // CARGAR DATOS
   // ==========================================================
@@ -692,12 +704,26 @@ const isEditing =
     user?.id,
     suitcaseId,
   ]);
+  // Refresca solo las prendas al volver a la pestaña (sin pisar lo que estás editando)
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.id) {
+        return;
+      }
 
+      getUserClothes(user.id)
+        .then((list) => setClothes(list || []))
+        .catch((error) =>
+          console.log('Error recargando prendas:', error)
+        );
+    }, [user?.id])
+  );
 
   const loadPackingData =
     async () => {
       try {
         setLoading(true);
+         setCurrentSuitcaseId(suitcaseId ?? null); 
 
         if (!user?.id) {
           setClothes([]);
@@ -977,30 +1003,22 @@ const saveNote = () => {
   // ITEMS PARA LA BASE DE DATOS
   // ==========================================================
 
-  const buildSuitcaseItems =
+   const buildSuitcaseItems =
     () => {
-      return visibleClothes.map(
-        (clothing) => {
-          const current =
-            packedItems[
-              clothing.id
-            ] || {
-              packed: false,
-              note: '',
-            };
+      return visibleClothes
+        .filter((clothing) => {
+          const current = packedItems[clothing.id];
+          return current?.packed || !!current?.note;
+        })
+        .map((clothing) => {
+          const current = packedItems[clothing.id];
 
           return {
-            clothingId:
-              clothing.id,
-
-            note:
-              current.note || '',
-
-            packed:
-              !!current.packed,
+            clothingId: clothing.id,
+            note: current.note || '',
+            packed: !!current.packed,
           };
-        }
-      );
+        });
     };
 
 
@@ -1053,10 +1071,10 @@ const saveNote = () => {
           );
 
 
-        if (suitcaseId) {
+               if (activeSuitcaseId) {
           const result =
             await updateSuitcase(
-              suitcaseId,
+              activeSuitcaseId,
               {
                 destino:
                   destination.trim(),
@@ -1072,9 +1090,12 @@ const saveNote = () => {
 
                 items:
                   suitcaseItems,
+
+                // una maleta finalizada deja de contar como activa
+                active:
+                  status !== 'Finalizada',
               }
             );
-
 
           if (!result.success) {
             Alert.alert(
@@ -1107,7 +1128,6 @@ const saveNote = () => {
                 suitcaseItems,
             });
 
-
           if (!result.success) {
             Alert.alert(
               'Error',
@@ -1116,6 +1136,11 @@ const saveNote = () => {
 
             return;
           }
+
+          // Guardamos el id para que el próximo "Guardar" actualice
+          setCurrentSuitcaseId(
+            result.suitcase?.id ?? null
+          );
         }
 
 setSuccessMessageVisible(true);
@@ -1428,22 +1453,7 @@ setSuccessMessageVisible(true);
           false
         }
       >
-{successMessageVisible && (
-  <View style={styles.successBanner}>
-    <View style={styles.successIcon}>
-      <Ionicons
-        name="checkmark"
-        size={17}
-        color={SUCCESS_TEXT}
-      />
-    </View>
 
-    <Text style={styles.successText}>
-      {MESSAGES.SUITCASE_SAVED ||
-        'Maleta guardada exitosamente.'}
-    </Text>
-  </View>
-)}
 {isEditing && (
   <View style={styles.editingBanner}>
     <Ionicons
@@ -1452,9 +1462,23 @@ setSuccessMessageVisible(true);
       color="#6F4A8E"
     />
 
-    <Text style={styles.editingBannerText}>
+    <Text
+      style={[
+        styles.editingBannerText,
+        { flex: 1 },
+      ]}
+    >
       Editando maleta
     </Text>
+
+    <TouchableOpacity
+      onPress={handleNewSuitcase}
+      activeOpacity={0.7}
+    >
+      <Text style={styles.editingBannerText}>
+        + Nueva maleta
+      </Text>
+    </TouchableOpacity>
   </View>
 )}
         {/* INFORMACIÓN */}
@@ -1864,8 +1888,18 @@ setSuccessMessageVisible(true);
           </Text>
         </TouchableOpacity>
 
-      </ScrollView>
+     </ScrollView>
 
+<AlertMessage
+  floating
+  top={12}
+  type="success"
+  message={
+    successMessageVisible
+      ? MESSAGES.SUITCASE_SAVED || 'Maleta guardada correctamente.'
+      : ''
+  }
+/>
 
       {/* CALENDARIO */}
 
@@ -2030,56 +2064,14 @@ editingBanner: {
 
 editingBannerText: {
   color: '#6F4A8E',
-
-  fontSize: 10.5,
-
-  fontFamily:
-    'Poppins_600SemiBold',
-
+  fontSize: 13,
+  fontFamily: 'Poppins_600SemiBold',
   marginLeft: 8,
 },
 
 
-successBanner: {
-  flexDirection: 'row',
-  alignItems: 'center',
 
-  backgroundColor: SUCCESS_BACKGROUND,
 
-  borderWidth: 1,
-  borderColor: SUCCESS_BORDER,
-
-  borderRadius: 10,
-
-  paddingHorizontal: 14,
-  paddingVertical: 10,
-
-  marginBottom: 12,
-},
-
-    successIcon: {
-  width: 27,
-  height: 27,
-
-  borderRadius: 14,
-
-  backgroundColor: '#FFFFFF',
-
-  alignItems: 'center',
-  justifyContent: 'center',
-
-  marginRight: 9,
-},
-
-    successText: {
-  flex: 1,
-
-  color: SUCCESS_TEXT,
-
-  fontSize: 10.5,
-
-  fontFamily: 'Poppins_600SemiBold',
-},
 
     contentContainer: {
       padding: 12,
@@ -2145,17 +2137,13 @@ successBanner: {
       paddingVertical: 10,
     },
 
-    infoRow: {
-      minHeight: 51,
-
-      flexDirection: 'row',
-      alignItems: 'center',
-
-      borderBottomWidth: 1,
-      borderBottomColor:
-        '#F0EAF8',
-    },
-
+   infoRow: {
+  minHeight: 58,
+  flexDirection: 'row',
+  alignItems: 'center',
+  borderBottomWidth: 1,
+  borderBottomColor: '#F0EAF8',
+},
     lastInfoRow: {
       borderBottomWidth: 0,
     },
@@ -2172,61 +2160,38 @@ successBanner: {
       marginLeft: 3,
     },
 
-    infoLabel: {
-      color:
-        COLORS.textLight,
+  infoLabel: {
+  color: COLORS.textLight,
+  fontSize: 12,
+  fontFamily: 'Poppins_400Regular',
+},
 
-      fontSize: 10,
-
-      fontFamily:
-        'Poppins_400Regular',
-    },
-
-    // IMPORTANTE:
-    // Sin background, border ni borderRadius.
-    // El destino vuelve a verse limpio.
     infoInput: {
-      color:
-        COLORS.textDark,
-
-      fontSize: 12,
-
-      fontFamily:
-        'Poppins_600SemiBold',
-
-      paddingVertical: 1,
-      paddingHorizontal: 0,
-
-      marginTop: 1,
-
-      backgroundColor:
-        'transparent',
-    },
+  color: COLORS.textDark,
+  fontSize: 14,
+  fontFamily: 'Poppins_600SemiBold',
+  paddingVertical: 1,
+  paddingHorizontal: 0,
+  marginTop: 1,
+  backgroundColor: 'transparent',
+},
+  
 
     dateButton: {
-      minHeight: 30,
+  minHeight: 34,
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  paddingVertical: 2,
+  paddingRight: 2,
+},
 
-      flexDirection: 'row',
-      alignItems: 'center',
-
-      justifyContent:
-        'space-between',
-
-      paddingVertical: 2,
-      paddingRight: 2,
-    },
-
-    dateButtonText: {
-      flex: 1,
-
-      color:
-        COLORS.textDark,
-
-      fontSize: 12,
-
-      fontFamily:
-        'Poppins_600SemiBold',
-    },
+dateButtonText: {
+  flex: 1,
+  color: COLORS.textDark,
+  fontSize: 14,
+  fontFamily: 'Poppins_600SemiBold',
+},
 
     datePlaceholder: {
       color:
@@ -2236,33 +2201,21 @@ successBanner: {
         'Poppins_400Regular',
     },
 
-   statusBadge: {
+ statusBadge: {
   alignSelf: 'flex-start',
-
-  backgroundColor:
-    STATUS_PLANNED_BACKGROUND,
-
+  backgroundColor: STATUS_PLANNED_BACKGROUND,
   borderWidth: 1,
-
-  borderColor:
-    STATUS_PLANNED_BORDER,
-
+  borderColor: STATUS_PLANNED_BORDER,
   borderRadius: 10,
-
-  paddingHorizontal: 10,
-  paddingVertical: 3,
-
-  marginTop: 1,
-},
+  paddingHorizontal: 12,
+  paddingVertical: 4,
+  marginTop: 2,
+},  
 
 statusText: {
-  color:
-    STATUS_PLANNED_TEXT,
-
-  fontSize: 9,
-
-  fontFamily:
-    'Poppins_600SemiBold',
+  color: STATUS_PLANNED_TEXT,
+  fontSize: 12,
+  fontFamily: 'Poppins_600SemiBold',
 },
 
 statusBadgePlanned: {
@@ -2351,15 +2304,11 @@ statusTextPlanned: {
       alignItems: 'center',
     },
 
-    calendarMonthTitle: {
-      color:
-        COLORS.textDark,
-
-      fontSize: 15,
-
-      fontFamily:
-        'Poppins_600SemiBold',
-    },
+   calendarMonthTitle: {
+  color: COLORS.textDark,
+  fontSize: 16,
+  fontFamily: 'Poppins_600SemiBold',
+},
 
     weekDaysRow: {
       flexDirection: 'row',
@@ -2374,15 +2323,11 @@ statusTextPlanned: {
       justifyContent: 'center',
     },
 
-    weekDayText: {
-      color:
-        COLORS.textLight,
-
-      fontSize: 10,
-
-      fontFamily:
-        'Poppins_600SemiBold',
-    },
+  weekDayText: {
+  color: COLORS.textLight,
+  fontSize: 12,
+  fontFamily: 'Poppins_600SemiBold',
+},
 
     calendarGrid: {
       flexDirection: 'row',
@@ -2397,25 +2342,17 @@ statusTextPlanned: {
       justifyContent: 'center',
     },
 
-    calendarDayText: {
-      width: 32,
-      height: 32,
-
-      textAlign: 'center',
-      textAlignVertical: 'center',
-
-      color:
-        COLORS.textDark,
-
-      fontSize: 11,
-
-      fontFamily:
-        'Poppins_400Regular',
-
-      borderRadius: 16,
-
-      paddingTop: 7,
-    },
+   calendarDayText: {
+  width: 34,
+  height: 34,
+  textAlign: 'center',
+  textAlignVertical: 'center',
+  color: COLORS.textDark,
+  fontSize: 14,
+  fontFamily: 'Poppins_400Regular',
+  borderRadius: 17,
+  paddingTop: 7,
+},
 
     calendarDayTextSelected: {
       color:
@@ -2451,15 +2388,11 @@ statusTextPlanned: {
         '#F3EFF6',
     },
 
-    calendarCancelText: {
-      color:
-        COLORS.textLight,
-
-      fontSize: 10,
-
-      fontFamily:
-        'Poppins_600SemiBold',
-    },
+calendarCancelText: {
+  color: COLORS.textLight,
+  fontSize: 13,
+  fontFamily: 'Poppins_600SemiBold',
+},
 
     sectionHeader: {
       marginTop: 14,
@@ -2467,14 +2400,10 @@ statusTextPlanned: {
     },
 
     sectionTitle: {
-      color:
-        COLORS.textDark,
-
-      fontSize: 14,
-
-      fontFamily:
-        'Poppins_600SemiBold',
-    },
+  color: COLORS.textDark,
+  fontSize: 17,
+  fontFamily: 'Poppins_600SemiBold',
+},
 
     // ========================================================
     // CONTADOR DE PRENDAS
@@ -2514,13 +2443,9 @@ statusTextPlanned: {
     },
 
     packedCountText: {
-      color:
-        COLORS.textDark,
-
-      fontSize: 10,
-
-      fontFamily:
-        'Poppins_400Regular',
+      color: COLORS.textDark,
+      fontSize: 13,
+      fontFamily: 'Poppins_400Regular',
     },
 
     packedCountNumber: {
@@ -2540,28 +2465,16 @@ statusTextPlanned: {
     },
 
     clothingCard: {
-      minHeight: 82,
-
-      backgroundColor:
-        '#FFFFFF',
-
+      minHeight: 96,
+      backgroundColor: '#FFFFFF',
       borderRadius: 12,
-
       flexDirection: 'row',
       alignItems: 'center',
-
-      padding: 7,
-
+      padding: 9,
       shadowColor: '#000',
-
-      shadowOffset: {
-        width: 0,
-        height: 1,
-      },
-
+      shadowOffset: { width: 0, height: 1 },
       shadowOpacity: 0.06,
       shadowRadius: 3,
-
       elevation: 1,
     },
 
@@ -2581,17 +2494,12 @@ statusTextPlanned: {
     },
 
     imageContainer: {
-      width: 65,
-      height: 68,
-
+      width: 76,
+      height: 80,
       borderRadius: 8,
-
-      backgroundColor:
-        '#F6F3F8',
-
+      backgroundColor: '#F6F3F8',
       justifyContent: 'center',
       alignItems: 'center',
-
       overflow: 'hidden',
     },
 
@@ -2616,24 +2524,15 @@ statusTextPlanned: {
     },
 
     clothingTitle: {
-      color:
-        COLORS.textDark,
-
-      fontSize: 11,
-
-      fontFamily:
-        'Poppins_600SemiBold',
+      color: COLORS.textDark,
+      fontSize: 14,
+      fontFamily: 'Poppins_600SemiBold',
     },
 
     clothingCategory: {
-      color:
-        COLORS.textLight,
-
-      fontSize: 8.5,
-
-      fontFamily:
-        'Poppins_400Regular',
-
+      color: COLORS.textLight,
+      fontSize: 12,
+      fontFamily: 'Poppins_400Regular',
       marginTop: 1,
     },
 
@@ -2645,26 +2544,18 @@ statusTextPlanned: {
     },
 
     colorDot: {
-      width: 8,
-      height: 8,
-
-      borderRadius: 4,
-
+      width: 10,
+      height: 10,
+      borderRadius: 5,
       borderWidth: 1,
-      borderColor:
-        '#D7D1DD',
-
-      marginRight: 4,
+      borderColor: '#D7D1DD',
+      marginRight: 5,
     },
 
     colorText: {
-      color:
-        COLORS.textLight,
-
-      fontSize: 8.5,
-
-      fontFamily:
-        'Poppins_400Regular',
+      color: COLORS.textLight,
+      fontSize: 12,
+      fontFamily: 'Poppins_400Regular',
     },
 
     noteRow: {
@@ -2678,15 +2569,9 @@ statusTextPlanned: {
 
     noteText: {
       flex: 1,
-
-      color:
-        COLORS.buttonDark,
-
-      fontSize: 7.5,
-
-      fontFamily:
-        'Poppins_400Regular',
-
+      color: COLORS.buttonDark,
+      fontSize: 11,
+      fontFamily: 'Poppins_400Regular',
       marginLeft: 3,
     },
 
@@ -2698,48 +2583,34 @@ statusTextPlanned: {
     },
 
     editButton: {
-      width: 43,
-
+      width: 54,
       alignItems: 'center',
       justifyContent: 'center',
     },
 
     packButton: {
-      width: 52,
-
+      width: 66,
       alignItems: 'center',
       justifyContent: 'center',
     },
 
     actionText: {
-      color:
-        COLORS.textLight,
-
-      fontSize: 6.5,
-
-      fontFamily:
-        'Poppins_400Regular',
-
-      marginTop: 2,
-
+      color: COLORS.textLight,
+      fontSize: 11,
+      fontFamily: 'Poppins_400Regular',
+      marginTop: 3,
       textAlign: 'center',
     },
 
     checkbox: {
-      width: 18,
-      height: 18,
-
-      borderRadius: 4,
-
-      borderWidth: 1,
-      borderColor:
-        '#A9A1B0',
-
+      width: 22,
+      height: 22,
+      borderRadius: 5,
+      borderWidth: 1.5,
+      borderColor: '#A9A1B0',
       justifyContent: 'center',
       alignItems: 'center',
-
-      backgroundColor:
-        '#FFFFFF',
+      backgroundColor: '#FFFFFF',
     },
 
     checkboxChecked: {
@@ -2763,57 +2634,36 @@ statusTextPlanned: {
     },
 
     emptyTitle: {
-      color:
-        COLORS.textDark,
-
-      fontSize: 13,
-
-      fontFamily:
-        'Poppins_600SemiBold',
-
+      color: COLORS.textDark,
+      fontSize: 16,
+      fontFamily: 'Poppins_600SemiBold',
       marginTop: 10,
-
       textAlign: 'center',
     },
 
     emptyText: {
-      color:
-        COLORS.textLight,
-
-      fontSize: 10,
-
-      fontFamily:
-        'Poppins_400Regular',
-
+      color: COLORS.textLight,
+      fontSize: 13,
+      fontFamily: 'Poppins_400Regular',
       marginTop: 5,
-
       textAlign: 'center',
-
-      maxWidth: 280,
+      maxWidth: 300,
     },
 
     saveButton: {
-      height: 42,
-
-      backgroundColor:
-        COLORS.buttonDark,
-
-      borderRadius: 8,
-
+      height: 50,
+      backgroundColor: COLORS.buttonDark,
+      borderRadius: 10,
       flexDirection: 'row',
-
       justifyContent: 'center',
       alignItems: 'center',
-
-      marginTop: 10,
+      marginTop: 12,
     },
 
     saveButtonDesktop: {
-      height: 48,
-
-      borderRadius: 9,
-
-      marginTop: 15,
+      height: 52,
+      borderRadius: 10,
+      marginTop: 16,
     },
 
     saveButtonDisabled: {
@@ -2821,15 +2671,10 @@ statusTextPlanned: {
     },
 
     saveButtonText: {
-      color:
-        '#FFFFFF',
-
-      fontSize: 11,
-
-      fontFamily:
-        'Poppins_600SemiBold',
-
-      marginLeft: 7,
+      color: '#FFFFFF',
+      fontSize: 15,
+      fontFamily: 'Poppins_600SemiBold',
+      marginLeft: 8,
     },
 
     modalOverlay: {
@@ -2867,40 +2712,23 @@ statusTextPlanned: {
     },
 
     modalSubtitle: {
-      color:
-        COLORS.textLight,
-
-      fontSize: 11,
-
-      fontFamily:
-        'Poppins_400Regular',
-
+      color: COLORS.textLight,
+      fontSize: 13,
+      fontFamily: 'Poppins_400Regular',
       marginTop: 3,
       marginBottom: 12,
     },
 
     noteInput: {
       minHeight: 90,
-
       borderWidth: 1,
-
-      borderColor:
-        '#E4DCEC',
-
+      borderColor: '#E4DCEC',
       borderRadius: 10,
-
       padding: 12,
-
-      color:
-        COLORS.textDark,
-
-      fontSize: 12,
-
-      fontFamily:
-        'Poppins_400Regular',
-
-      textAlignVertical:
-        'top',
+      color: COLORS.textDark,
+      fontSize: 14,
+      fontFamily: 'Poppins_400Regular',
+      textAlignVertical: 'top',
     },
 
     modalActions: {
@@ -2925,13 +2753,9 @@ statusTextPlanned: {
     },
 
     cancelButtonText: {
-      color:
-        COLORS.textLight,
-
-      fontSize: 10,
-
-      fontFamily:
-        'Poppins_600SemiBold',
+      color: COLORS.textLight,
+      fontSize: 13,
+      fontFamily: 'Poppins_600SemiBold',
     },
 
     confirmButton: {
@@ -2945,12 +2769,8 @@ statusTextPlanned: {
     },
 
     confirmButtonText: {
-      color:
-        '#FFFFFF',
-
-      fontSize: 10,
-
-      fontFamily:
-        'Poppins_600SemiBold',
+      color: '#FFFFFF',
+      fontSize: 13,
+      fontFamily: 'Poppins_600SemiBold',
     },
   });

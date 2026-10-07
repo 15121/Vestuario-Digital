@@ -1,4 +1,5 @@
 import React, {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -13,6 +14,7 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  Platform,
   useWindowDimensions,
 } from 'react-native';
 
@@ -22,21 +24,18 @@ import {
   getOutfitById,
   getClothingItemById,
   addHistoryEntry,
+  getUserHistory,
+  deleteOutfit,
 } from '../services/database';
 import { COLORS } from '../theme/colours';
 import { MESSAGES } from '../theme/messages';
-import {
-  OutfitScreenLayout,
-} from '../navigation/MainTabNavigator';
-
-// ============================================================
-// CONFIGURACIÓN DE CATEGORÍAS
-// ============================================================
+import { getColorHex } from '../utils/colorutils';
+import { OutfitScreenLayout } from '../navigation/MainTabNavigator';
 
 const CATEGORY_CONFIG = {
   superior: {
     label: 'Superior',
-    icon: 'shirt-outline',
+    icon: 'tshirt-crew-outline',
   },
   inferior: {
     label: 'Inferior',
@@ -50,11 +49,15 @@ const CATEGORY_CONFIG = {
     label: 'Accesorio',
     icon: 'bag-personal-outline',
   },
+  completa: {
+    label: 'Prenda completa',
+    icon: 'hanger',
+  },
+  interior: {
+    label: 'Ropa interior',
+    icon: 'tshirt-crew-outline',
+  },
 };
-
-// ============================================================
-// HELPERS
-// ============================================================
 
 const normalizeId = (value) => {
   if (value === null || value === undefined) return null;
@@ -62,6 +65,14 @@ const normalizeId = (value) => {
   const numberValue = Number(value);
 
   return Number.isNaN(numberValue) ? value : numberValue;
+};
+
+const normalizeText = (value) => {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
 };
 
 const formatDate = (dateValue) => {
@@ -83,8 +94,10 @@ const formatDate = (dateValue) => {
 const getColorLabel = (color) => {
   if (!color) return 'Sin color especificado';
 
-  return color;
+  return String(color);
 };
+
+const getColorValue = (color) => getColorHex(color, '#E8E4EC');
 
 const getCategoryKey = (category) => {
   if (!category) return 'accesorio';
@@ -95,27 +108,41 @@ const getCategoryKey = (category) => {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
 
+  // SUPERIORES Y PRENDAS DE UNA PIEZA
   if (
     normalized.includes('superior') ||
+    normalized.includes('camiseta') ||
+    normalized.includes('top') ||
     normalized.includes('camisa') ||
     normalized.includes('remera') ||
     normalized.includes('blusa') ||
     normalized.includes('campera') ||
-    normalized.includes('buzo')
+    normalized.includes('abrigo') ||
+    normalized.includes('buzo') ||
+    normalized.includes('sweater') ||
+    normalized.includes('chaqueta') ||
+    normalized.includes('vestido') ||
+    normalized.includes('traje') ||
+    normalized.includes('conjunto') ||
+    normalized.includes('mono')
   ) {
     return 'superior';
   }
 
+  // INFERIORES
   if (
     normalized.includes('inferior') ||
     normalized.includes('pantalon') ||
     normalized.includes('falda') ||
+    normalized.includes('pollera') ||
     normalized.includes('short') ||
+    normalized.includes('bermuda') ||
     normalized.includes('jean')
   ) {
     return 'inferior';
   }
 
+  // CALZADO
   if (
     normalized.includes('calzado') ||
     normalized.includes('zapato') ||
@@ -129,22 +156,33 @@ const getCategoryKey = (category) => {
   return 'accesorio';
 };
 
-// ============================================================
-// COMPONENTE: TARJETA DE PRENDA
-// ============================================================
-
-function ClothingRow({ item, onPress }) {
+function ClothingRow({
+  item,
+  onPress,
+  isCompact,
+}) {
   const categoryKey = getCategoryKey(item?.category);
-  const config = CATEGORY_CONFIG[categoryKey];
+
+  const config =
+    CATEGORY_CONFIG[categoryKey] ||
+    CATEGORY_CONFIG.accesorio;
 
   return (
     <TouchableOpacity
       activeOpacity={0.75}
-      style={styles.clothingRow}
+      style={[
+        styles.clothingRow,
+        isCompact && styles.clothingRowCompact,
+      ]}
       onPress={onPress}
     >
-      {/* Imagen */}
-      <View style={styles.clothingImageContainer}>
+      <View
+        style={[
+          styles.clothingImageContainer,
+          isCompact &&
+            styles.clothingImageContainerCompact,
+        ]}
+      >
         {item?.imageUri ? (
           <Image
             source={{ uri: item.imageUri }}
@@ -162,7 +200,6 @@ function ClothingRow({ item, onPress }) {
         )}
       </View>
 
-      {/* Información */}
       <View style={styles.clothingInfo}>
         <View style={styles.categoryLine}>
           <View style={styles.categoryIcon}>
@@ -173,14 +210,17 @@ function ClothingRow({ item, onPress }) {
             />
           </View>
 
-          <Text style={styles.categoryText}>
+          <Text
+            style={styles.categoryText}
+            numberOfLines={1}
+          >
             {config.label}
           </Text>
         </View>
 
         <Text
           style={styles.clothingTitle}
-          numberOfLines={1}
+          numberOfLines={2}
         >
           {item?.title || 'Prenda sin nombre'}
         </Text>
@@ -191,7 +231,7 @@ function ClothingRow({ item, onPress }) {
               styles.colorDot,
               {
                 backgroundColor:
-                  item?.color || '#FFFFFF',
+                  getColorValue(item?.color),
               },
             ]}
           />
@@ -208,11 +248,11 @@ function ClothingRow({ item, onPress }) {
   );
 }
 
-// ============================================================
-// COMPONENTE: IMAGEN PRINCIPAL DEL OUTFIT
-// ============================================================
-
-function OutfitPreview({ items, isDesktop }) {
+function OutfitPreview({
+  items,
+  isDesktop,
+  isCompact,
+}) {
   const previewItems = [
     items?.superior,
     items?.inferior,
@@ -225,7 +265,10 @@ function OutfitPreview({ items, isDesktop }) {
       <View
         style={[
           styles.previewEmpty,
-          isDesktop && styles.previewEmptyDesktop,
+          isDesktop &&
+            styles.previewEmptyDesktop,
+          isCompact &&
+            styles.previewEmptyCompact,
         ]}
       >
         <MaterialCommunityIcons
@@ -245,15 +288,21 @@ function OutfitPreview({ items, isDesktop }) {
     <View
       style={[
         styles.outfitPreview,
-        isDesktop && styles.outfitPreviewDesktop,
+        isDesktop &&
+          styles.outfitPreviewDesktop,
+        isCompact &&
+          styles.outfitPreviewCompact,
       ]}
     >
       {previewItems.map((item, index) => (
         <View
-          key={`${item.id}-${index}`}
+          key={`${item.id ?? 'item'}-${index}`}
           style={[
             styles.previewItem,
-            previewItems.length <= 2 && styles.previewItemLarge,
+            previewItems.length <= 2 &&
+              styles.previewItemLarge,
+            isCompact &&
+              styles.previewItemCompact,
           ]}
         >
           {item.imageUri ? (
@@ -263,7 +312,11 @@ function OutfitPreview({ items, isDesktop }) {
               resizeMode="contain"
             />
           ) : (
-            <View style={styles.previewImagePlaceholder}>
+            <View
+              style={
+                styles.previewImagePlaceholder
+              }
+            >
               <Ionicons
                 name="image-outline"
                 size={35}
@@ -277,14 +330,14 @@ function OutfitPreview({ items, isDesktop }) {
   );
 }
 
-// ============================================================
-// COMPONENTE PRINCIPAL
-// ============================================================
-
-export default function OutfitDetailScreen({ navigation, route }) {
+export default function OutfitDetailScreen({
+  navigation,
+  route,
+}) {
   const { width } = useWindowDimensions();
 
-  const isDesktop = width > 768;
+  const isDesktop = width >= 900;
+  const isCompact = width < 390;
 
   const outfitId =
     route?.params?.outfitId ??
@@ -297,140 +350,172 @@ export default function OutfitDetailScreen({ navigation, route }) {
     route?.params?.outfit || null
   );
 
-  const [clothingItems, setClothingItems] = useState({
-    superior: null,
-    inferior: null,
-    calzado: null,
-    accesorios: [],
-  });
+  const [clothingItems, setClothingItems] =
+    useState({
+      superior: null,
+      inferior: null,
+      calzado: null,
+      accesorios: [],
+    });
 
-  const [loading, setLoading] = useState(true);
-const [showSuccessMessage, setShowSuccessMessage] = useState(false);
-const successMessageTimeout = useRef(null);
+  const [loading, setLoading] =
+    useState(true);
 
-  // ==========================================================
-  // CARGAR OUTFIT
-  // ==========================================================
+  const [
+    showSuccessMessage,
+    setShowSuccessMessage,
+  ] = useState(false);
+
+  const successMessageTimeout =
+    useRef(null);
+
+  const [deleting, setDeleting] =
+    useState(false);
+
+  const loadClothingForOutfit =
+    useCallback(async (currentOutfit) => {
+      const outfitItems =
+        currentOutfit?.items || {};
+
+      const superiorId =
+        outfitItems.superior;
+
+      const inferiorId =
+        outfitItems.inferior;
+
+      const calzadoId =
+        outfitItems.calzado;
+
+      const accessoryIds =
+        Array.isArray(
+          outfitItems.accesorios
+        )
+          ? outfitItems.accesorios
+          : [];
+
+      const [
+        superior,
+        inferior,
+        calzado,
+        accesorios,
+      ] = await Promise.all([
+        superiorId !== null &&
+        superiorId !== undefined
+          ? getClothingItemById(
+              normalizeId(superiorId)
+            )
+          : null,
+
+        inferiorId !== null &&
+        inferiorId !== undefined
+          ? getClothingItemById(
+              normalizeId(inferiorId)
+            )
+          : null,
+
+        calzadoId !== null &&
+        calzadoId !== undefined
+          ? getClothingItemById(
+              normalizeId(calzadoId)
+            )
+          : null,
+
+        Promise.all(
+          accessoryIds.map((id) =>
+            getClothingItemById(
+              normalizeId(id)
+            )
+          )
+        ),
+      ]);
+
+      setClothingItems({
+        superior,
+        inferior,
+        calzado,
+        accesorios:
+          accesorios.filter(Boolean),
+      });
+    }, []);
+
+  const loadOutfit = useCallback(
+    async () => {
+      try {
+        setLoading(true);
+
+        let currentOutfit =
+          route?.params?.outfit ||
+          null;
+
+        if (
+          outfitId !== undefined &&
+          outfitId !== null
+        ) {
+          const databaseOutfit =
+            await getOutfitById(
+              normalizeId(outfitId)
+            );
+
+          if (databaseOutfit) {
+            currentOutfit =
+              databaseOutfit;
+          }
+        }
+
+        if (!currentOutfit) {
+          setOutfit(null);
+
+          setClothingItems({
+            superior: null,
+            inferior: null,
+            calzado: null,
+            accesorios: [],
+          });
+
+          return;
+        }
+
+        setOutfit(currentOutfit);
+
+        await loadClothingForOutfit(
+          currentOutfit
+        );
+      } catch (error) {
+        console.log(
+          'Error cargando detalle del outfit:',
+          error
+        );
+
+        Alert.alert(
+          'Error',
+          MESSAGES.OUTFIT_ERROR
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      loadClothingForOutfit,
+      outfitId,
+      route?.params?.outfit,
+    ]
+  );
 
   useEffect(() => {
     loadOutfit();
-  }, [outfitId]);
-useEffect(() => {
-  return () => {
-    if (successMessageTimeout.current) {
-      clearTimeout(successMessageTimeout.current);
-    }
-  };
-}, []);
-  const loadOutfit = async () => {
-    try {
-      setLoading(true);
+  }, [loadOutfit]);
 
-      let currentOutfit = route?.params?.outfit || null;
-
-      // Si recibimos ID, siempre consultamos la base.
-      if (outfitId !== undefined && outfitId !== null) {
-        const databaseOutfit = await getOutfitById(
-          normalizeId(outfitId)
+  useEffect(() => {
+    return () => {
+      if (
+        successMessageTimeout.current
+      ) {
+        clearTimeout(
+          successMessageTimeout.current
         );
-
-        if (databaseOutfit) {
-          currentOutfit = databaseOutfit;
-        }
       }
-
-      if (!currentOutfit) {
-        setOutfit(null);
-
-        setClothingItems({
-          superior: null,
-          inferior: null,
-          calzado: null,
-          accesorios: [],
-        });
-
-        return;
-      }
-
-      setOutfit(currentOutfit);
-
-      await loadClothingForOutfit(currentOutfit);
-    } catch (error) {
-      console.log(
-        'Error cargando detalle del outfit:',
-        error
-      );
-
-      Alert.alert(
-        'Error',
-        MESSAGES.OUTFIT_ERROR
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ==========================================================
-  // CARGAR PRENDAS RELACIONADAS
-  // ==========================================================
-
-  const loadClothingForOutfit = async (currentOutfit) => {
-    const outfitItems = currentOutfit?.items || {};
-
-    const superiorId = outfitItems.superior;
-    const inferiorId = outfitItems.inferior;
-    const calzadoId = outfitItems.calzado;
-
-    const accessoryIds = Array.isArray(
-      outfitItems.accesorios
-    )
-      ? outfitItems.accesorios
-      : [];
-
-    const [
-      superior,
-      inferior,
-      calzado,
-      accesorios,
-    ] = await Promise.all([
-      superiorId
-        ? getClothingItemById(
-            normalizeId(superiorId)
-          )
-        : null,
-
-      inferiorId
-        ? getClothingItemById(
-            normalizeId(inferiorId)
-          )
-        : null,
-
-      calzadoId
-        ? getClothingItemById(
-            normalizeId(calzadoId)
-          )
-        : null,
-
-      Promise.all(
-        accessoryIds.map((id) =>
-          getClothingItemById(
-            normalizeId(id)
-          )
-        )
-      ),
-    ]);
-
-    setClothingItems({
-      superior,
-      inferior,
-      calzado,
-      accesorios: accesorios.filter(Boolean),
-    });
-  };
-
-  // ==========================================================
-  // LISTA FINAL DE PRENDAS
-  // ==========================================================
+    };
+  }, []);
 
   const allClothingItems = useMemo(() => {
     return [
@@ -441,380 +526,535 @@ useEffect(() => {
     ].filter(Boolean);
   }, [clothingItems]);
 
-  // ==========================================================
-  // ABRIR DETALLE DE PRENDA
-  // ==========================================================
+  const handleClothingPress =
+    useCallback(
+      (item) => {
+        if (!item?.id) return;
 
-const handleClothingPress = (item) => {
-  if (!item?.id) return;
-
-  navigation.navigate(
-    'ClothingDetail',
-    {
-      prenda: item,
-      clothingId: item.id,
-      user,
-    }
-  );
-};
-
-
-
-  // ==========================================================
-  // VOLVER
-  // ==========================================================
-
-  const handleBack = () => {
-    navigation.goBack();
-  };
-const handleMarkAsUsed = async () => {
-  if (!user?.id || !outfit?.id) {
-    Alert.alert(
-      'Error',
-      'No se pudo identificar el outfit o el usuario.'
+        navigation.navigate(
+          'ClothingDetail',
+          {
+            prenda: item,
+            clothingId: item.id,
+            user,
+          }
+        );
+      },
+      [navigation, user]
     );
-    return;
+
+  const handleBack =
+    useCallback(() => {
+      navigation.goBack();
+    }, [navigation]);
+
+  const handleMarkAsUsed =
+    useCallback(async () => {
+      if (!user?.id || !outfit?.id) {
+        Alert.alert(
+          'Error',
+          'No se pudo identificar el outfit o el usuario.'
+        );
+
+        return;
+      }
+
+      try {
+        // Un mismo outfit solo se puede marcar una vez por día
+        const history = await getUserHistory(user.id);
+        const today = new Date().toDateString();
+
+        const alreadyUsedToday = (
+          Array.isArray(history) ? history : []
+        ).some(
+          (entry) =>
+            String(entry.outfitId) === String(outfit.id) &&
+            new Date(entry.date).toDateString() === today
+        );
+
+        if (alreadyUsedToday) {
+          Alert.alert(
+            'Ya registrado',
+            'Este outfit ya fue marcado como usado hoy.'
+          );
+
+          return;
+        }
+
+        const result =
+          await addHistoryEntry({
+            userId: user.id,
+            outfitId: outfit.id,
+            outfitName:
+              outfit.name ||
+              'Outfit sin nombre',
+            imageUri: '',
+            note: '',
+          });
+
+        if (!result?.success) {
+          throw new Error(
+            result?.message ||
+              'HISTORY_ERROR'
+          );
+        }
+
+        if (
+          successMessageTimeout.current
+        ) {
+          clearTimeout(
+            successMessageTimeout.current
+          );
+        }
+
+        setShowSuccessMessage(true);
+
+        successMessageTimeout.current =
+          setTimeout(() => {
+            setShowSuccessMessage(false);
+          }, 2500);
+      } catch (error) {
+        console.log(
+          'Error registrando uso del outfit:',
+          error
+        );
+
+        Alert.alert(
+          'Error',
+          'No se pudo registrar el outfit en el historial.'
+        );
+      }
+    }, [outfit, user]);
+
+  const handleDelete = useCallback(() => {
+    if (!outfit?.id || deleting) return;
+
+    const runDelete = async () => {
+      try {
+        setDeleting(true);
+
+        const result = await deleteOutfit(outfit.id);
+
+        if (!result?.success) {
+          throw new Error(result?.message || 'DELETE_ERROR');
+        }
+
+        navigation.goBack();
+      } catch (error) {
+        console.log('Error eliminando outfit:', error);
+
+        setDeleting(false);
+
+        Alert.alert('Error', 'No se pudo eliminar el outfit.');
+      }
+    };
+
+    const message = `¿Seguro que querés eliminar "${
+      outfit.name || 'este outfit'
+    }"? Esta acción no se puede deshacer.`;
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(message)) {
+        runDelete();
+      }
+      return;
+    }
+
+    Alert.alert('Eliminar outfit', message, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: runDelete,
+      },
+    ]);
+  }, [outfit, deleting, navigation]);
+
+  if (loading) {
+    return (
+      <OutfitScreenLayout
+        title="Detalle de Outfit"
+        navigation={navigation}
+        user={user}
+      >
+        <View
+          style={styles.loadingContainer}
+        >
+          <ActivityIndicator
+            size="large"
+            color={COLORS.primary}
+          />
+
+          <Text
+            style={styles.loadingText}
+          >
+            Cargando outfit...
+          </Text>
+        </View>
+      </OutfitScreenLayout>
+    );
   }
 
-  try {
-    const result = await addHistoryEntry({
-      userId: user.id,
-      outfitId: outfit.id,
-      outfitName: outfit.name || 'Outfit sin nombre',
-      imageUri: '',
-      note: '',
-    });
+  if (!outfit) {
+    return (
+      <OutfitScreenLayout
+        title="Detalle de Outfit"
+        navigation={navigation}
+        user={user}
+      >
+        <View
+          style={styles.emptyContainer}
+        >
+          <MaterialCommunityIcons
+            name="hanger"
+            size={70}
+            color={COLORS.primary}
+          />
 
-    if (!result?.success) {
-      throw new Error(
-        result?.message || 'HISTORY_ERROR'
-      );
-    }
+          <Text
+            style={styles.emptyTitle}
+          >
+            Outfit no encontrado
+          </Text>
 
-    // Limpiamos un mensaje anterior si todavía estaba visible.
-    if (successMessageTimeout.current) {
-      clearTimeout(successMessageTimeout.current);
-    }
+          <Text
+            style={styles.emptyDescription}
+          >
+            No pudimos encontrar este outfit en tu armario.
+          </Text>
 
-    // Mostramos mensaje de éxito.
-    setShowSuccessMessage(true);
-
-    // Lo ocultamos después de unos segundos.
-    successMessageTimeout.current = setTimeout(() => {
-      setShowSuccessMessage(false);
-    }, 2500);
-
-  } catch (error) {
-    console.log(
-      'Error registrando uso del outfit:',
-      error
-    );
-
-    Alert.alert(
-      'Error',
-      'No se pudo registrar el outfit en el historial.'
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={handleBack}
+          >
+            <Text
+              style={
+                styles.backButtonText
+              }
+            >
+              Volver
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </OutfitScreenLayout>
     );
   }
-};
-  // ==========================================================
-  // LOADING
-  // ==========================================================
 
-if (loading) {
   return (
     <OutfitScreenLayout
       title="Detalle de Outfit"
       navigation={navigation}
       user={user}
     >
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator
-          size="large"
-          color={COLORS.primary}
-        />
+      <View style={styles.root}>
+        {showSuccessMessage && (
+          <View
+            style={[
+              styles.successMessage,
+              isDesktop &&
+                styles.successMessageDesktop,
+              isCompact &&
+                styles.successMessageCompact,
+            ]}
+          >
+            <Ionicons
+              name="checkmark-circle"
+              size={22}
+              color="#2F6B4F"
+            />
 
-        <Text style={styles.loadingText}>
-          Cargando outfit...
-        </Text>
+            <Text
+              style={
+                styles.successMessageText
+              }
+            >
+              ¡Outfit marcado exitosamente!
+            </Text>
+          </View>
+        )}
+
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.scrollContent,
+            isDesktop &&
+              styles.scrollContentDesktop,
+            isCompact &&
+              styles.scrollContentCompact,
+          ]}
+          showsVerticalScrollIndicator={
+            false
+          }
+        >
+          <View
+            style={[
+              styles.contentWrapper,
+              isDesktop &&
+                styles.contentWrapperDesktop,
+            ]}
+          >
+            <View
+              style={[
+                styles.columns,
+                isDesktop
+                  ? styles.columnsDesktop
+                  : styles.columnsMobile,
+              ]}
+            >
+              <View
+                style={[
+                  styles.mainCard,
+                  isDesktop
+                    ? styles.mainCardDesktop
+                    : styles.mainCardMobile,
+                ]}
+              >
+                <OutfitPreview
+                  items={clothingItems}
+                  isDesktop={isDesktop}
+                  isCompact={isCompact}
+                />
+
+                <View
+                  style={[
+                    styles.outfitInfo,
+                    isCompact &&
+                      styles.outfitInfoCompact,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.outfitName,
+                      isCompact &&
+                        styles.outfitNameCompact,
+                    ]}
+                  >
+                    {outfit.name ||
+                      'Outfit sin nombre'}
+                  </Text>
+
+                  {!!outfit.description && (
+                    <Text
+                      style={
+                        styles.outfitDescription
+                      }
+                    >
+                      {outfit.description}
+                    </Text>
+                  )}
+
+                  <View
+                    style={styles.dateRow}
+                  >
+                    <Ionicons
+                      name="calendar-outline"
+                      size={20}
+                      color={
+                        COLORS.textLight
+                      }
+                    />
+
+                    <Text
+                      style={styles.dateText}
+                    >
+                      Creado el{' '}
+                      {formatDate(
+                        outfit.createdAt
+                      )}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <View
+                style={[
+                  styles.itemsCard,
+                  isDesktop
+                    ? styles.itemsCardDesktop
+                    : styles.itemsCardMobile,
+                ]}
+              >
+                <View
+                  style={styles.itemsHeader}
+                >
+                  <MaterialCommunityIcons
+                    name="hanger"
+                    size={25}
+                    color={COLORS.primary}
+                  />
+
+                  <Text
+                    style={
+                      styles.itemsHeaderText
+                    }
+                    numberOfLines={1}
+                  >
+                    Prendas incluidas
+                  </Text>
+
+                  <View
+                    style={styles.countBadge}
+                  >
+                    <Text
+                      style={styles.countText}
+                    >
+                      {
+                        allClothingItems.length
+                      }
+                    </Text>
+                  </View>
+                </View>
+
+                {allClothingItems.length >
+                0 ? (
+                  <View
+                    style={styles.itemsList}
+                  >
+                    {allClothingItems.map(
+                      (item, index) => (
+                        <ClothingRow
+                          key={`${item.id ?? 'item'}-${index}`}
+                          item={item}
+                          isCompact={
+                            isCompact
+                          }
+                          onPress={() =>
+                            handleClothingPress(
+                              item
+                            )
+                          }
+                        />
+                      )
+                    )}
+                  </View>
+                ) : (
+                  <View
+                    style={
+                      styles.noItemsContainer
+                    }
+                  >
+                    <Ionicons
+                      name="shirt-outline"
+                      size={40}
+                      color={
+                        COLORS.textLight
+                      }
+                    />
+
+                    <Text
+                      style={
+                        styles.noItemsText
+                      }
+                    >
+                      No hay prendas asociadas a este outfit.
+                    </Text>
+                  </View>
+                )}
+
+                <View
+                  style={styles.infoBanner}
+                >
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={21}
+                    color={COLORS.buttonDark}
+                  />
+
+                  <Text
+                    style={
+                      styles.infoBannerText
+                    }
+                  >
+                    Tocá cualquier prenda para ver más detalles.
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.useButton}
+                  onPress={
+                    handleMarkAsUsed
+                  }
+                  activeOpacity={0.85}
+                >
+                  <Ionicons
+                    name="checkmark-circle-outline"
+                    size={22}
+                    color="#FFFFFF"
+                  />
+
+                  <Text
+                    style={
+                      styles.useButtonText
+                    }
+                  >
+                    Marcar como usado
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.deleteButton,
+                    deleting && styles.deleteButtonDisabled,
+                  ]}
+                  onPress={handleDelete}
+                  disabled={deleting}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons
+                    name="trash-outline"
+                    size={20}
+                    color="#C94C6D"
+                  />
+
+                  <Text style={styles.deleteButtonText}>
+                    {deleting ? 'Eliminando...' : 'Eliminar outfit'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.returnButton}
+                  onPress={handleBack}
+                  activeOpacity={0.85}
+                >
+                  <Text
+                    style={
+                      styles.returnButtonText
+                    }
+                  >
+                    Volver
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
       </View>
     </OutfitScreenLayout>
   );
 }
-  // ==========================================================
-  // OUTFIT NO ENCONTRADO
-  // ==========================================================
-
-  if (!outfit) {
-  return (
-    <OutfitScreenLayout
-      title="Detalle de Outfit"
-      navigation={navigation}
-      user={user}
-    >
-      <View style={styles.emptyContainer}>
-        <MaterialCommunityIcons
-          name="hanger"
-          size={70}
-          color={COLORS.primary}
-        />
-
-        <Text style={styles.emptyTitle}>
-          Outfit no encontrado
-        </Text>
-
-        <Text style={styles.emptyDescription}>
-          No pudimos encontrar este outfit en tu armario.
-        </Text>
-
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={handleBack}
-        >
-          <Text style={styles.backButtonText}>
-            Volver
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </OutfitScreenLayout>
-  );
-  }
-
-  // ==========================================================
-  // RENDER
-  // ==========================================================
-
-  return (
-  <OutfitScreenLayout
-    title="Detalle de Outfit"
-    navigation={navigation}
-    user={user}
-  >
-    <View style={styles.root}>
-      {showSuccessMessage && (
-  <View style={styles.successMessage}>
-    <Ionicons
-      name="checkmark-circle"
-      size={22}
-      color="#2F6B4F"
-    />
-
-    <Text style={styles.successMessageText}>
-      ¡Outfit marcado exitosamente!
-    </Text>
-  </View>
-)}
-
-      {/* ======================================================
-          CONTENIDO
-      ====================================================== */}
-
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.scrollContent,
-          isDesktop && styles.scrollContentDesktop,
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-
-        {/* ====================================================
-            TÍTULO
-        ==================================================== */}
-
-{/* Título gestionado por el header global */}
-        {/* ====================================================
-            DOS COLUMNAS EN DESKTOP
-        ==================================================== */}
-
-        <View
-          style={[
-            styles.columns,
-            isDesktop
-              ? styles.columnsDesktop
-              : styles.columnsMobile,
-          ]}
-        >
-
-          {/* ==================================================
-              TARJETA IZQUIERDA
-          ================================================== */}
-
-          <View
-            style={[
-              styles.mainCard,
-              isDesktop
-                ? styles.mainCardDesktop
-                : styles.mainCardMobile,
-            ]}
-          >
-
-            {/* Preview */}
-
-            <OutfitPreview
-              items={clothingItems}
-              isDesktop={isDesktop}
-            />
-
-            {/* Nombre */}
-
-            <View style={styles.outfitInfo}>
-
-              <Text style={styles.outfitName}>
-                {outfit.name || 'Outfit sin nombre'}
-              </Text>
-
-              {!!outfit.description && (
-                <Text style={styles.outfitDescription}>
-                  {outfit.description}
-                </Text>
-              )}
-
-              <View style={styles.dateRow}>
-                <Ionicons
-                  name="calendar-outline"
-                  size={20}
-                  color={COLORS.textLight}
-                />
-
-                <Text style={styles.dateText}>
-                  Creado el {formatDate(outfit.createdAt)}
-                </Text>
-              </View>
-
-            </View>
-
-          </View>
-
-          {/* ==================================================
-              TARJETA DERECHA / PRENDAS
-          ================================================== */}
-
-          <View
-            style={[
-              styles.itemsCard,
-              isDesktop
-                ? styles.itemsCardDesktop
-                : styles.itemsCardMobile,
-            ]}
-          >
-
-            {/* Header de prendas */}
-
-            <View style={styles.itemsHeader}>
-
-              <MaterialCommunityIcons
-                name="hanger"
-                size={25}
-                color={COLORS.primary}
-              />
-
-              <Text style={styles.itemsHeaderText}>
-                Prendas incluidas
-              </Text>
-
-              <View style={styles.countBadge}>
-                <Text style={styles.countText}>
-                  {allClothingItems.length}
-                </Text>
-              </View>
-
-            </View>
-
-            {/* Lista */}
-
-            {allClothingItems.length > 0 ? (
-              <View style={styles.itemsList}>
-
-                {allClothingItems.map((item, index) => (
-                  <ClothingRow
-                    key={`${item.id}-${index}`}
-                    item={item}
-                    onPress={() =>
-                      handleClothingPress(item)
-                    }
-                  />
-                ))}
-
-              </View>
-            ) : (
-              <View style={styles.noItemsContainer}>
-                <Ionicons
-                  name="shirt-outline"
-                  size={40}
-                  color={COLORS.textLight}
-                />
-
-                <Text style={styles.noItemsText}>
-                  No hay prendas asociadas a este outfit.
-                </Text>
-              </View>
-            )}
-
-            {/* =================================================
-                AVISO
-            ================================================= */}
-
-            <View style={styles.infoBanner}>
-
-              <Ionicons
-                name="information-circle-outline"
-                size={21}
-                color={COLORS.buttonDark}
-              />
-
-              <Text style={styles.infoBannerText}>
-                Tocá cualquier prenda para ver más detalles.
-              </Text>
-
-            </View>
-
-            {/* =================================================
-                BOTONES
-            ================================================= */}
-
-    
-
-            {/* =================================================
-                VOLVER
-            ================================================= */}
-<TouchableOpacity
-  style={styles.useButton}
-  onPress={handleMarkAsUsed}
-  activeOpacity={0.85}
->
-  <Ionicons
-    name="checkmark-circle-outline"
-    size={22}
-    color="#FFFFFF"
-  />
-
-  <Text style={styles.useButtonText}>
-    Marcar como usado
-  </Text>
-</TouchableOpacity>
-            <TouchableOpacity
-              style={styles.returnButton}
-              onPress={handleBack}
-            >
-              <Text style={styles.returnButtonText}>
-                Volver
-              </Text>
-            </TouchableOpacity>
-
-          </View>
-
-        </View>
-
-       </ScrollView>
-  </View>
-</OutfitScreenLayout>
-);}
-
-// ============================================================
-// ESTILOS
-// ============================================================
 
 const styles = StyleSheet.create({
+  deleteButton: {
+    minHeight: 50,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#C94C6D',
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+
+  deleteButtonDisabled: {
+    opacity: 0.6,
+  },
+
+  deleteButtonText: {
+    color: '#C94C6D',
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+  },
 
   root: {
     flex: 1,
@@ -826,42 +1066,29 @@ const styles = StyleSheet.create({
   },
 
   scrollContent: {
+    width: '100%',
     padding: 16,
     paddingBottom: 35,
   },
 
+  scrollContentCompact: {
+    paddingHorizontal: 10,
+    paddingBottom: 24,
+  },
+
   scrollContentDesktop: {
-    paddingHorizontal: 38,
-    paddingVertical: 32,
+    paddingHorizontal: 28,
+    paddingVertical: 28,
   },
 
-  // ==========================================================
-  // TÍTULO
-  // ==========================================================
-
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24,
+  contentWrapper: {
+    width: '100%',
+    alignSelf: 'center',
   },
 
-  backIconButton: {
-    width: 45,
-    height: 45,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    marginRight: 10,
+  contentWrapperDesktop: {
+    maxWidth: 1440,
   },
-
-  pageTitle: {
-    color: '#20203A',
-    fontSize: 27,
-    fontFamily: 'Poppins_600SemiBold',
-  },
-
-  // ==========================================================
-  // COLUMNAS
-  // ==========================================================
 
   columns: {
     width: '100%',
@@ -870,16 +1097,12 @@ const styles = StyleSheet.create({
   columnsDesktop: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    gap: 18,
+    gap: 24,
   },
 
   columnsMobile: {
     flexDirection: 'column',
   },
-
-  // ==========================================================
-  // TARJETA PRINCIPAL
-  // ==========================================================
 
   mainCard: {
     backgroundColor: '#FFFFFF',
@@ -901,6 +1124,7 @@ const styles = StyleSheet.create({
 
   mainCardDesktop: {
     flex: 1,
+    minWidth: 0,
     minHeight: 620,
   },
 
@@ -908,10 +1132,6 @@ const styles = StyleSheet.create({
     width: '100%',
     marginBottom: 14,
   },
-
-  // ==========================================================
-  // PREVIEW
-  // ==========================================================
 
   outfitPreview: {
     minHeight: 300,
@@ -925,9 +1145,14 @@ const styles = StyleSheet.create({
   },
 
   outfitPreviewDesktop: {
-    minHeight: 380,
+    minHeight: 390,
     margin: 25,
     borderRadius: 10,
+  },
+
+  outfitPreviewCompact: {
+    minHeight: 250,
+    padding: 8,
   },
 
   previewItem: {
@@ -941,6 +1166,12 @@ const styles = StyleSheet.create({
   previewItemLarge: {
     width: '44%',
     height: 180,
+  },
+
+  previewItemCompact: {
+    width: '45%',
+    height: 110,
+    margin: 3,
   },
 
   previewImage: {
@@ -966,7 +1197,12 @@ const styles = StyleSheet.create({
   previewEmptyDesktop: {
     margin: 25,
     borderRadius: 10,
-    minHeight: 380,
+    minHeight: 390,
+  },
+
+  previewEmptyCompact: {
+    minHeight: 250,
+    padding: 20,
   },
 
   previewEmptyText: {
@@ -977,20 +1213,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // ==========================================================
-  // INFO OUTFIT
-  // ==========================================================
-
   outfitInfo: {
     paddingHorizontal: 30,
     paddingVertical: 24,
   },
 
+  outfitInfoCompact: {
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+  },
+
   outfitName: {
     color: '#20203A',
     fontSize: 25,
+    lineHeight: 32,
     fontFamily: 'Poppins_600SemiBold',
     marginBottom: 8,
+  },
+
+  outfitNameCompact: {
+    fontSize: 21,
+    lineHeight: 28,
   },
 
   outfitDescription: {
@@ -1007,15 +1250,12 @@ const styles = StyleSheet.create({
   },
 
   dateText: {
+    flex: 1,
     marginLeft: 9,
     color: COLORS.textLight,
     fontSize: 14,
     fontFamily: 'Poppins_400Regular',
   },
-
-  // ==========================================================
-  // TARJETA DE PRENDAS
-  // ==========================================================
 
   itemsCard: {
     backgroundColor: '#FFFFFF',
@@ -1037,6 +1277,7 @@ const styles = StyleSheet.create({
 
   itemsCardDesktop: {
     flex: 1,
+    minWidth: 0,
     minHeight: 620,
   },
 
@@ -1048,9 +1289,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
+    minWidth: 0,
   },
 
   itemsHeaderText: {
+    flexShrink: 1,
     marginLeft: 10,
     color: COLORS.buttonDark,
     fontSize: 17,
@@ -1074,10 +1317,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
   },
 
-  // ==========================================================
-  // FILAS DE PRENDAS
-  // ==========================================================
-
   itemsList: {
     width: '100%',
   },
@@ -1091,6 +1330,11 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
 
+  clothingRowCompact: {
+    minHeight: 84,
+    paddingVertical: 7,
+  },
+
   clothingImageContainer: {
     width: 82,
     height: 78,
@@ -1102,6 +1346,12 @@ const styles = StyleSheet.create({
     marginRight: 14,
   },
 
+  clothingImageContainerCompact: {
+    width: 68,
+    height: 66,
+    marginRight: 10,
+  },
+
   clothingImage: {
     width: '90%',
     height: '90%',
@@ -1109,12 +1359,14 @@ const styles = StyleSheet.create({
 
   imagePlaceholder: {
     flex: 1,
+    width: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },
 
   clothingInfo: {
     flex: 1,
+    minWidth: 0,
     paddingRight: 8,
   },
 
@@ -1122,6 +1374,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 3,
+    minWidth: 0,
   },
 
   categoryIcon: {
@@ -1130,6 +1383,7 @@ const styles = StyleSheet.create({
   },
 
   categoryText: {
+    flexShrink: 1,
     color: COLORS.buttonDark,
     fontSize: 12,
     fontFamily: 'Poppins_600SemiBold',
@@ -1138,6 +1392,7 @@ const styles = StyleSheet.create({
   clothingTitle: {
     color: '#20203A',
     fontSize: 14,
+    lineHeight: 19,
     fontFamily: 'Poppins_600SemiBold',
     marginBottom: 4,
   },
@@ -1145,6 +1400,7 @@ const styles = StyleSheet.create({
   colorLine: {
     flexDirection: 'row',
     alignItems: 'center',
+    minWidth: 0,
   },
 
   colorDot: {
@@ -1157,15 +1413,11 @@ const styles = StyleSheet.create({
   },
 
   colorText: {
+    flex: 1,
     color: COLORS.textLight,
     fontSize: 11,
     fontFamily: 'Poppins_400Regular',
-    flexShrink: 1,
   },
-
-  // ==========================================================
-  // SIN PRENDAS
-  // ==========================================================
 
   noItemsContainer: {
     minHeight: 150,
@@ -1182,10 +1434,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
 
-  // ==========================================================
-  // BANNER
-  // ==========================================================
-
   infoBanner: {
     minHeight: 42,
     borderRadius: 8,
@@ -1201,15 +1449,31 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     color: COLORS.textLight,
     fontSize: 11,
+    lineHeight: 16,
     fontFamily: 'Poppins_400Regular',
   },
 
-  // ==========================================================
-  // BOTONES
-  // ==========================================================
+  useButton: {
+    minHeight: 50,
+    borderRadius: 10,
+    backgroundColor: COLORS.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 12,
+  },
+
+  useButtonText: {
+    marginLeft: 8,
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontFamily: 'Poppins_600SemiBold',
+  },
 
   returnButton: {
-    height: 52,
+    minHeight: 52,
     borderRadius: 9,
     borderWidth: 1,
     borderColor: '#DDD6E4',
@@ -1225,12 +1489,59 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
   },
 
-  // ==========================================================
-  // LOADING
-  // ==========================================================
+  successMessage: {
+    position: 'absolute',
+    top: 16,
+    left: 20,
+    right: 20,
+    zIndex: 1000,
+
+    minHeight: 52,
+    borderRadius: 12,
+
+    backgroundColor: '#BFE8D0',
+
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    paddingHorizontal: 18,
+
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+
+  successMessageDesktop: {
+    left: '50%',
+    right: undefined,
+    width: 420,
+    marginLeft: -210,
+  },
+
+  successMessageCompact: {
+    left: 10,
+    right: 10,
+    paddingHorizontal: 12,
+  },
+
+  successMessageText: {
+    flexShrink: 1,
+    marginLeft: 8,
+    color: '#2F6B4F',
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+    textAlign: 'center',
+  },
 
   loadingContainer: {
     flex: 1,
+    minHeight: 300,
     backgroundColor: '#FAF8FC',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1243,12 +1554,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_400Regular',
   },
 
-  // ==========================================================
-  // EMPTY
-  // ==========================================================
-
   emptyContainer: {
     flex: 1,
+    minHeight: 400,
     backgroundColor: '#FAF8FC',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1263,6 +1571,7 @@ const styles = StyleSheet.create({
   },
 
   emptyDescription: {
+    maxWidth: 500,
     color: COLORS.textLight,
     fontSize: 14,
     fontFamily: 'Poppins_400Regular',
@@ -1275,7 +1584,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.buttonDark,
     borderRadius: 9,
     paddingHorizontal: 35,
-    height: 48,
+    minHeight: 48,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1285,57 +1594,4 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Poppins_600SemiBold',
   },
-  useButton: {
-  minHeight: 50,
-  borderRadius: 10,
-  backgroundColor: COLORS.primary,
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'center',
-  paddingHorizontal: 20,
-  marginBottom: 12,
-},
-
-useButtonText: {
-  marginLeft: 8,
-  color: '#FFFFFF',
-  fontSize: 15,
-  fontFamily: 'Poppins_600SemiBold',
-},
-
-successMessage: {
-  position: 'absolute',
-  top: 16,
-  left: 20,
-  right: 20,
-  zIndex: 1000,
-
-  minHeight: 52,
-  borderRadius: 12,
-
-  backgroundColor: '#BFE8D0',
-
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'center',
-
-  paddingHorizontal: 18,
-
-  shadowColor: '#000000',
-  shadowOffset: {
-    width: 0,
-    height: 3,
-  },
-  shadowOpacity: 0.18,
-  shadowRadius: 6,
-  elevation: 6,
-},
-
-successMessageText: {
-  marginLeft: 8,
-  color: '#2F6B4F',
-  fontSize: 14,
-  fontFamily: 'Poppins_600SemiBold',
-  textAlign: 'center',
-},
 });

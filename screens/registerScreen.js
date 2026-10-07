@@ -17,6 +17,7 @@ import ResponsiveContainer from '../components/ResponsiveContainer';
 import AlertMessage from '../components/AlertMessage';
 import { MESSAGES } from '../theme/messages';
 import { registerUser } from '../services/database';
+import { setAuthToken } from '../services/api';
 
 
 // ============================================================
@@ -74,10 +75,16 @@ export default function RegisterScreen({ navigation }) {
   const isDesktop = width > 768;
 
 
-  // Helper para resetear la alerta al escribir en los campos
+  // ----------------------------------------------------------
+  // HELPER PARA RESETEAR LA ALERTA AL ESCRIBIR
+  // ----------------------------------------------------------
+
   const handleInputChange = (setter) => (value) => {
     setter(value);
-    if (alert.message) setAlert({ type: '', message: '' });
+
+    if (alert.message) {
+      setAlert({ type: '', message: '' });
+    }
   };
 
 
@@ -100,7 +107,9 @@ export default function RegisterScreen({ navigation }) {
     ) {
       setAlert({
         type: 'error',
-        message: MESSAGES.REQUIRED_FIELDS || 'Por favor completá todos los campos.',
+        message:
+          MESSAGES.REQUIRED_FIELDS ||
+          'Por favor completá todos los campos.',
       });
 
       return;
@@ -122,54 +131,101 @@ export default function RegisterScreen({ navigation }) {
 
 
     // --------------------------------------------------------
+    // VALIDACIÓN DEL CORREO
+    // --------------------------------------------------------
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(email.trim())) {
+      setAlert({
+        type: 'error',
+        message: 'Ingresá un correo electrónico válido.',
+      });
+
+      return;
+    }
+
+
+    // --------------------------------------------------------
+    // VALIDACIÓN DE LONGITUD DE CONTRASEÑA
+    // --------------------------------------------------------
+
+    if (password.length < 6) {
+      setAlert({
+        type: 'error',
+        message: 'La contraseña debe tener al menos 6 caracteres.',
+      });
+
+      return;
+    }
+
+
+    // --------------------------------------------------------
     // GUARDAR USUARIO Y REDIRIGIR A HOME
     // --------------------------------------------------------
 
     try {
 
-      // Guardamos y obtenemos los datos del nuevo usuario
-      const newUser = await registerUser(
+      // Se crea la cuenta. NO se inicia sesión automáticamente:
+      // todos los usuarios deben pasar por el Login.
+      await registerUser(
         name,
         lastname,
         email,
         password
       );
 
-
-      // ------------------------------------------------------
-      // REGISTRO EXITOSO: ALERTA Y REDIRECCIÓN A MAIN (HOME)
-      // ------------------------------------------------------
+      // En web registerUser guarda el token de sesión: se descarta
+      // para que el usuario tenga que iniciar sesión.
+      setAuthToken(null);
 
       setAlert({
         type: 'success',
-        message: '¡Cuenta creada correctamente!',
+        message: '¡Cuenta creada correctamente! Iniciá sesión para continuar.',
       });
 
       setTimeout(() => {
-        // Reiniciamos la pila de navegación hacia Main enviando los datos
+        // Pila limpia: Welcome -> Login
         navigation.reset({
-          index: 0,
+          index: 1,
           routes: [
-            {
-              name: 'Main',
-              params: {
-                user: newUser || { name, lastname, email },
-                isTempPassword: false,
-              },
-            },
+            { name: 'Welcome' },
+            { name: 'Login' },
           ],
         });
-      }, 1200);
+      }, 1500);
 
     } catch (error) {
 
-      // ------------------------------------------------------
-      // ERROR DURANTE EL REGISTRO
-      // ------------------------------------------------------
+      console.log('Error al registrar:', error);
+
+      const errStr = String(error?.message || error);
+
+      let errorMessage =
+        'No se pudo crear la cuenta. Intentá nuevamente.';
+
+
+      if (
+        errStr.includes('EMAIL_EXISTS') ||
+        errStr.toLowerCase().includes('duplicate')
+      ) {
+        errorMessage = MESSAGES.EMAIL_EXISTS;
+
+      } else if (
+        errStr.includes('ROOT_EMAIL_RESERVED')
+      ) {
+        errorMessage = 'Ese correo está reservado.';
+
+      } else if (
+        errStr.includes('Failed to fetch') ||
+        errStr.includes('Network request failed')
+      ) {
+        errorMessage = 'No se pudo conectar con el servidor.';
+      }
 
       setAlert({
         type: 'error',
-        message: MESSAGES.EMAIL_EXISTS || 'Esta cuenta ya existe.',
+        message: errorMessage,
       });
     }
   };
@@ -184,24 +240,33 @@ export default function RegisterScreen({ navigation }) {
 
       <View style={styles.container}>
 
-
         {/* ==================================================
             BARRA SUPERIOR
             Contiene el botón para volver a la pantalla anterior.
             ================================================== */}
 
-        <View style={[styles.topBar, isDesktop && styles.desktopTopBar]}>
+        <View
+          style={[
+            styles.topBar,
+            isDesktop && styles.desktopTopBar,
+          ]}
+        >
+
           <TouchableOpacity
             onPress={() => navigation?.goBack()}
             style={styles.backButton}
           >
+
             <Ionicons
               name="arrow-back"
               size={isDesktop ? 26 : 22}
               color="#FFFFFF"
             />
+
           </TouchableOpacity>
+
         </View>
+
 
         {/* ==================================================
             CONTENIDO DESPLAZABLE
@@ -210,8 +275,8 @@ export default function RegisterScreen({ navigation }) {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-
 
           {/* =================================================
               CONTENIDO PRINCIPAL
@@ -224,7 +289,6 @@ export default function RegisterScreen({ navigation }) {
             ]}
           >
 
-
             {/* ===============================================
                 COLUMNA DEL FORMULARIO
                 =============================================== */}
@@ -235,7 +299,6 @@ export default function RegisterScreen({ navigation }) {
                 isDesktop && styles.desktopLeftColumn,
               ]}
             >
-
 
               {/* =============================================
                   TÍTULO DEL REGISTRO
@@ -259,7 +322,10 @@ export default function RegisterScreen({ navigation }) {
                   CARTEL DE ALERTA DISEÑADO
                   ============================================= */}
 
-              <AlertMessage type={alert.type} message={alert.message} />
+              <AlertMessage
+                type={alert.type}
+                message={alert.message}
+              />
 
 
               {/* =============================================
@@ -445,7 +511,6 @@ export default function RegisterScreen({ navigation }) {
 
               </TouchableOpacity>
 
-
             </View>
 
 
@@ -466,7 +531,6 @@ export default function RegisterScreen({ navigation }) {
               </View>
 
             )}
-
 
           </View>
 
@@ -490,6 +554,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
+
   topBar: {
     backgroundColor: '#B185DB',
     height: 85,
@@ -497,9 +562,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
 
+
   desktopTopBar: {
     height: 60,
   },
+
 
   backButton: {
     width: 36,
@@ -509,10 +576,12 @@ const styles = StyleSheet.create({
     marginTop: 18,
   },
 
+
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
   },
+
 
   mainContent: {
     width: '100%',
@@ -521,6 +590,7 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     marginTop: -25,
   },
+
 
   desktopContent: {
     flexDirection: 'row',
@@ -531,13 +601,16 @@ const styles = StyleSheet.create({
     marginTop: 0,
   },
 
+
   leftColumn: {
     width: '100%',
   },
 
+
   desktopLeftColumn: {
     width: '45%',
   },
+
 
   title: {
     fontSize: 32,
@@ -547,6 +620,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
 
+
   subtitle: {
     fontSize: 15,
     fontFamily: 'Poppins_400Regular',
@@ -554,6 +628,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
   },
+
 
   inputContainer: {
     flexDirection: 'row',
@@ -567,9 +642,11 @@ const styles = StyleSheet.create({
     borderColor: '#EFEFEF',
   },
 
+
   inputIcon: {
     marginRight: 10,
   },
+
 
   input: {
     flex: 1,
@@ -577,6 +654,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_400Regular',
     color: '#333333',
   },
+
 
   submitButton: {
     backgroundColor: '#764dc6',
@@ -587,17 +665,20 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
 
+
   submitButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontFamily: 'Poppins_600SemiBold',
   },
 
+
   desktopRightColumn: {
     width: '50%',
     alignItems: 'center',
     justifyContent: 'center',
   },
+
 
   illustrationImage: {
     width: '100%',

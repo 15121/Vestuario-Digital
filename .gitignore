@@ -12,7 +12,7 @@ pubspec.lock
 doc/api/
 
 # dotenv environment variables file
-.env*
+
 
 # Avoid committing generated Javascript files:
 *.dart.js
@@ -68,3 +68,4 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+.vscode/

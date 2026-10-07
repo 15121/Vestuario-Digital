@@ -47,6 +47,7 @@ export default function AboutAppScreen({
     navigation.navigate('Main', {
       user,
       initialTab: tabName,
+      navTs: Date.now(),
     });
   };
 

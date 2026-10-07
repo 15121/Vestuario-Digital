@@ -1,4 +1,5 @@
 import React, {
+  useCallback,
   useEffect,
   useState,
 } from 'react';
@@ -11,7 +12,8 @@ import {
   SafeAreaView,
   useWindowDimensions,
   Alert,
-    Platform, 
+  Platform,
+  BackHandler,
 } from 'react-native';
 
 import {
@@ -19,11 +21,14 @@ import {
 } from '@react-navigation/bottom-tabs';
 
 import {
+  useFocusEffect,
+} from '@react-navigation/native';
+
+import {
   Ionicons,
   MaterialCommunityIcons,
 } from '@expo/vector-icons';
 
-import WeatherRecScreen from '../screens/weatherRecScreen';
 import HomeScreen from '../screens/homeScreen';
 import ClothingScreen from '../screens/clothingScreen';
 import MyOutfitsScreen from '../screens/myoufitsScreen';
@@ -33,6 +38,10 @@ import PackingModeScreen from '../screens/packingModeScreen';
 
 import AddMenuModal from '../components/AddMenuModal';
 import SideMenu from '../components/sideMenu';
+import ForceChangePasswordModal from '../components/ForceChangePasswordModal';
+import { confirmLogout, logout } from '../services/session';
+import { setUnauthorizedHandler } from '../services/api';
+import { getUserById } from '../services/database';
 
 import { COLORS } from '../theme/colours';
 
@@ -101,23 +110,23 @@ export function AppHeader({
         </Text>
 
 
-      {onOpenProfile ? (
-  <TouchableOpacity
-    style={styles.profileButton}
-    onPress={onOpenProfile}
-    activeOpacity={0.8}
-  >
-    <View style={styles.profileCircle}>
-      <Ionicons
-        name="person-outline"
-        size={21}
-        color={COLORS.buttonDark}
-      />
-    </View>
-  </TouchableOpacity>
-) : (
-  <View style={styles.profileButton} />
-)}
+        {onOpenProfile ? (
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={onOpenProfile}
+            activeOpacity={0.8}
+          >
+            <View style={styles.profileCircle}>
+              <Ionicons
+                name="person-outline"
+                size={21}
+                color={COLORS.buttonDark}
+              />
+            </View>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.profileButton} />
+        )}
 
       </View>
     </SafeAreaView>
@@ -325,6 +334,7 @@ export function MobileAddButton({
   );
 }
 
+
 // ============================================================
 // LAYOUT PARA PANTALLAS SECUNDARIAS
 // Crear Outfit / Detalle de Outfit
@@ -356,16 +366,14 @@ export function OutfitScreenLayout({
   // ==========================================================
 
   const goToMainTab = (tabName) => {
-  setSideMenuVisible(false);
+    setSideMenuVisible(false);
 
-  navigation.navigate(
-    'Main',
-    {
+    navigation.navigate('Main', {
       user,
       initialTab: tabName,
-    }
-  );
-};
+      navTs: Date.now(),
+    });
+  };
 
   // ==========================================================
   // MENÚ AGREGAR
@@ -464,26 +472,7 @@ export function OutfitScreenLayout({
 
   const handleLogout = () => {
     setSideMenuVisible(false);
-
-    const doLogout = () => {
-      navigation.replace('Login');
-    };
-
-    if (Platform.OS === 'web') {
-      if (window.confirm('¿Querés cerrar sesión?')) {
-        doLogout();
-      }
-      return;
-    }
-
-    Alert.alert(
-      'Cerrar sesión',
-      '¿Querés cerrar sesión?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Cerrar sesión', style: 'destructive', onPress: doLogout },
-      ]
-    );
+    confirmLogout(navigation);
   };
 
   // ==========================================================
@@ -491,6 +480,16 @@ export function OutfitScreenLayout({
   // ==========================================================
 
   const renderMobileMenu = () => {
+    // La pestaña activa viene de la prop activeTab (antes "Outfits"
+    // estaba fijo y se marcaba siempre, también en Perfil, Agregar prenda, etc.)
+    const tabColor = (tabName) =>
+      activeTab === tabName ? COLORS.primary : COLORS.textDark;
+
+    const tabLabelStyle = (tabName) => [
+      styles.secondaryMobileLabel,
+      activeTab === tabName && styles.secondaryMobileLabelActive,
+    ];
+
     return (
       <View style={styles.secondaryMobileBar}>
 
@@ -503,10 +502,10 @@ export function OutfitScreenLayout({
           <Ionicons
             name="home-outline"
             size={23}
-            color={COLORS.textDark}
+            color={tabColor('Inicio')}
           />
 
-          <Text style={styles.secondaryMobileLabel}>
+          <Text style={tabLabelStyle('Inicio')}>
             Inicio
           </Text>
         </TouchableOpacity>
@@ -521,10 +520,10 @@ export function OutfitScreenLayout({
           <Ionicons
             name="shirt-outline"
             size={23}
-            color={COLORS.textDark}
+            color={tabColor('Prendas')}
           />
 
-          <Text style={styles.secondaryMobileLabel}>
+          <Text style={tabLabelStyle('Prendas')}>
             Prendas
           </Text>
         </TouchableOpacity>
@@ -555,33 +554,28 @@ export function OutfitScreenLayout({
           <MaterialCommunityIcons
             name="hanger"
             size={24}
-            color={COLORS.primary}
+            color={tabColor('Outfits')}
           />
 
-          <Text
-            style={[
-              styles.secondaryMobileLabel,
-              styles.secondaryMobileLabelActive,
-            ]}
-          >
+          <Text style={tabLabelStyle('Outfits')}>
             Outfits
           </Text>
         </TouchableOpacity>
 
 
-{/* MALETA */}
-<TouchableOpacity
-  style={styles.secondaryMobileItem}
-  onPress={() => goToMainTab('Maleta')}
-  activeOpacity={0.75}
->
+        {/* MALETA */}
+        <TouchableOpacity
+          style={styles.secondaryMobileItem}
+          onPress={() => goToMainTab('Maleta')}
+          activeOpacity={0.75}
+        >
           <Ionicons
             name="briefcase-outline"
             size={23}
-            color={COLORS.textDark}
+            color={tabColor('Maleta')}
           />
 
-          <Text style={styles.secondaryMobileLabel}>
+          <Text style={tabLabelStyle('Maleta')}>
             Maleta
           </Text>
         </TouchableOpacity>
@@ -589,7 +583,7 @@ export function OutfitScreenLayout({
       </View>
     );
   };
-    
+
   // ==========================================================
   // DESKTOP
   // ==========================================================
@@ -698,9 +692,54 @@ export function OutfitScreenLayout({
     </View>
   );
 }
+
+
 // ============================================================
 // MAIN TAB NAVIGATOR
 // ============================================================
+
+// ============================================================
+// USUARIO ACTUAL (se mantiene fresco)
+//
+// Los params de la ruta "Main" quedan con el usuario del login.
+// Al editar el perfil, Main seguía mostrando el nombre/email viejos
+// (Home: "¡Hola, NombreViejo!", menú lateral, etc.).
+//
+// Solución: Main guarda su propia copia del usuario y la actualiza
+// cada vez que la pantalla vuelve a tener foco (por ejemplo al volver
+// de Perfil / Editar perfil), consultando getUserById.
+//
+// mergeUser devuelve el MISMO objeto si no cambió nada, para no
+// disparar efectos que dependen de `user` (ej. clima en Home).
+// ============================================================
+
+const USER_COMPARE_FIELDS = [
+  'id',
+  'name',
+  'lastname',
+  'email',
+  'role',
+  'status',
+];
+
+const mergeUser = (previous, next) => {
+  if (!next) {
+    return previous;
+  }
+
+  if (!previous || previous.id !== next.id) {
+    return next;
+  }
+
+  const merged = { ...previous, ...next };
+
+  const unchanged = USER_COMPARE_FIELDS.every(
+    (field) => previous[field] === merged[field]
+  );
+
+  return unchanged ? previous : merged;
+};
+
 
 export default function MainTabNavigator({
   user: userProp,
@@ -726,10 +765,78 @@ export default function MainTabNavigator({
   // la sesión cuando cambia la forma en que se monta
   // este navegador.
   //
-  const user =
+
+  const baseUser =
     userProp ||
     route?.params?.user ||
     null;
+
+  const [
+    user,
+    setCurrentUser,
+  ] = useState(baseUser);
+
+  // Si llegan params nuevos (otro login, setParams, etc.)
+  useEffect(() => {
+    if (baseUser) {
+      setCurrentUser((previous) =>
+        mergeUser(previous, baseUser)
+      );
+    }
+  }, [
+    baseUser?.id,
+    baseUser?.name,
+    baseUser?.lastname,
+    baseUser?.email,
+  ]);
+
+  // Al volver a esta pantalla (ej. después de editar el perfil),
+  // se vuelve a leer el usuario.
+  useFocusEffect(
+    useCallback(() => {
+      const userId = user?.id;
+
+      if (!userId) {
+        return undefined;
+      }
+
+      let active = true;
+
+      (async () => {
+        try {
+          const fresh = await getUserById(userId);
+
+          if (active && fresh) {
+            setCurrentUser((previous) =>
+              mergeUser(previous, fresh)
+            );
+          }
+        } catch (error) {
+          // Si falló (red, sesión vencida) se conserva el usuario actual.
+          // La sesión vencida la maneja el handler global de abajo.
+        }
+      })();
+
+      return () => {
+        active = false;
+      };
+    }, [user?.id])
+  );
+
+  // Sesión vencida (401 del servidor estando logueado):
+  // volver al login y avisar, en vez de mostrar "no tenés prendas".
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      logout(navigation);
+
+      Alert.alert(
+        'Sesión vencida',
+        'Tu sesión expiró. Iniciá sesión nuevamente.'
+      );
+    });
+
+    return () => setUnauthorizedHandler(null);
+  }, [navigation]);
 
 
   const {
@@ -744,34 +851,55 @@ export default function MainTabNavigator({
   // ESTADO DESKTOP
   // ==========================================================
 
-const [
-  activeDesktopTab,
-  setActiveDesktopTab,
-] = useState(
-  route?.params?.initialTab || 'Inicio'
-);
-useEffect(() => {
-  if (route?.params?.initialTab) {
-    setActiveDesktopTab(
-      route.params.initialTab
-    );
-  }
-}, [
-  route?.params?.initialTab,
-]);
+  const [
+    activeDesktopTab,
+    setActiveDesktopTab,
+  ] = useState(
+    route?.params?.initialTab || 'Inicio'
+  );
 
-const [
-  showSuitcases,
-  setShowSuitcases,
-] = useState(false);
-const [
-  editingSuitcaseId,
-  setEditingSuitcaseId,
-] = useState(null);
-const [
-  mobileInitialTab,
-  setMobileInitialTab,
-] = useState('Inicio');
+  const [
+    showSuitcases,
+    setShowSuitcases,
+  ] = useState(false);
+
+  const [
+    editingSuitcaseId,
+    setEditingSuitcaseId,
+  ] = useState(null);
+
+  const [
+    mobileInitialTab,
+    setMobileInitialTab,
+  ] = useState('Inicio');
+
+  const [
+    mustChangePassword,
+    setMustChangePassword,
+  ] = useState(!!route?.params?.isTempPassword);
+
+  const [
+    tabNavKey,
+    setTabNavKey,
+  ] = useState(0);
+
+
+  // Cambio de pestaña pedido desde otra pantalla (Perfil, Ayuda, Clima, etc.)
+  useEffect(() => {
+    const tab = route?.params?.initialTab;
+
+    if (!tab) return;
+
+    setActiveDesktopTab(tab);
+    setMobileInitialTab(tab);
+    setShowSuitcases(false);
+    setTabNavKey((k) => k + 1);
+  }, [
+    route?.params?.initialTab,
+    route?.params?.navTs,
+  ]);
+
+
   // ==========================================================
   // ESTADO MENÚ AGREGAR
   // ==========================================================
@@ -797,26 +925,30 @@ const [
   // ==========================================================
 
   const handleDesktopTabChange = (
-  tabName
-) => {
-  if (tabName === 'Maleta') {
-    setEditingSuitcaseId(null);
-  }
-
-  setActiveDesktopTab(
     tabName
-  );
-};
-const handleEditSuitcase = (suitcaseId) => {
-  if (!suitcaseId) {
-    return;
-  }
+  ) => {
+    if (tabName === 'Maleta') {
+      setEditingSuitcaseId(null);
+    }
 
-  setEditingSuitcaseId(suitcaseId);
-  setShowSuitcases(false);
-  setActiveDesktopTab('Maleta');
-  setMobileInitialTab('Maleta');
-};
+    setActiveDesktopTab(
+      tabName
+    );
+  };
+
+
+  const handleEditSuitcase = (
+    suitcaseId
+  ) => {
+    if (!suitcaseId) {
+      return;
+    }
+
+    setEditingSuitcaseId(suitcaseId);
+    setShowSuitcases(false);
+    setActiveDesktopTab('Maleta');
+    setMobileInitialTab('Maleta');
+  };
 
 
   // ==========================================================
@@ -916,114 +1048,287 @@ const handleEditSuitcase = (suitcaseId) => {
 
 
   // ==========================================================
-// ACERCA DE
-// ==========================================================
+  // ACERCA DE
+  // ==========================================================
 
-const handleAbout = () => {
-  setSideMenuVisible(false);
+  const handleAbout = () => {
+    setSideMenuVisible(false);
 
-  if (
-    navigation?.navigate
-  ) {
-    navigation.navigate(
-      'AboutApp',
-      {
-        user,
-      }
-    );
-  }
-};
+    if (
+      navigation?.navigate
+    ) {
+      navigation.navigate(
+        'AboutApp',
+        {
+          user,
+        }
+      );
+    }
+  };
 
 
-// ==========================================================
-// AYUDA
-// ==========================================================
+  // ==========================================================
+  // AYUDA
+  // ==========================================================
 
-const handleHelp = () => {
-  setSideMenuVisible(false);
+  const handleHelp = () => {
+    setSideMenuVisible(false);
 
-  if (
-    navigation?.navigate
-  ) {
-    navigation.navigate(
-      'Help',
-      {
-        user,
-      }
-    );
-  }
-};
+    if (
+      navigation?.navigate
+    ) {
+      navigation.navigate(
+        'Help',
+        {
+          user,
+        }
+      );
+    }
+  };
+
+
   // ==========================================================
   // CERRAR SESIÓN
   // ==========================================================
+
   const handleLogout = () => {
     setSideMenuVisible(false);
-
-    const doLogout = () => {
-      if (navigation?.replace) {
-        navigation.replace('Login');
-      }
-    };
-
-    if (Platform.OS === 'web') {
-      if (window.confirm('¿Querés cerrar sesión?')) {
-        doLogout();
-      }
-      return;
-    }
-
-    Alert.alert(
-      'Cerrar sesión',
-      '¿Querés cerrar sesión?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Cerrar sesión', style: 'destructive', onPress: doLogout },
-      ]
-    );
+    confirmLogout(navigation);
   };
 
-// ==========================================================
-// PANTALLA MIS MALETAS
-// ==========================================================
 
-if (showSuitcases) {
-  if (isDesktop) {
-    return (
-      <View style={styles.desktopRoot}>
+  // ==========================================================
+  // BOTÓN ATRÁS DE ANDROID EN "MIS MALETAS"
+  // ==========================================================
 
-        <AppHeader
-          title="Mis maletas"
-          onBack={() => setShowSuitcases(false)}
-        />
+  useEffect(() => {
+    if (
+      !showSuitcases ||
+      Platform.OS !== 'android'
+    ) {
+      return undefined;
+    }
 
-        <View style={styles.desktopMain}>
+    const subscription =
+      BackHandler.addEventListener(
+        'hardwareBackPress',
+        () => {
+          setMobileInitialTab('Inicio');
+          setShowSuitcases(false);
+          return true;
+        }
+      );
 
-          <DesktopSidebar
-            activeTab="Inicio"
-            onChangeTab={(tabName) => {
+    return () =>
+      subscription.remove();
+  }, [showSuitcases]);
+
+
+  // ==========================================================
+  // PANTALLA MIS MALETAS
+  // ==========================================================
+
+  if (showSuitcases) {
+    if (isDesktop) {
+      return (
+        <View style={styles.desktopRoot}>
+
+          <AppHeader
+            title="Mis maletas"
+            onBack={() => {
+              setMobileInitialTab('Inicio');
               setShowSuitcases(false);
-              handleDesktopTabChange(tabName);
             }}
-            onOpenAddMenu={handleOpenAddMenu}
           />
 
-          <View style={styles.desktopContent}>
 
-            <SuitcasesScreen
-              navigation={navigation}
-              route={{
-                params: {
-                  user,
-                },
+          <View style={styles.desktopMain}>
+
+            <DesktopSidebar
+              activeTab="Inicio"
+              onChangeTab={(tabName) => {
+                setShowSuitcases(false);
+                handleDesktopTabChange(tabName);
               }}
-              user={user}
-              embedded
-                onEditSuitcase={handleEditSuitcase}
+              onOpenAddMenu={handleOpenAddMenu}
             />
+
+
+            <View style={styles.desktopContent}>
+
+              <SuitcasesScreen
+                navigation={navigation}
+                route={{
+                  params: {
+                    user,
+                  },
+                }}
+                user={user}
+                embedded
+                onEditSuitcase={handleEditSuitcase}
+              />
+
+            </View>
 
           </View>
 
+
+          <AddMenuModal
+            visible={addMenuVisible}
+            onClose={handleCloseAddMenu}
+            onAddPrenda={handleAddClothing}
+            onAddOutfit={handleCreateOutfit}
+          />
+
+
+          <SideMenu
+            visible={sideMenuVisible}
+            onClose={handleCloseSideMenu}
+            onProfile={handleProfile}
+            onAbout={handleAbout}
+            onHelp={handleHelp}
+            onLogout={handleLogout}
+            user={user}
+          />
+
         </View>
+      );
+    }
+
+
+    return (
+      <View style={styles.secondaryScreenRoot}>
+
+        <AppHeader
+          title="Mis maletas"
+          onBack={() => {
+            setMobileInitialTab('Inicio');
+            setShowSuitcases(false);
+          }}
+        />
+
+
+        <View style={styles.secondaryMobileContent}>
+
+          <SuitcasesScreen
+            navigation={navigation}
+            route={{
+              params: {
+                user,
+              },
+            }}
+            user={user}
+            embedded
+            onEditSuitcase={handleEditSuitcase}
+          />
+
+        </View>
+
+
+        <View style={styles.secondaryMobileBar}>
+
+          <TouchableOpacity
+            style={styles.secondaryMobileItem}
+            onPress={() => {
+              setMobileInitialTab('Inicio');
+              setShowSuitcases(false);
+            }}
+            activeOpacity={0.75}
+          >
+            <Ionicons
+              name="home-outline"
+              size={23}
+              color={COLORS.textDark}
+            />
+
+            <Text style={styles.secondaryMobileLabel}>
+              Inicio
+            </Text>
+          </TouchableOpacity>
+
+
+          <TouchableOpacity
+            style={styles.secondaryMobileItem}
+            onPress={() => {
+              setMobileInitialTab('Prendas');
+              setShowSuitcases(false);
+            }}
+            activeOpacity={0.75}
+          >
+            <Ionicons
+              name="shirt-outline"
+              size={23}
+              color={COLORS.textDark}
+            />
+
+            <Text style={styles.secondaryMobileLabel}>
+              Prendas
+            </Text>
+          </TouchableOpacity>
+
+
+          <TouchableOpacity
+            style={styles.secondaryMobileAddContainer}
+            onPress={handleOpenAddMenu}
+            activeOpacity={0.85}
+          >
+            <View style={styles.secondaryMobileAddButton}>
+              <Ionicons
+                name="add"
+                size={31}
+                color="#FFFFFF"
+              />
+            </View>
+          </TouchableOpacity>
+
+
+          <TouchableOpacity
+            style={styles.secondaryMobileItem}
+            onPress={() => {
+              setMobileInitialTab('Outfits');
+              setShowSuitcases(false);
+            }}
+            activeOpacity={0.75}
+          >
+            <MaterialCommunityIcons
+              name="hanger"
+              size={24}
+              color={COLORS.textDark}
+            />
+
+            <Text style={styles.secondaryMobileLabel}>
+              Outfits
+            </Text>
+          </TouchableOpacity>
+
+
+          <TouchableOpacity
+            style={styles.secondaryMobileItem}
+            onPress={() => {
+              setEditingSuitcaseId(null);
+              setMobileInitialTab('Maleta');
+              setShowSuitcases(false);
+            }}
+            activeOpacity={0.75}
+          >
+            <Ionicons
+              name="briefcase-outline"
+              size={23}
+              color={COLORS.primary}
+            />
+
+            <Text
+              style={[
+                styles.secondaryMobileLabel,
+                styles.secondaryMobileLabelActive,
+              ]}
+            >
+              Maleta
+            </Text>
+          </TouchableOpacity>
+
+        </View>
+
 
         <AddMenuModal
           visible={addMenuVisible}
@@ -1031,6 +1336,7 @@ if (showSuitcases) {
           onAddPrenda={handleAddClothing}
           onAddOutfit={handleCreateOutfit}
         />
+
 
         <SideMenu
           visible={sideMenuVisible}
@@ -1046,142 +1352,7 @@ if (showSuitcases) {
     );
   }
 
-  return (
-    <View style={styles.secondaryScreenRoot}>
 
-      <AppHeader
-        title="Mis maletas"
-        onBack={() => setShowSuitcases(false)}
-      />
-
-      <View style={styles.secondaryMobileContent}>
-
-        <SuitcasesScreen
-          navigation={navigation}
-          route={{
-            params: {
-              user,
-            },
-          }}
-          user={user}
-          embedded
-            onEditSuitcase={handleEditSuitcase}
-        />
-
-      </View>
-
-      <View style={styles.secondaryMobileBar}>
-
-        <TouchableOpacity
-          style={styles.secondaryMobileItem}
-          onPress={() => {
-            setShowSuitcases(false);
-          }}
-          activeOpacity={0.75}
-        >
-          <Ionicons
-            name="home-outline"
-            size={23}
-            color={COLORS.textDark}
-          />
-
-          <Text style={styles.secondaryMobileLabel}>
-            Inicio
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.secondaryMobileItem}
-          onPress={() => {
-            setShowSuitcases(false);
-          }}
-          activeOpacity={0.75}
-        >
-          <Ionicons
-            name="shirt-outline"
-            size={23}
-            color={COLORS.textDark}
-          />
-
-          <Text style={styles.secondaryMobileLabel}>
-            Prendas
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.secondaryMobileAddContainer}
-          onPress={handleOpenAddMenu}
-          activeOpacity={0.85}
-        >
-          <View style={styles.secondaryMobileAddButton}>
-            <Ionicons
-              name="add"
-              size={31}
-              color="#FFFFFF"
-            />
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.secondaryMobileItem}
-          onPress={() => {
-            setShowSuitcases(false);
-          }}
-          activeOpacity={0.75}
-        >
-          <MaterialCommunityIcons
-            name="hanger"
-            size={24}
-            color={COLORS.textDark}
-          />
-
-          <Text style={styles.secondaryMobileLabel}>
-            Outfits
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.secondaryMobileItem}
-          activeOpacity={0.75}
-        >
-          <Ionicons
-            name="briefcase-outline"
-            size={23}
-            color={COLORS.primary}
-          />
-
-          <Text
-            style={[
-              styles.secondaryMobileLabel,
-              styles.secondaryMobileLabelActive,
-            ]}
-          >
-            Maleta
-          </Text>
-        </TouchableOpacity>
-
-      </View>
-
-      <AddMenuModal
-        visible={addMenuVisible}
-        onClose={handleCloseAddMenu}
-        onAddPrenda={handleAddClothing}
-        onAddOutfit={handleCreateOutfit}
-      />
-
-      <SideMenu
-        visible={sideMenuVisible}
-        onClose={handleCloseSideMenu}
-        onProfile={handleProfile}
-        onAbout={handleAbout}
-        onHelp={handleHelp}
-        onLogout={handleLogout}
-        user={user}
-      />
-
-    </View>
-  );
-}
   // ==========================================================
   // SCREEN DESKTOP ACTIVA
   // ==========================================================
@@ -1239,6 +1410,15 @@ if (showSuitcases) {
         style={styles.desktopRoot}
       >
 
+        <ForceChangePasswordModal
+          visible={mustChangePassword}
+          user={user}
+          onDone={() =>
+            setMustChangePassword(false)
+          }
+        />
+
+
         {/* HEADER */}
         <AppHeader
           title={activeTitle}
@@ -1253,20 +1433,23 @@ if (showSuitcases) {
 
         {/* CUERPO */}
         <View
-          style={styles.desktopMain}
+          style={
+            styles.desktopMain
+          }
         >
 
           {/* SIDEBAR */}
           <DesktopSidebar
-  activeTab={activeDesktopTab}
-  onChangeTab={(tabName) => {
-    if (tabName === 'Maleta') {
-      setEditingSuitcaseId(null);
-    }
-    handleDesktopTabChange(tabName);
-  }}
-  onOpenAddMenu={handleOpenAddMenu}
-/>
+            activeTab={activeDesktopTab}
+            onChangeTab={(tabName) => {
+              if (tabName === 'Maleta') {
+                setEditingSuitcaseId(null);
+              }
+
+              handleDesktopTabChange(tabName);
+            }}
+            onOpenAddMenu={handleOpenAddMenu}
+          />
 
 
           {/* CONTENIDO */}
@@ -1275,39 +1458,46 @@ if (showSuitcases) {
               styles.desktopContent
             }
           >
-   <ActiveScreen
-  navigation={
-    navigation
-  }
-route={{
-  params: {
-    user,
-    suitcaseId: editingSuitcaseId,
-  },
-}}
-  user={user}
-  onNavigateToClothing={() =>
-    handleDesktopTabChange('Prendas')
-  }
-  onNavigateToOutfits={() =>
-    handleDesktopTabChange('Outfits')
-  }
-  onNavigateToSuitcases={() =>
-  setShowSuitcases(true)
-}
-/>
+
+            <ActiveScreen
+              navigation={
+                navigation
+              }
+              route={{
+                params: {
+                  user,
+                  suitcaseId: editingSuitcaseId,
+                },
+              }}
+              user={user}
+              onNavigateToClothing={() =>
+                handleDesktopTabChange('Prendas')
+              }
+              onNavigateToOutfits={() =>
+                handleDesktopTabChange('Outfits')
+              }
+              onNavigateToSuitcases={() =>
+                setShowSuitcases(true)
+              }
+              onExitEdit={() => {
+                setEditingSuitcaseId(null);
+                setMobileInitialTab('Inicio');
+              }}
+            />
+
           </View>
 
         </View>
 
 
         {/* MENÚ AGREGAR */}
-      <AddMenuModal
-  visible={addMenuVisible}
-  onClose={handleCloseAddMenu}
-  onAddPrenda={handleAddClothing}
-  onAddOutfit={handleCreateOutfit}
-/>
+        <AddMenuModal
+          visible={addMenuVisible}
+          onClose={handleCloseAddMenu}
+          onAddPrenda={handleAddClothing}
+          onAddOutfit={handleCreateOutfit}
+        />
+
 
         {/* SIDE MENU */}
         <SideMenu
@@ -1343,26 +1533,36 @@ route={{
 
   return (
     <>
+      <ForceChangePasswordModal
+        visible={mustChangePassword}
+        user={user}
+        onDone={() =>
+          setMustChangePassword(false)
+        }
+      />
+
+
       <Tab.Navigator
-       initialRouteName={mobileInitialTab}
+        key={tabNavKey}
+        initialRouteName={mobileInitialTab}
         screenOptions={{
           headerShown: true,
 
-         header: ({ route }) => (
-  <AppHeader
-    title={
-      TAB_HEADER_TITLES[route?.name] ||
-      route?.name ||
-      'Inicio'
-    }
-    onOpenMenu={
-      handleOpenSideMenu
-    }
-    onOpenProfile={
-      handleProfile
-    }
-  />
-),
+          header: ({ route }) => (
+            <AppHeader
+              title={
+                TAB_HEADER_TITLES[route?.name] ||
+                route?.name ||
+                'Inicio'
+              }
+              onOpenMenu={
+                handleOpenSideMenu
+              }
+              onOpenProfile={
+                handleProfile
+              }
+            />
+          ),
 
           tabBarShowLabel: true,
 
@@ -1384,42 +1584,42 @@ route={{
             INICIO
             ==================================================== */}
 
-<Tab.Screen
-  name="Inicio"
-  options={{
-    tabBarIcon: ({
-      color,
-      size,
-    }) => (
-      <Ionicons
-        name="home-outline"
-        size={size}
-        color={color}
-      />
-    ),
-  }}
->
-  {({ navigation: tabNavigation }) => (
-    <HomeScreen
-      navigation={navigation}
-      route={{
-        params: {
-          user,
-        },
-      }}
-      user={user}
-      onNavigateToClothing={() =>
-        tabNavigation.navigate('Prendas')
-      }
-      onNavigateToOutfits={() =>
-        tabNavigation.navigate('Outfits')
-      }
-      onNavigateToSuitcases={() =>
-        setShowSuitcases(true)
-      }
-    />
-  )}
-</Tab.Screen>
+        <Tab.Screen
+          name="Inicio"
+          options={{
+            tabBarIcon: ({
+              color,
+              size,
+            }) => (
+              <Ionicons
+                name="home-outline"
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        >
+          {({ navigation: tabNavigation }) => (
+            <HomeScreen
+              navigation={navigation}
+              route={{
+                params: {
+                  user,
+                },
+              }}
+              user={user}
+              onNavigateToClothing={() =>
+                tabNavigation.navigate('Prendas')
+              }
+              onNavigateToOutfits={() =>
+                tabNavigation.navigate('Outfits')
+              }
+              onNavigateToSuitcases={() =>
+                setShowSuitcases(true)
+              }
+            />
+          )}
+        </Tab.Screen>
 
 
         {/* ====================================================
@@ -1520,10 +1720,10 @@ route={{
         <Tab.Screen
           name="Maleta"
           listeners={{
-  tabPress: () => {
-    setEditingSuitcaseId(null);
-  },
-}}
+            tabPress: () => {
+              setEditingSuitcaseId(null);
+            },
+          }}
           options={{
             tabBarIcon: ({
               color,
@@ -1538,16 +1738,20 @@ route={{
           }}
         >
           {() => (
-         <PackingModeScreen
-  navigation={navigation}
-  route={{
-    params: {
-      user,
-      suitcaseId: editingSuitcaseId,
-    },
-  }}
-  user={user}
-/>
+            <PackingModeScreen
+              navigation={navigation}
+              route={{
+                params: {
+                  user,
+                  suitcaseId: editingSuitcaseId,
+                },
+              }}
+              user={user}
+              onExitEdit={() => {
+                setEditingSuitcaseId(null);
+                setMobileInitialTab('Inicio');
+              }}
+            />
           )}
         </Tab.Screen>
 
@@ -1558,13 +1762,12 @@ route={{
           MENÚ AGREGAR
           ====================================================== */}
 
-      
- <AddMenuModal
-  visible={addMenuVisible}
-  onClose={handleCloseAddMenu}
-  onAddPrenda={handleAddClothing}
-  onAddOutfit={handleCreateOutfit}
-/>
+      <AddMenuModal
+        visible={addMenuVisible}
+        onClose={handleCloseAddMenu}
+        onAddPrenda={handleAddClothing}
+        onAddOutfit={handleCreateOutfit}
+      />
 
 
       {/* ======================================================
@@ -1665,6 +1868,8 @@ const styles = StyleSheet.create({
     marginTop: -18,
     elevation: 5,
   },
+
+
   // ==========================================================
   // HEADER
   // ==========================================================

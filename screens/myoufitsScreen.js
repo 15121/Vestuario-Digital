@@ -132,7 +132,6 @@ function OutfitCard({
   outfit,
   clothesById,
   onPress,
-  onOptions,
 }) {
   // Obtenemos las prendas pertenecientes al outfit.
   const clothingIds = getOutfitClothingIds(outfit.items);
@@ -219,26 +218,6 @@ function OutfitCard({
           >
             {outfit.name || 'Outfit sin nombre'}
           </Text>
-
-
-          {/* Menú de opciones */}
-
-          <TouchableOpacity
-            style={styles.optionsButton}
-            onPress={(event) => {
-              event?.stopPropagation?.();
-              onOptions?.(outfit);
-            }}
-            hitSlop={10}
-          >
-
-            <Ionicons
-              name="ellipsis-vertical"
-              size={20}
-              color="#5F5668"
-            />
-
-          </TouchableOpacity>
 
         </View>
 
@@ -585,20 +564,6 @@ export default function MyOutfitsScreen({
 
 
   // ==========================================================
-  // OPCIONES DEL OUTFIT
-  // ==========================================================
-
-  const handleOptions = (outfit) => {
-
-    Alert.alert(
-      outfit.name || 'Outfit',
-      'Seleccioná el outfit para ver sus detalles.'
-    );
-
-  };
-
-
-  // ==========================================================
   // ACTUALIZAR
   // ==========================================================
 
@@ -871,7 +836,6 @@ export default function MyOutfitsScreen({
                 onPress={() =>
                   handleOpenOutfit(item)
                 }
-                onOptions={handleOptions}
               />
 
             )}
@@ -1007,7 +971,6 @@ export default function MyOutfitsScreen({
           outfit={outfit}
           clothesById={clothesById}
           onPress={() => handleOpenOutfit(outfit)}
-          onOptions={() => {}}
         />
 
         <View style={styles.historyUsedBadge}>
@@ -1425,11 +1388,6 @@ outfitList: {
     color: '#302738',
     fontSize: 15,
     fontFamily: 'Poppins_600SemiBold',
-  },
-
-
-  optionsButton: {
-    paddingLeft: 8,
   },
 
 

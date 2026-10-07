@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-
+import { AppDialogHost, appAlert } from './components/AppDialog';
 import {
   useFonts,
   Poppins_400Regular,
@@ -50,7 +50,7 @@ import EditProfileScreen from './screens/editProfileScreen';
 // Menú hamburguesa
 import AboutAppScreen from './screens/aboutAppScreen';
 import HelpScreen from './screens/helpScreen';
-
+Alert.alert = appAlert;
 const Stack = createNativeStackNavigator();
 
 export default function App() {
@@ -73,7 +73,7 @@ export default function App() {
 
   return (
     <>
-      {Platform.OS === 'web' && (
+            {Platform.OS === 'web' && (
         <style type="text/css">{`
           html, body, #root {
             height: 100%;
@@ -82,6 +82,39 @@ export default function App() {
             display: flex;
             flex-direction: column;
             background-color: #F8F5FF;
+          }
+
+          #root > div {
+            min-height: 0;
+          }
+
+          /* Barra de scroll visible y arrastrable.
+             Solo se aplica en dispositivos con mouse (PC), así que
+             en celulares/tablets no cambia nada. */
+          @media (hover: hover) and (pointer: fine) {
+            * {
+              scrollbar-width: auto !important;
+              scrollbar-color: #B87EEE #F3E8FF;
+            }
+
+            *::-webkit-scrollbar {
+              display: block !important;
+              width: 10px;
+              height: 10px;
+            }
+
+            *::-webkit-scrollbar-track {
+              background: #F3E8FF;
+            }
+
+            *::-webkit-scrollbar-thumb {
+              background: #B87EEE;
+              border-radius: 8px;
+            }
+
+            *::-webkit-scrollbar-thumb:hover {
+              background: #764DC6;
+            }
           }
         `}</style>
       )}
@@ -233,6 +266,7 @@ export default function App() {
           />
         </Stack.Navigator>
       </NavigationContainer>
+      <AppDialogHost />
     </>
   );
 }

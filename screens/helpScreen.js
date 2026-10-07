@@ -69,11 +69,9 @@ function HelpCard({
       onPress={onPress}
       style={[
         styles.helpCard,
-        expanded &&
-          styles.helpCardExpanded,
+        expanded && styles.helpCardExpanded,
       ]}
     >
-
       <View style={styles.helpIconContainer}>
         <MaterialCommunityIcons
           name={item.icon}
@@ -83,7 +81,6 @@ function HelpCard({
       </View>
 
       <View style={styles.helpContent}>
-
         <Text style={styles.helpTitle}>
           {item.title}
         </Text>
@@ -93,7 +90,6 @@ function HelpCard({
             {item.description}
           </Text>
         )}
-
       </View>
 
       <View style={styles.arrowContainer}>
@@ -107,7 +103,6 @@ function HelpCard({
           color={COLORS.buttonDark}
         />
       </View>
-
     </TouchableOpacity>
   );
 }
@@ -119,7 +114,6 @@ function HelpCard({
 function AdviceCard() {
   return (
     <View style={styles.adviceCard}>
-
       <View style={styles.adviceIconContainer}>
         <MaterialCommunityIcons
           name="lightbulb-on-outline"
@@ -129,7 +123,6 @@ function AdviceCard() {
       </View>
 
       <View style={styles.adviceContent}>
-
         <Text style={styles.adviceTitle}>
           Consejo
         </Text>
@@ -139,10 +132,51 @@ function AdviceCard() {
           recomendaciones más precisas y organizar mejor los
           outfits y las maletas.
         </Text>
-
       </View>
-
     </View>
+  );
+}
+
+// ============================================================
+// CONTENIDO DE AYUDA
+// ============================================================
+// IMPORTANTE:
+// Este componente está fuera de HelpScreen para evitar que sea
+// recreado cada vez que cambia expandedId.
+// ============================================================
+
+function HelpContent({
+  expandedId,
+  toggleItem,
+  isDesktop,
+}) {
+  return (
+    <ScrollView
+      style={styles.scrollView}
+      contentContainerStyle={[
+        styles.scrollContent,
+        isDesktop && styles.scrollContentDesktop,
+      ]}
+      showsVerticalScrollIndicator={false}
+    >
+      <View
+        style={[
+          styles.cardsContainer,
+          isDesktop && styles.cardsContainerDesktop,
+        ]}
+      >
+        {HELP_ITEMS.map((item) => (
+          <HelpCard
+            key={item.id}
+            item={item}
+            expanded={expandedId === item.id}
+            onPress={() => toggleItem(item.id)}
+          />
+        ))}
+
+        <AdviceCard />
+      </View>
+    </ScrollView>
   );
 }
 
@@ -154,11 +188,9 @@ export default function HelpScreen({
   navigation,
   route,
 }) {
-  const { width } =
-    useWindowDimensions();
+  const { width } = useWindowDimensions();
 
-  const isDesktop =
-    width > 768;
+  const isDesktop = width > 768;
 
   const user =
     route?.params?.user || null;
@@ -186,6 +218,7 @@ export default function HelpScreen({
     navigation.navigate('Main', {
       user,
       initialTab: tabName,
+      navTs: Date.now(),
     });
   };
 
@@ -358,49 +391,6 @@ export default function HelpScreen({
   );
 
   // ==========================================================
-  // CONTENIDO
-  // ==========================================================
-
-  const HelpContent = () => (
-    <ScrollView
-      style={styles.scrollView}
-      contentContainerStyle={[
-        styles.scrollContent,
-        isDesktop &&
-          styles.scrollContentDesktop,
-      ]}
-      showsVerticalScrollIndicator={false}
-    >
-
-      <View
-        style={[
-          styles.cardsContainer,
-          isDesktop &&
-            styles.cardsContainerDesktop,
-        ]}
-      >
-
-        {HELP_ITEMS.map((item) => (
-          <HelpCard
-            key={item.id}
-            item={item}
-            expanded={
-              expandedId === item.id
-            }
-            onPress={() =>
-              toggleItem(item.id)
-            }
-          />
-        ))}
-
-        <AdviceCard />
-
-      </View>
-
-    </ScrollView>
-  );
-
-  // ==========================================================
   // MENÚ INFERIOR MOBILE
   // ==========================================================
 
@@ -487,29 +477,34 @@ export default function HelpScreen({
   // DESKTOP
   // ==========================================================
 
- if (isDesktop) {
-  return (
-    <View style={styles.desktopRoot}>
+  if (isDesktop) {
+    return (
+      <View style={styles.desktopRoot}>
 
-      {/* HEADER COMPLETO */}
-      <Header />
+        {/* HEADER COMPLETO */}
+        <Header />
 
-      {/* CUERPO */}
-      <View style={styles.desktopMain}>
+        {/* CUERPO */}
+        <View style={styles.desktopMain}>
 
-        {/* SIDEBAR */}
-        <DesktopSidebar />
+          {/* SIDEBAR */}
+          <DesktopSidebar />
 
-        {/* CONTENIDO */}
-        <View style={styles.desktopBody}>
-          <HelpContent />
+          {/* CONTENIDO */}
+          <View style={styles.desktopBody}>
+            <HelpContent
+              expandedId={expandedId}
+              toggleItem={toggleItem}
+              isDesktop={isDesktop}
+            />
+          </View>
+
         </View>
 
       </View>
+    );
+  }
 
-    </View>
-  );
-}
   // ==========================================================
   // MOBILE
   // ==========================================================
@@ -520,7 +515,11 @@ export default function HelpScreen({
       <Header />
 
       <View style={styles.mobileContent}>
-        <HelpContent />
+        <HelpContent
+          expandedId={expandedId}
+          toggleItem={toggleItem}
+          isDesktop={isDesktop}
+        />
       </View>
 
       <MobileBottomMenu />

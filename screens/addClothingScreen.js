@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { toPersistentUri } from '../services/imageUtils';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,15 +18,26 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system/legacy';
 import jpeg from 'jpeg-js';
 
 import { COLORS } from '../theme/colours';
+import {
+  COLOR_OPTIONS,
+  rgbToCss,
+  findClosestColor,
+} from '../utils/colorutils';
 import ResponsiveContainer from '../components/ResponsiveContainer';
 import { removeBackground } from '../services/bgRemoveService';
 import { addClothingItem } from '../services/database';
 import AlertMessage from '../components/AlertMessage';
 import { MESSAGES } from '../theme/messages';
 import { OutfitScreenLayout } from '../navigation/MainTabNavigator';
+import {
+  validateClothingForm,
+  findDuplicateClothing,
+} from '../services/clothingValidation';
+
 /* ============================================================
    CATEGORÍAS
    ============================================================ */
@@ -55,7 +67,7 @@ const SEASONS = [
   'Invierno',
   'Primavera',
   'Otoño',
-  'Todas',
+  'Todo el año',
   'Otra temporada',
 ];
 
@@ -89,85 +101,56 @@ const OCASIONES = [
      el píxel y mostrar el color visualmente.
    ============================================================ */
 
-const COLORS_LIST = [
-  { name: 'Negro', rgb: [0, 0, 0] },
-  { name: 'Blanco', rgb: [255, 255, 255] },
-  { name: 'Gris oscuro', rgb: [75, 85, 99] },
-  { name: 'Gris', rgb: [128, 128, 128] },
-  { name: 'Gris claro', rgb: [209, 213, 219] },
-
-  { name: 'Rojo', rgb: [220, 38, 38] },
-  { name: 'Rojo oscuro', rgb: [153, 27, 27] },
-  { name: 'Rosa', rgb: [236, 72, 153] },
-  { name: 'Rosa claro', rgb: [249, 168, 212] },
-
-  { name: 'Naranja', rgb: [249, 115, 22] },
-  { name: 'Amarillo', rgb: [234, 179, 8] },
-  { name: 'Crema', rgb: [255, 247, 214] },
-
-  { name: 'Verde', rgb: [22, 163, 74] },
-  { name: 'Verde oscuro', rgb: [22, 101, 52] },
-  { name: 'Verde claro', rgb: [134, 239, 172] },
-
-  { name: 'Celeste', rgb: [56, 189, 248] },
-  { name: 'Azul', rgb: [30, 64, 175] },
-  { name: 'Azul oscuro', rgb: [30, 58, 138] },
-
-  { name: 'Violeta', rgb: [156, 78, 221] },
-  { name: 'Lila', rgb: [196, 181, 253] },
-
-  { name: 'Marrón', rgb: [146, 64, 14] },
-  { name: 'Beige', rgb: [212, 185, 150] },
-  {
-  name: 'Multicolor',
-  rgb: null,
-},
-];
+// La lista de colores vive en utils/colorUtils.js (COLOR_OPTIONS)
 
 const OTHER_COLOR_OPTION = 'Otro color';
+
 const DESCRIPTION_MAX_LENGTH = 150;
+const TITLE_MAX_LENGTH = 60;
+const CUSTOM_OPTION_MAX_LENGTH = 40;
+
 const IMAGE_BOX_SIZE = 220;
 
 /* ============================================================
-   UTILIDADES DE COLOR
+   NORMALIZACIÓN DE OPCIONES PERSONALIZADAS
+   ("camperas", "Camperas " y "CAMPERAS" pasan a ser "Camperas";
+   si coincide con una opción fija se usa esa, sin tildes ni
+   mayúsculas de por medio).
    ============================================================ */
 
-const rgbToCss = ([r, g, b]) => {
-  return `rgb(${r}, ${g}, ${b})`;
-};
+const stripAccents = (value) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ');
 
-const colorDistance = (a, b) => {
-  return (
-    Math.pow(a[0] - b[0], 2) +
-    Math.pow(a[1] - b[1], 2) +
-    Math.pow(a[2] - b[2], 2)
-  );
-};
+const normalizeCustomOption = (text, fixedOptions) => {
+  const clean = String(text || '').trim().replace(/\s+/g, ' ');
 
-const findClosestColor = (r, g, b) => {
-  const sample = [r, g, b];
-
-  let closest = COLORS_LIST[0];
-  let distance = Infinity;
-
- COLORS_LIST.forEach((color) => {
-  if (!color.rgb) {
-    return;
+  if (!clean) {
+    return '';
   }
 
-  const currentDistance = colorDistance(
-    sample,
-    color.rgb
+  const key = stripAccents(clean);
+
+  const match = fixedOptions.find(
+    (option) =>
+      !option.startsWith('Otra ') &&
+      stripAccents(option) === key
   );
 
-  if (currentDistance < distance) {
-    distance = currentDistance;
-    closest = color;
+  if (match) {
+    return match;
   }
-});
 
-  return closest;
+  const lower = clean.toLowerCase();
+
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
 };
+const MAX_IMAGE_WIDTH = 1024;
+const IMAGE_JPEG_QUALITY = 0.8;
 
 /* ============================================================
    BASE64 → UINT8ARRAY
@@ -365,11 +348,6 @@ const samplePixelOnWeb = async (
       relativeY / rect.scale
     );
 
-  /*
-   * Garantizamos coordenadas válidas
-   * dentro de la imagen original.
-   */
-
   if (!Number.isFinite(imageX)) {
     imageX = 0;
   }
@@ -398,11 +376,6 @@ const samplePixelOnWeb = async (
     document.createElement(
       'canvas'
     );
-
-  /*
-   * Canvas siempre recibe dimensiones
-   * enteras y válidas.
-   */
 
   const canvasWidth =
     Math.max(
@@ -443,12 +416,6 @@ const samplePixelOnWeb = async (
     canvasWidth,
     canvasHeight
   );
-
-  /*
-   * getImageData necesita enteros.
-   * Además, los mantenemos dentro
-   * de los límites reales del canvas.
-   */
 
   const safeX =
     Math.max(
@@ -493,6 +460,214 @@ const samplePixelOnWeb = async (
 };
 
 /* ============================================================
+   NATIVE - LEER PIXEL
+   ============================================================ */
+
+const samplePixelOnNative = async (
+  uri,
+  x,
+  y,
+  imageWidth,
+  imageHeight
+) => {
+  const rect =
+    getDisplayedImageRect(
+      imageWidth,
+      imageHeight
+    );
+
+  if (
+    !Number.isFinite(x) ||
+    !Number.isFinite(y)
+  ) {
+    throw new Error(
+      'Las coordenadas no son válidas.'
+    );
+  }
+
+  if (
+    x < rect.offsetX ||
+    x > rect.offsetX + rect.width ||
+    y < rect.offsetY ||
+    y > rect.offsetY + rect.height
+  ) {
+    return null;
+  }
+
+  const imageX =
+    Math.max(
+      0,
+      Math.min(
+        imageWidth - 1,
+        Math.round(
+          (x - rect.offsetX) /
+            rect.scale
+        )
+      )
+    );
+
+  const imageY =
+    Math.max(
+      0,
+      Math.min(
+        imageHeight - 1,
+        Math.round(
+          (y - rect.offsetY) /
+            rect.scale
+        )
+      )
+    );
+
+  const cropResult =
+    await ImageManipulator.manipulateAsync(
+      uri,
+      [
+        {
+          crop: {
+            originX: imageX,
+            originY: imageY,
+            width: 1,
+            height: 1,
+          },
+        },
+      ],
+      {
+        compress: 1,
+        format:
+          ImageManipulator.SaveFormat.JPEG,
+        base64: true,
+      }
+    );
+
+  if (!cropResult.base64) {
+    throw new Error(
+      'No se pudo obtener el píxel de la imagen.'
+    );
+  }
+
+  const bytes =
+    base64ToUint8Array(
+      cropResult.base64
+    );
+
+  const decoded =
+    jpeg.decode(
+      bytes,
+      {
+        useTArray: true,
+      }
+    );
+
+  if (
+    !decoded ||
+    !decoded.data ||
+    decoded.data.length < 3
+  ) {
+    throw new Error(
+      'No se pudo decodificar el píxel.'
+    );
+  }
+
+  return {
+    r: decoded.data[0],
+    g: decoded.data[1],
+    b: decoded.data[2],
+  };
+};
+
+/* ============================================================
+   PREPARAR IMAGEN
+
+   Expo ImagePicker no garantiza el mismo comportamiento de
+   allowsEditing en Web y Native. Normalizamos siempre la imagen
+   a un tamaño razonable y JPEG para evitar archivos enormes.
+   ============================================================ */
+
+const prepareImageForApp = async (uri) => {
+  if (!uri) {
+    throw new Error(
+      'No se recibió una imagen válida.'
+    );
+  }
+
+  const result =
+    await ImageManipulator.manipulateAsync(
+      uri,
+      [
+        {
+          resize: {
+            width: MAX_IMAGE_WIDTH,
+          },
+        },
+      ],
+      {
+        compress:
+          IMAGE_JPEG_QUALITY,
+        format:
+          ImageManipulator.SaveFormat.JPEG,
+      }
+    );
+
+  return result.uri;
+};
+
+/* ============================================================
+   PERSISTENCIA LOCAL DE IMAGEN
+
+   En Web se conserva el comportamiento de toPersistentUri.
+   En Native se copia la imagen final al documentDirectory
+   para evitar depender de una URI temporal/cacheable.
+   ============================================================ */
+
+const persistImageLocally = async (uri) => {
+  if (!uri) {
+    throw new Error(
+      'No se recibió una imagen válida.'
+    );
+  }
+
+  const persistentUri =
+    await toPersistentUri(uri);
+
+  if (
+    Platform.OS === 'web' ||
+    !FileSystem.documentDirectory
+  ) {
+    return (
+      persistentUri ||
+      uri
+    );
+  }
+
+  if (
+    persistentUri &&
+    persistentUri.startsWith(
+      FileSystem.documentDirectory
+    )
+  ) {
+    return persistentUri;
+  }
+
+  const filename =
+    `clothing_${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2, 8)}.jpg`;
+
+  const destination =
+    `${FileSystem.documentDirectory}${filename}`;
+
+  await FileSystem.copyAsync({
+    from:
+      persistentUri ||
+      uri,
+    to:
+      destination,
+  });
+
+  return destination;
+};
+
+/* ============================================================
    COMPONENTE
    ============================================================ */
 
@@ -508,6 +683,7 @@ export default function AddClothingScreen({
 
   const user =
     route?.params?.user;
+
   /* ==========================================================
      FORMULARIO
      ========================================================== */
@@ -583,7 +759,56 @@ export default function AddClothingScreen({
 
   const [isSaving, setIsSaving] =
     useState(false);
-const [alertMessage, setAlertMessage] = useState('');
+
+  const [alertInfo, setAlertInfo] =
+    useState({
+      type: '',
+      message: '',
+    });
+
+  const alertTimer =
+    useRef(null);
+
+  const navTimer =
+    useRef(null);
+
+  const showAlert = (
+    type,
+    message
+  ) => {
+    clearTimeout(
+      alertTimer.current
+    );
+
+    setAlertInfo({
+      type,
+      message,
+    });
+
+    alertTimer.current =
+      setTimeout(
+        () =>
+          setAlertInfo({
+            type: '',
+            message: '',
+          }),
+        3500
+      );
+  };
+
+  useEffect(
+    () => () => {
+      clearTimeout(
+        alertTimer.current
+      );
+
+      clearTimeout(
+        navTimer.current
+      );
+    },
+    []
+  );
+
   /* ==========================================================
      DROPDOWN DESKTOP
      ========================================================== */
@@ -597,17 +822,17 @@ const [alertMessage, setAlertMessage] = useState('');
 
   const finalCategory =
     isCustomCategory
-      ? customCategory.trim()
+      ? normalizeCustomOption(customCategory, CATEGORIES)
       : category;
 
   const finalSeason =
     isCustomSeason
-      ? customSeason.trim()
+      ? normalizeCustomOption(customSeason, SEASONS)
       : season;
 
   const finalOcasion =
     isCustomOcasion
-      ? customOcasion.trim()
+      ? normalizeCustomOption(customOcasion, OCASIONES)
       : ocasion;
 
   /* ==========================================================
@@ -618,13 +843,19 @@ const [alertMessage, setAlertMessage] = useState('');
     value
   ) => {
     if (
-      value === 'Otra categoría'
+      value ===
+      'Otra categoría'
     ) {
       setCategory('');
       setCustomCategory('');
-      setIsCustomCategory(true);
+      setIsCustomCategory(
+        true
+      );
     } else {
-      setIsCustomCategory(false);
+      setIsCustomCategory(
+        false
+      );
+
       setCustomCategory('');
       setCategory(value);
     }
@@ -640,13 +871,19 @@ const [alertMessage, setAlertMessage] = useState('');
     value
   ) => {
     if (
-      value === 'Otra temporada'
+      value ===
+      'Otra temporada'
     ) {
       setSeason('');
       setCustomSeason('');
-      setIsCustomSeason(true);
+      setIsCustomSeason(
+        true
+      );
     } else {
-      setIsCustomSeason(false);
+      setIsCustomSeason(
+        false
+      );
+
       setCustomSeason('');
       setSeason(value);
     }
@@ -662,13 +899,19 @@ const [alertMessage, setAlertMessage] = useState('');
     value
   ) => {
     if (
-      value === 'Otra ocasión'
+      value ===
+      'Otra ocasión'
     ) {
       setOcasion('');
       setCustomOcasion('');
-      setIsCustomOcasion(true);
+      setIsCustomOcasion(
+        true
+      );
     } else {
-      setIsCustomOcasion(false);
+      setIsCustomOcasion(
+        false
+      );
+
       setCustomOcasion('');
       setOcasion(value);
     }
@@ -684,9 +927,10 @@ const [alertMessage, setAlertMessage] = useState('');
     colorName
   ) => {
     const color =
-      COLORS_LIST.find(
+      COLOR_OPTIONS.find(
         (item) =>
-          item.name === colorName
+          item.name ===
+          colorName
       );
 
     if (!color) {
@@ -698,10 +942,15 @@ const [alertMessage, setAlertMessage] = useState('');
     );
 
     setSampledColor(
-      rgbToCss(color.rgb)
+      color.rgb
+        ? rgbToCss(color.rgb)
+        : null
     );
 
-    setIsColorPickerMode(false);
+    setIsColorPickerMode(
+      false
+    );
+
     setSamplePoint(null);
   };
 
@@ -719,14 +968,11 @@ const [alertMessage, setAlertMessage] = useState('');
       return;
     }
 
-    setIsColorPickerMode(true);
-    setSamplePoint(null);
+    setIsColorPickerMode(
+      true
+    );
 
-    /*
-     * No borramos el color anterior inmediatamente.
-     * Así el usuario puede volver a elegir otro punto
-     * sin perder el estado visual.
-     */
+    setSamplePoint(null);
   };
 
   /* ==========================================================
@@ -736,12 +982,31 @@ const [alertMessage, setAlertMessage] = useState('');
   const prepareImage = async (
     uri
   ) => {
-    const dimensions =
-      await getImageSize(uri);
+    try {
+      if (!uri) {
+        setImageDimensions(
+          null
+        );
 
-    setImageDimensions(
-      dimensions
-    );
+        return;
+      }
+
+      const dimensions =
+        await getImageSize(uri);
+
+      setImageDimensions(
+        dimensions
+      );
+    } catch (error) {
+      console.error(
+        'Error obteniendo dimensiones de imagen:',
+        error
+      );
+
+      setImageDimensions(
+        null
+      );
+    }
   };
 
   /* ==========================================================
@@ -763,10 +1028,6 @@ const [alertMessage, setAlertMessage] = useState('');
         setIsSamplingColor(
           true
         );
-
-        /*
-         * Guardamos exactamente dónde hizo clic/tocó.
-         */
 
         setSamplePoint({
           x,
@@ -806,24 +1067,12 @@ const [alertMessage, setAlertMessage] = useState('');
           return;
         }
 
-        /*
-         * Buscamos el nombre más cercano.
-         */
-
         const closestColor =
           findClosestColor(
             pixel.r,
             pixel.g,
             pixel.b
           );
-
-        /*
-         * El RGB se utiliza solamente para mostrar
-         * visualmente el color detectado.
-         *
-         * En la BD se guarda:
-         * closestColor.name
-         */
 
         setSampledColor(
           rgbToCss([
@@ -836,11 +1085,6 @@ const [alertMessage, setAlertMessage] = useState('');
         setSelectedColor(
           closestColor.name
         );
-
-        /*
-         * Una vez elegido el color, salimos del modo
-         * puntero.
-         */
 
         setIsColorPickerMode(
           false
@@ -924,18 +1168,32 @@ const [alertMessage, setAlertMessage] = useState('');
         !result.canceled &&
         result.assets?.length
       ) {
-        const uri =
+        const originalUri =
           result.assets[0].uri;
+
+        const uri =
+          await prepareImageForApp(
+            originalUri
+          );
 
         setImageUri(uri);
 
+        // Cambiar la foto no debe arrastrar un punto de muestreo
+        // de la imagen anterior. El color elegido manualmente se
+        // conserva hasta que el usuario decida cambiarlo.
         setSampledColor(null);
-        setSelectedColor('');
         setSamplePoint(null);
-        setIsColorPickerMode(false);
-        setImageDimensions(null);
+        setIsColorPickerMode(
+          false
+        );
 
-        await prepareImage(uri);
+        setImageDimensions(
+          null
+        );
+
+        await prepareImage(
+          uri
+        );
       }
     } catch (error) {
       console.error(
@@ -972,21 +1230,37 @@ const [alertMessage, setAlertMessage] = useState('');
       try {
         const processedUri =
           await removeBackground(
-            imageUri
+            imageUri,
+            {
+              bg_color:
+                'ffffff',
+              format:
+                'jpg',
+            }
           );
 
         if (processedUri) {
+          const normalizedUri =
+            await prepareImageForApp(
+              processedUri
+            );
+
           setImageUri(
-            processedUri
+            normalizedUri
           );
 
-          setSampledColor(null);
-          setSelectedColor('');
-          setSamplePoint(null);
-          setIsColorPickerMode(false);
+          // El procesamiento del fondo no debe borrar el color
+          // que el usuario ya había seleccionado.
+          setSamplePoint(
+            null
+          );
+
+          setIsColorPickerMode(
+            false
+          );
 
           await prepareImage(
-            processedUri
+            normalizedUri
           );
 
           Alert.alert(
@@ -1022,52 +1296,41 @@ const [alertMessage, setAlertMessage] = useState('');
 
   const handleSave =
     async () => {
-      if (!title.trim()) {
-        Alert.alert(
-          'Campo obligatorio',
-          'Ingresá un nombre para la prenda.'
+      const validationError =
+        validateClothingForm({
+          title,
+          imageUri,
+          category:
+            finalCategory,
+          color:
+            selectedColor,
+          season:
+            finalSeason,
+          ocasion:
+            finalOcasion,
+        });
+
+      if (validationError) {
+        showAlert(
+          'error',
+          validationError
         );
 
         return;
       }
 
-      if (!imageUri) {
-        Alert.alert(
-          'Campo obligatorio',
-          'Por favor seleccioná o tomá una foto de la prenda.'
-        );
+      /*
+       * No existe un usuario válido.
+       *
+       * IMPORTANTE:
+       * Nunca usamos un ownerId de respaldo como 1,
+       * porque eso podría guardar prendas en otra cuenta.
+       */
 
-        return;
-      }
-
-      if (!finalCategory) {
-        Alert.alert(
-          'Campo obligatorio',
-          'Seleccioná una categoría o escribí una categoría personalizada.'
-        );
-
-        return;
-      }
-
-      if (
-        isCustomSeason &&
-        !finalSeason
-      ) {
-        Alert.alert(
-          'Campo obligatorio',
-          'Escribí una temporada personalizada.'
-        );
-
-        return;
-      }
-
-      if (
-        isCustomOcasion &&
-        !finalOcasion
-      ) {
-        Alert.alert(
-          'Campo obligatorio',
-          'Escribí una ocasión personalizada.'
+      if (!user?.id) {
+        showAlert(
+          'error',
+          'No se pudo identificar al usuario actual. Volvé a iniciar sesión e intentá nuevamente.'
         );
 
         return;
@@ -1076,54 +1339,85 @@ const [alertMessage, setAlertMessage] = useState('');
       setIsSaving(true);
 
       try {
-        const clothingData = {
-          userId:
-            user?.id || 1,
+        const ownerId =
+          user.id;
 
-          title:
-            title.trim(),
+        /*
+         * Antes de guardar, dejamos la imagen en una ubicación
+         * persistente y con el formato/tamaño normalizado.
+         */
 
-          imageUri,
-
-          category:
-            finalCategory,
-
-          /*
-           * SOLAMENTE se guarda el nombre:
-           *
-           * "Azul"
-           * "Rojo"
-           * "Verde"
-           *
-           * Nunca HEX.
-           * Nunca RGB.
-           */
-
-          color:
-            selectedColor,
-
-          season:
-            finalSeason,
-
-          ocasion:
-            finalOcasion,
-
-          description:
-            description.trim(),
-        };
-
-        const result =
-          await addClothingItem(
-            clothingData
+        const persistentImageUri =
+          await persistImageLocally(
+            imageUri
           );
 
-      if (result.success) {
-  setAlertMessage(MESSAGES.ITEM_ADDED);
+        const duplicate =
+          await findDuplicateClothing(
+            ownerId,
+            {
+              title,
+              category:
+                finalCategory,
+              color:
+                selectedColor,
+            }
+          );
+
+        if (duplicate) {
+          showAlert(
+            'error',
+            MESSAGES.ITEM_DUPLICATED
+          );
+
+          return;
+        }
+
+        const result =
+          await addClothingItem({
+            userId:
+              ownerId,
+
+            title:
+              title.trim(),
+
+            imageUri:
+              persistentImageUri,
+
+            category:
+              finalCategory,
+
+            color:
+              selectedColor,
+
+            season:
+              finalSeason,
+
+            ocasion:
+              finalOcasion,
+
+            description:
+              description.trim(),
+          });
+
+        if (result.success) {
+          showAlert(
+            'success',
+            MESSAGES.ITEM_ADDED
+          );
+
+          navTimer.current =
+            setTimeout(
+              () => {
+                navigation.goBack();
+              },
+              1200
+            );
         } else {
-          Alert.alert(
-            'Error',
+          showAlert(
+            'error',
             result.message ||
-              'No se pudo guardar la prenda en la base de datos.'
+              MESSAGES.ITEM_SAVE_ERROR
           );
         }
       } catch (error) {
@@ -1132,9 +1426,9 @@ const [alertMessage, setAlertMessage] = useState('');
           error
         );
 
-        Alert.alert(
-          'Error',
-          'Surgió un error al intentar guardar.'
+        showAlert(
+          'error',
+          MESSAGES.ITEM_SAVE_ERROR
         );
       } finally {
         setIsSaving(
@@ -1198,9 +1492,16 @@ const [alertMessage, setAlertMessage] = useState('');
           </Text>
 
           <TextInput
-            value={value}
-            onChangeText={
-              setValue
+            value={
+              value
+            }
+            onChangeText={(text) =>
+              setValue(
+                text.slice(
+                  0,
+                  CUSTOM_OPTION_MAX_LENGTH
+                )
+              )
             }
             placeholder={
               placeholder
@@ -1213,6 +1514,9 @@ const [alertMessage, setAlertMessage] = useState('');
             }
             autoCapitalize="sentences"
             returnKeyType="done"
+            maxLength={
+              CUSTOM_OPTION_MAX_LENGTH
+            }
           />
         </View>
       );
@@ -1314,35 +1618,39 @@ const [alertMessage, setAlertMessage] = useState('');
               styles.dropdownRowRight
             }
           >
-           {isColorRow && displayValue && (
-  COLORS_LIST.find(
-    (c) =>
-      c.name === displayValue
-  )?.rgb ? (
-    <View
-      style={[
-        styles.dropdownColorPreview,
-        {
-          backgroundColor:
-            sampledColor ||
-            rgbToCss(
-              COLORS_LIST.find(
+            {isColorRow &&
+              !!displayValue &&
+              COLOR_OPTIONS.find(
                 (c) =>
                   c.name ===
                   displayValue
-              ).rgb
-            ),
-        },
-      ]}
-    />
-  ) : (
-    <Ionicons
-      name="color-palette-outline"
-      size={16}
-      color={COLORS.primary}
-    />
-  )
-)}
+              )?.rgb ? (
+              <View
+                style={[
+                  styles.dropdownColorPreview,
+                  {
+                    backgroundColor:
+                      sampledColor ||
+                      rgbToCss(
+                        COLOR_OPTIONS.find(
+                          (c) =>
+                            c.name ===
+                            displayValue
+                        ).rgb
+                      ),
+                  },
+                ]}
+              />
+            ) : isColorRow &&
+              !!displayValue ? (
+              <Ionicons
+                name="color-palette-outline"
+                size={16}
+                color={
+                  COLORS.primary
+                }
+              />
+            ) : null}
 
             <Text
               style={[
@@ -1384,7 +1692,10 @@ const [alertMessage, setAlertMessage] = useState('');
                     styles.customDropdownChipActive,
                 ]}
                 onPress={() => {
-                  setOpenDropdown(null);
+                  setOpenDropdown(
+                    null
+                  );
+
                   activateColorPicker();
                 }}
               >
@@ -1401,7 +1712,9 @@ const [alertMessage, setAlertMessage] = useState('');
                     styles.customDropdownChipText
                   }
                 >
-                  {OTHER_COLOR_OPTION}
+                  {
+                    OTHER_COLOR_OPTION
+                  }
                 </Text>
               </Pressable>
             )}
@@ -1464,6 +1777,7 @@ const [alertMessage, setAlertMessage] = useState('');
                         selectColor(
                           optionName
                         );
+
                         setOpenDropdown(
                           null
                         );
@@ -1474,25 +1788,28 @@ const [alertMessage, setAlertMessage] = useState('');
                       }
                     }}
                   >
-                    {isColorRow && (
-  option.rgb ? (
-    <View
-      style={[
-        styles.dropdownColorDot,
-        {
-          backgroundColor:
-            rgbToCss(option.rgb),
-        },
-      ]}
-    />
-  ) : (
-    <Ionicons
-      name="color-palette-outline"
-      size={16}
-      color={COLORS.primary}
-    />
-  )
-)}
+                    {isColorRow &&
+                      (option.rgb ? (
+                        <View
+                          style={[
+                            styles.dropdownColorDot,
+                            {
+                              backgroundColor:
+                                rgbToCss(
+                                  option.rgb
+                                ),
+                            },
+                          ]}
+                        />
+                      ) : (
+                        <Ionicons
+                          name="color-palette-outline"
+                          size={16}
+                          color={
+                            COLORS.primary
+                          }
+                        />
+                      ))}
 
                     <Text
                       style={[
@@ -1578,85 +1895,86 @@ const [alertMessage, setAlertMessage] = useState('');
             style={
               styles.imageTouchArea
             }
-           onPress={(event) => {
-  if (
-    !isColorPickerMode ||
-    isSamplingColor
-  ) {
-    return;
-  }
+            onPress={(event) => {
+              if (
+                !isColorPickerMode ||
+                isSamplingColor
+              ) {
+                return;
+              }
 
-  const nativeEvent =
-    event.nativeEvent;
+              const nativeEvent =
+                event.nativeEvent;
 
-  let x =
-    nativeEvent.locationX;
+              let x =
+                nativeEvent.locationX;
 
-  let y =
-    nativeEvent.locationY;
+              let y =
+                nativeEvent.locationY;
 
-  /*
-   * En Web, React Native Web puede no proporcionar
-   * locationX/locationY correctamente.
-   *
-   * En ese caso calculamos la posición directamente
-   * usando clientX/clientY y el rectángulo del elemento.
-   */
+              if (
+                Platform.OS ===
+                  'web' &&
+                (
+                  !Number.isFinite(
+                    x
+                  ) ||
+                  !Number.isFinite(
+                    y
+                  )
+                )
+              ) {
+                const element =
+                  event.currentTarget;
 
-  if (
-    Platform.OS === 'web' &&
-    (
-      !Number.isFinite(x) ||
-      !Number.isFinite(y)
-    )
-  ) {
-    const element =
-      event.currentTarget;
+                if (
+                  element &&
+                  typeof element.getBoundingClientRect ===
+                    'function'
+                ) {
+                  const bounds =
+                    element.getBoundingClientRect();
 
-    if (
-      element &&
-      typeof element.getBoundingClientRect ===
-        'function'
-    ) {
-      const bounds =
-        element.getBoundingClientRect();
+                  if (
+                    Number.isFinite(
+                      nativeEvent.clientX
+                    ) &&
+                    Number.isFinite(
+                      nativeEvent.clientY
+                    )
+                  ) {
+                    x =
+                      nativeEvent.clientX -
+                      bounds.left;
 
-      if (
-        Number.isFinite(
-          nativeEvent.clientX
-        ) &&
-        Number.isFinite(
-          nativeEvent.clientY
-        )
-      ) {
-        x =
-          nativeEvent.clientX -
-          bounds.left;
+                    y =
+                      nativeEvent.clientY -
+                      bounds.top;
+                  }
+                }
+              }
 
-        y =
-          nativeEvent.clientY -
-          bounds.top;
-      }
-    }
-  }
+              if (
+                !Number.isFinite(
+                  x
+                ) ||
+                !Number.isFinite(
+                  y
+                )
+              ) {
+                console.error(
+                  'No se pudieron obtener coordenadas válidas:',
+                  nativeEvent
+                );
 
-  if (
-    !Number.isFinite(x) ||
-    !Number.isFinite(y)
-  ) {
-    console.error(
-      'No se pudieron obtener coordenadas válidas:',
-      nativeEvent
-    );
+                return;
+              }
 
-    return;
-  }
-
-  sampleColorFromImage(
-    x,
-    y
-  );
-}}
+              sampleColorFromImage(
+                x,
+                y
+              );
+            }}
           >
             <Image
               source={{
@@ -1961,7 +2279,7 @@ const [alertMessage, setAlertMessage] = useState('');
         }
       >
         Nombre de la prenda
-        {!isDesktop && ' *'}
+        {' *'}
       </Text>
 
       {isDesktop ? (
@@ -1989,9 +2307,19 @@ const [alertMessage, setAlertMessage] = useState('');
             placeholderTextColor={
               COLORS.textLight
             }
-            value={title}
-            onChangeText={
-              setTitle
+            value={
+              title
+            }
+            onChangeText={(text) =>
+              setTitle(
+                text.slice(
+                  0,
+                  TITLE_MAX_LENGTH
+                )
+              )
+            }
+            maxLength={
+              TITLE_MAX_LENGTH
             }
           />
         </View>
@@ -2004,9 +2332,19 @@ const [alertMessage, setAlertMessage] = useState('');
           placeholderTextColor={
             COLORS.textLight
           }
-          value={title}
-          onChangeText={
-            setTitle
+          value={
+            title
+          }
+          onChangeText={(text) =>
+            setTitle(
+              text.slice(
+                0,
+                TITLE_MAX_LENGTH
+              )
+            )
+          }
+          maxLength={
+            TITLE_MAX_LENGTH
           }
         />
       )}
@@ -2108,96 +2446,116 @@ const [alertMessage, setAlertMessage] = useState('');
           styles.label
         }
       >
-        Color Principal
+        Color principal *
       </Text>
-  <View
-  style={
-    styles.colorsContainer
-  }
->
-  {COLORS_LIST.map((color) => {
-    const isMulticolor =
-      color.name === 'Multicolor';
 
-    const isSelected =
-      selectedColor === color.name;
-
-    if (isMulticolor) {
-      return (
-        <Pressable
-          key={color.name}
-          style={[
-            styles.multicolorOption,
-            isSelected &&
-              styles.multicolorOptionActive,
-          ]}
-          onPress={() =>
-            selectColor(color.name)
-          }
-          accessibilityLabel="Seleccionar color Multicolor"
-        >
-          <View
-            style={styles.multicolorIcon}
-          >
-            <Ionicons
-              name="color-palette-outline"
-              size={22}
-              color={COLORS.primary}
-            />
-          </View>
-
-          <Text
-            style={[
-              styles.multicolorText,
-              isSelected &&
-                styles.multicolorTextActive,
-            ]}
-          >
-            Multicolor
-          </Text>
-        </Pressable>
-      );
-    }
-
-    return (
-      <Pressable
-        key={color.name}
-        accessibilityLabel={`Seleccionar color ${color.name}`}
-        style={[
-          styles.colorCircle,
-          {
-            backgroundColor:
-              rgbToCss(color.rgb),
-          },
-          isSelected &&
-            styles.colorCircleActive,
-        ]}
-        onPress={() =>
-          selectColor(color.name)
+      <View
+        style={
+          styles.colorsContainer
         }
-      />
-    );
-  })}
+      >
+        {COLOR_OPTIONS.map(
+          (color) => {
+            const isMulticolor =
+              color.name ===
+              'Multicolor';
 
-  <Pressable
-    style={[
-      styles.customColorCircle,
-      isColorPickerMode &&
-        styles.customColorCircleActive,
-    ]}
-    onPress={
-      activateColorPicker
-    }
-  >
-    <Ionicons
-      name="color-wand-outline"
-      size={17}
-      color={
-        COLORS.background
-      }
-    />
-  </Pressable>
-</View>
+            const isSelected =
+              selectedColor ===
+              color.name;
+
+            if (isMulticolor) {
+              return (
+                <Pressable
+                  key={
+                    color.name
+                  }
+                  style={[
+                    styles.multicolorOption,
+                    isSelected &&
+                      styles.multicolorOptionActive,
+                  ]}
+                  onPress={() =>
+                    selectColor(
+                      color.name
+                    )
+                  }
+                  accessibilityLabel="Seleccionar color Multicolor"
+                >
+                  <View
+                    style={
+                      styles.multicolorIcon
+                    }
+                  >
+                    <Ionicons
+                      name="color-palette-outline"
+                      size={22}
+                      color={
+                        COLORS.primary
+                      }
+                    />
+                  </View>
+
+                  <Text
+                    style={[
+                      styles.multicolorText,
+                      isSelected &&
+                        styles.multicolorTextActive,
+                    ]}
+                  >
+                    Multicolor
+                  </Text>
+                </Pressable>
+              );
+            }
+
+            return (
+              <Pressable
+                key={
+                  color.name
+                }
+                accessibilityLabel={`Seleccionar color ${color.name}`}
+                style={[
+                  styles.colorCircle,
+                  {
+                    backgroundColor:
+                      rgbToCss(
+                        color.rgb
+                      ),
+                  },
+                  isSelected &&
+                    styles.colorCircleActive,
+                ]}
+                onPress={() =>
+                  selectColor(
+                    color.name
+                  )
+                }
+              />
+            );
+          }
+        )}
+
+        <Pressable
+          style={[
+            styles.customColorCircle,
+            isColorPickerMode &&
+              styles.customColorCircleActive,
+          ]}
+          onPress={
+            activateColorPicker
+          }
+        >
+          <Ionicons
+            name="color-wand-outline"
+            size={17}
+            color={
+              COLORS.background
+            }
+          />
+        </Pressable>
+      </View>
+
       <Pressable
         style={[
           styles.otherOptionButton,
@@ -2252,7 +2610,7 @@ const [alertMessage, setAlertMessage] = useState('');
           styles.label
         }
       >
-        Temporada
+        Temporada *
       </Text>
 
       <View
@@ -2332,7 +2690,7 @@ const [alertMessage, setAlertMessage] = useState('');
           styles.label
         }
       >
-        Ocasión
+        Ocasión *
       </Text>
 
       <View
@@ -2439,6 +2797,9 @@ const [alertMessage, setAlertMessage] = useState('');
           }
         }}
         multiline
+        maxLength={
+          DESCRIPTION_MAX_LENGTH
+        }
       />
 
       <Text
@@ -2459,32 +2820,29 @@ const [alertMessage, setAlertMessage] = useState('');
   return (
     <OutfitScreenLayout
       title="Agregar Prenda"
-      navigation={navigation}
-      user={user}
+      navigation={
+        navigation
+      }
+      user={
+        user
+      }
       activeTab="Prendas"
     >
       <ResponsiveContainer>
-       <ScrollView
-  style={
-    styles.scrollArea
-  }
-  contentContainerStyle={[
-    styles.container,
+        <ScrollView
+          style={
+            styles.scrollArea
+          }
+          contentContainerStyle={[
+            styles.container,
 
-    isDesktop &&
-      styles.desktopContainer,
-  ]}
-  showsVerticalScrollIndicator={
-    false
-  }
->
-  {alertMessage ? (
-    <AlertMessage
-      type="success"
-      message={alertMessage}
-    />
-  ) : null}
-
+            isDesktop &&
+              styles.desktopContainer,
+          ]}
+          showsVerticalScrollIndicator={
+            false
+          }
+        >
           {isDesktop ? (
             <>
               {/* ==================================================
@@ -2523,7 +2881,7 @@ const [alertMessage, setAlertMessage] = useState('');
                     {renderDropdownRow(
                       'category',
                       'shirt-outline',
-                      'Categoría',
+                      'Categoría *',
                       category,
                       'Seleccionar categoría',
                       CATEGORIES,
@@ -2533,10 +2891,10 @@ const [alertMessage, setAlertMessage] = useState('');
                     {renderDropdownRow(
                       'color',
                       'color-palette-outline',
-                      'Color',
+                      'Color *',
                       selectedColor,
                       'Seleccionar color',
-                      COLORS_LIST,
+                      COLOR_OPTIONS,
                       selectColor,
                       true
                     )}
@@ -2544,7 +2902,7 @@ const [alertMessage, setAlertMessage] = useState('');
                     {renderDropdownRow(
                       'season',
                       'sunny-outline',
-                      'Temporada',
+                      'Temporada *',
                       season,
                       'Seleccionar temporada',
                       SEASONS,
@@ -2554,7 +2912,7 @@ const [alertMessage, setAlertMessage] = useState('');
                     {renderDropdownRow(
                       'ocasion',
                       'sparkles-outline',
-                      'Ocasión',
+                      'Ocasión *',
                       ocasion,
                       'Seleccionar ocasión',
                       OCASIONES,
@@ -2620,6 +2978,9 @@ const [alertMessage, setAlertMessage] = useState('');
                           }
                         }}
                         multiline
+                        maxLength={
+                          DESCRIPTION_MAX_LENGTH
+                        }
                       />
 
                       <Text
@@ -2648,6 +3009,9 @@ const [alertMessage, setAlertMessage] = useState('');
                   }
                   onPress={() =>
                     navigation.goBack()
+                  }
+                  disabled={
+                    isSaving
                   }
                 >
                   <Text
@@ -2746,6 +3110,17 @@ const [alertMessage, setAlertMessage] = useState('');
             </>
           )}
         </ScrollView>
+
+        <AlertMessage
+          floating
+          top={12}
+          type={
+            alertInfo.type
+          }
+          message={
+            alertInfo.message
+          }
+        />
       </ResponsiveContainer>
     </OutfitScreenLayout>
   );
@@ -2757,34 +3132,6 @@ const [alertMessage, setAlertMessage] = useState('');
 
 const styles =
   StyleSheet.create({
-    safeArea: {
-      flex: 1,
-      backgroundColor:
-        COLORS.background,
-    },
-
-    header: {
-      height: 60,
-      backgroundColor:
-        COLORS.primary,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent:
-        'space-between',
-      paddingHorizontal: 16,
-    },
-
-    backButton: {
-      padding: 8,
-    },
-
-    headerTitle: {
-      color: 'white',
-      fontSize: 18,
-      fontFamily:
-        'Poppins_600SemiBold',
-    },
-
     scrollArea: {
       flex: 1,
     },
@@ -3274,41 +3621,54 @@ const styles =
       borderColor:
         COLORS.background,
     },
+
     multicolorOption: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  gap: 6,
-  paddingVertical: 6,
-  paddingHorizontal: 10,
-  borderRadius: 18,
-  backgroundColor: COLORS.background,
-  borderWidth: 1,
-  borderColor: COLORS.background,
-},
+      flexDirection:
+        'row',
+      alignItems:
+        'center',
+      gap: 6,
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      borderRadius: 18,
+      backgroundColor:
+        COLORS.background,
+      borderWidth: 1,
+      borderColor:
+        COLORS.background,
+    },
 
-multicolorOptionActive: {
-  backgroundColor: COLORS.primary,
-  borderColor: COLORS.primary,
-},
+    multicolorOptionActive: {
+      backgroundColor:
+        COLORS.primary,
+      borderColor:
+        COLORS.primary,
+    },
 
-multicolorIcon: {
-  width: 28,
-  height: 28,
-  borderRadius: 14,
-  justifyContent: 'center',
-  alignItems: 'center',
-  backgroundColor: 'white',
-},
+    multicolorIcon: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      justifyContent:
+        'center',
+      alignItems:
+        'center',
+      backgroundColor:
+        'white',
+    },
 
-multicolorText: {
-  fontSize: 11,
-  fontFamily: 'Poppins_600SemiBold',
-  color: COLORS.primary,
-},
+    multicolorText: {
+      fontSize: 11,
+      fontFamily:
+        'Poppins_600SemiBold',
+      color:
+        COLORS.primary,
+    },
 
-multicolorTextActive: {
-  color: 'white',
-},
+    multicolorTextActive: {
+      color:
+        'white',
+    },
 
     colorCircleActive: {
       borderWidth: 3,

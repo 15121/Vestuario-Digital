@@ -12,8 +12,10 @@ import {
   ScrollView,
   useWindowDimensions,
   ActivityIndicator,
+  Alert,
+  Platform,
 } from 'react-native';
-
+import { formatDateOnly as formatDate } from '../utils/dateUtils';
 import {
   Ionicons,
 } from '@expo/vector-icons';
@@ -24,6 +26,8 @@ import {
 
 import {
   getUserSuitcases,
+  getUserClothes,
+  deleteSuitcase,
 } from '../services/database';
 
 import {
@@ -79,6 +83,17 @@ export default function SuitcasesScreen({
     setLoading,
   ] = useState(true);
 
+  // Ids de las prendas que existen hoy (para no contar prendas borradas)
+  const [
+    existingClothingIds,
+    setExistingClothingIds,
+  ] = useState(null);
+
+  const [
+    deletingId,
+    setDeletingId,
+  ] = useState(null);
+
 
   // ==========================================================
   // CARGAR MALETAS
@@ -98,10 +113,16 @@ export default function SuitcasesScreen({
 
           setLoading(true);
 
-          const result =
-            await getUserSuitcases(
-              user.id
-            );
+          const [result, clothes] = await Promise.all([
+            getUserSuitcases(user.id),
+            getUserClothes(user.id).catch(() => null),
+          ]);
+
+          setExistingClothingIds(
+            Array.isArray(clothes)
+              ? new Set(clothes.map((c) => String(c.id)))
+              : null
+          );
 
           setSuitcases(
             Array.isArray(result)
@@ -152,43 +173,63 @@ const handleBack = () => {
   }
 };
 
-  // ==========================================================
-  // FORMATEAR FECHA
-  // ==========================================================
-
-  const formatDate =
-    (dateValue) => {
-
-      if (!dateValue) {
-        return null;
-      }
-
-      const date =
-        new Date(dateValue);
-
-      if (
-        Number.isNaN(
-          date.getTime()
-        )
-      ) {
-        return null;
-      }
-
-      return date.toLocaleDateString(
-        'es-AR',
-        {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-        }
-      );
-
-    };
+ 
 
 
   // ==========================================================
   // OBTENER ITEMS
   // ==========================================================
+
+  const handleDeleteSuitcase = (suitcase) => {
+    if (!suitcase?.id || deletingId) return;
+
+    const runDelete = async () => {
+      try {
+        setDeletingId(suitcase.id);
+
+        const result = await deleteSuitcase(suitcase.id);
+
+        if (!result?.success) {
+          throw new Error(result?.message || 'DELETE_ERROR');
+        }
+
+        setSuitcases((previous) =>
+          previous.filter((item) => item.id !== suitcase.id)
+        );
+      } catch (error) {
+        console.log('Error al eliminar la maleta:', error);
+
+        if (Platform.OS === 'web') {
+          window.alert('No se pudo eliminar la maleta.');
+        } else {
+          Alert.alert('Error', 'No se pudo eliminar la maleta.');
+        }
+      } finally {
+        setDeletingId(null);
+      }
+    };
+
+    const message = `¿Seguro que querés eliminar la maleta a "${
+      suitcase.destino || 'este destino'
+    }"? Esta acción no se puede deshacer.`;
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(message)) {
+        runDelete();
+      }
+      return;
+    }
+
+    Alert.alert('Eliminar maleta', message, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: runDelete,
+      },
+    ]);
+  };
+
 
   const getSuitcaseItems =
     (suitcase) => {
@@ -232,11 +273,17 @@ const handleBack = () => {
   // CANTIDAD DE PRENDAS
   // ==========================================================
 
-  const getItemCount =
+   const getItemCount =
     (suitcase) => {
 
+      // Solo cuentan las prendas empacadas
       return getSuitcaseItems(
         suitcase
+      ).filter(
+        (item) =>
+          item?.packed &&
+          (!existingClothingIds ||
+            existingClothingIds.has(String(item.clothingId)))
       ).length;
 
     };
@@ -246,16 +293,42 @@ const handleBack = () => {
   // ESTADO DE MALETA
   // ==========================================================
 
-  const getStatusLabel =
+    const getStatusLabel =
     (suitcase) => {
 
-      if (
-        suitcase?.estado
-      ) {
-        return suitcase.estado;
+      const toDate = (value) => {
+        const match = String(value || '').match(
+          /^(\d{4})-(\d{2})-(\d{2})/
+        );
+
+        return match
+          ? new Date(
+              Number(match[1]),
+              Number(match[2]) - 1,
+              Number(match[3])
+            )
+          : null;
+      };
+
+      const start = toDate(suitcase?.fechaInicio);
+      const end = toDate(suitcase?.fechaFin);
+
+      if (!start || !end) {
+        return suitcase?.estado || 'Planificada';
       }
 
-      return 'Planificada';
+      const t = new Date();
+
+      const today = new Date(
+        t.getFullYear(),
+        t.getMonth(),
+        t.getDate()
+      );
+
+      if (today < start) return 'Planificada';
+      if (today > end) return 'Finalizada';
+
+      return 'En curso';
 
     };
 
@@ -601,9 +674,30 @@ const handleBack = () => {
                     </View>
 
 
-                    {/* ========================================
-                        ESTADO
-                        ======================================== */}
+                    {/* BOTÓN ELIMINAR */}
+
+                    <TouchableOpacity
+                      style={[
+                        styles.deleteSuitcaseButton,
+                        deletingId === suitcase?.id &&
+                          styles.deleteSuitcaseButtonDisabled,
+                      ]}
+                      onPress={() =>
+                        handleDeleteSuitcase(suitcase)
+                      }
+                      disabled={deletingId === suitcase?.id}
+                      activeOpacity={0.75}
+                      hitSlop={6}
+                    >
+                      <Ionicons
+                        name="trash-outline"
+                        size={18}
+                        color="#C94C6D"
+                      />
+                    </TouchableOpacity>
+
+
+                    {/* ESTADO */}
 
          <View
   style={[
@@ -662,6 +756,23 @@ const handleBack = () => {
 // ============================================================
 
 const styles = StyleSheet.create({
+
+  deleteSuitcaseButton: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FDECEF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  deleteSuitcaseButtonDisabled: {
+    opacity: 0.5,
+  },
+
 
   // ==========================================================
   // RAÍZ
@@ -875,6 +986,7 @@ const styles = StyleSheet.create({
   // ==========================================================
 
   suitcaseMainInfo: {
+    paddingRight: 34,
     flex: 1,
 
     minWidth: 0,

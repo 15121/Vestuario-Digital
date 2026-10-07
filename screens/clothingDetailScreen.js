@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,55 +9,91 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-
+import { useFocusEffect } from '@react-navigation/native';
+import { formatDateOnly } from '../utils/dateUtils';
+import { getColorHex } from '../utils/colorutils';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../theme/colours';
 import ResponsiveContainer from '../components/ResponsiveContainer';
 import {
   deleteClothingItem,
   getClothingItemById,
+  getClothingUsage,
 } from '../services/database';
 import { OutfitScreenLayout } from '../navigation/MainTabNavigator';
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+// La prenda puede llegar desde la lista (images[]) o desde la base (imageUri).
+const getImageUri = (item) =>
+  item?.imageUri ||
+  (Array.isArray(item?.images) && item.images.length > 0
+    ? item.images[0]
+    : null);
+
+// Devuelve el texto limpio o null si está vacío
+const cleanText = (value) => {
+  const text = String(value ?? '').trim();
+  return text || null;
+};
+
+const pluralize = (count, singular, plural) =>
+  `${count} ${count === 1 ? singular : plural}`;
 
 // ============================================================
 // PANTALLA DETALLE DE PRENDA
 // ============================================================
 
 export default function ClothingDetailScreen({ navigation, route }) {
-
   const user = route?.params?.user || {};
   const clothingId = route?.params?.clothingId;
 
   const [prenda, setPrenda] = useState(route?.params?.prenda || null);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [galleryWidth, setGalleryWidth] = useState(0);
+  const [deleting, setDeleting] = useState(false);
 
-  // ----------------------------------------------------------
-  // CARGAR PRENDA SI SOLO LLEGÓ EL ID (evita crash)
-  // ----------------------------------------------------------
-
+  // Si llegan parámetros nuevos (por ejemplo, después de editar),
+  // actualizamos la prenda que se muestra.
   useEffect(() => {
-    let mounted = true;
+    if (route?.params?.prenda) {
+      setPrenda(route.params.prenda);
+    }
+  }, [route?.params?.prenda]);
 
-    const loadItem = async () => {
-      if (prenda || !clothingId) return;
+  // ----------------------------------------------------------
+  // RECARGAR LA PRENDA CADA VEZ QUE LA PANTALLA TOMA FOCO
+  // También sirve cuando solo llegó el id (evita crash).
+  // ----------------------------------------------------------
 
-      try {
-        const result = await getClothingItemById(clothingId);
-        if (mounted && result) {
-          setPrenda(result);
-        }
-      } catch (error) {
-        console.log('Error al cargar la prenda:', error);
+  useFocusEffect(
+    useCallback(() => {
+      const id = prenda?.id ?? clothingId;
+
+      if (id === null || id === undefined) {
+        return undefined;
       }
-    };
 
-    loadItem();
+      let active = true;
 
-    return () => {
-      mounted = false;
-    };
-  }, [clothingId, prenda]);
+      (async () => {
+        try {
+          const fresh = await getClothingItemById(id);
+
+          if (active && fresh) {
+            setPrenda((previous) => ({ ...previous, ...fresh }));
+          }
+        } catch (error) {
+          // Si falla (red / sesión vencida) se conserva lo que ya se ve.
+          console.log('Error al recargar la prenda:', error);
+        }
+      })();
+
+      return () => {
+        active = false;
+      };
+    }, [prenda?.id, clothingId])
+  );
 
   const handleGoBack = () => {
     navigation?.goBack();
@@ -78,46 +114,65 @@ export default function ClothingDetailScreen({ navigation, route }) {
     );
   }
 
-  const images = Array.isArray(prenda.images) && prenda.images.length > 0
-    ? prenda.images
-    : prenda.imageUri
-      ? [prenda.imageUri]
-      : [null];
-
-  // ----------------------------------------------------------
-  // CARRUSEL DE IMÁGENES
-  // ----------------------------------------------------------
-
-  const handleScrollEnd = (event) => {
-    if (galleryWidth === 0) return;
-    const offsetX = event.nativeEvent.contentOffset.x;
-    const index = Math.round(offsetX / galleryWidth);
-    setCurrentImageIndex(index);
-  };
+  const imageUri = getImageUri(prenda);
 
   // ----------------------------------------------------------
   // NAVEGACIÓN
   // ----------------------------------------------------------
 
   const handleEdit = () => {
-    navigation.navigate('EditarPrenda', { prenda });
+    navigation.navigate('EditarPrenda', { prenda, user });
   };
 
   // ----------------------------------------------------------
   // ELIMINAR PRENDA
   // ----------------------------------------------------------
 
-  const handleDelete = () => {
+  const showError = (message) => {
+    if (Platform.OS === 'web') {
+      window.alert(message);
+    } else {
+      Alert.alert('Error', message);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (deleting) return;
+
+    if (prenda?.id === null || prenda?.id === undefined) {
+      showError('No se encontró el ID de la prenda.');
+      return;
+    }
+
+    // Aviso: en cuántos outfits / maletas se usa la prenda
+    let usageText = '';
+
+    try {
+      const usage = await getClothingUsage(prenda.id);
+      const parts = [];
+
+      if (usage?.outfitCount > 0) {
+        parts.push(pluralize(usage.outfitCount, 'outfit', 'outfits'));
+      }
+
+      if (usage?.suitcaseCount > 0) {
+        parts.push(pluralize(usage.suitcaseCount, 'maleta', 'maletas'));
+      }
+
+      if (parts.length > 0) {
+        usageText = `\n\nEsta prenda está en ${parts.join(
+          ' y '
+        )}. También se va a quitar de ahí.`;
+      }
+    } catch (error) {
+      console.log('No se pudo consultar el uso de la prenda:', error);
+    }
+
+    const message = `¿Seguro que querés eliminar "${prenda.title}"? Esta acción no se puede deshacer.${usageText}`;
+
     const deleteItem = async () => {
       try {
-        if (prenda?.id === null || prenda?.id === undefined) {
-          if (Platform.OS === 'web') {
-            window.alert('No se encontró el ID de la prenda.');
-          } else {
-            Alert.alert('Error', 'No se encontró el ID de la prenda.');
-          }
-          return;
-        }
+        setDeleting(true);
 
         const result = await deleteClothingItem(prenda.id);
 
@@ -126,52 +181,65 @@ export default function ClothingDetailScreen({ navigation, route }) {
           return;
         }
 
-        if (Platform.OS === 'web') {
-          window.alert('No fue posible eliminar la prenda.');
-        } else {
-          Alert.alert('Error', 'No fue posible eliminar la prenda.');
-        }
+        showError('No fue posible eliminar la prenda.');
       } catch (error) {
         console.error('Error eliminando prenda:', error);
-
-        if (Platform.OS === 'web') {
-          window.alert('No fue posible eliminar la prenda.');
-        } else {
-          Alert.alert('Error', 'No fue posible eliminar la prenda.');
-        }
+        showError('No fue posible eliminar la prenda.');
+      } finally {
+        setDeleting(false);
       }
     };
 
     if (Platform.OS === 'web') {
-      const confirmed = window.confirm(
-        `¿Seguro que querés eliminar "${prenda.title}"? Esta acción no se puede deshacer.`
-      );
-      if (confirmed) deleteItem();
+      if (window.confirm(message)) {
+        deleteItem();
+      }
       return;
     }
 
-    Alert.alert(
-      'Eliminar prenda',
-      `¿Seguro que querés eliminar "${prenda.title}"? Esta acción no se puede deshacer.`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Eliminar', style: 'destructive', onPress: deleteItem },
-      ]
-    );
+    Alert.alert('Eliminar prenda', message, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Eliminar', style: 'destructive', onPress: deleteItem },
+    ]);
   };
 
   // ----------------------------------------------------------
   // FILAS DE INFORMACIÓN
+  // (la descripción va aparte, en un bloque de ancho completo)
   // ----------------------------------------------------------
 
+  const colorName = cleanText(prenda.color);
+
   const infoRows = [
-    { icon: 'shirt-outline', label: 'Categoría', value: prenda.category },
-    { icon: 'color-palette-outline', label: 'Color', value: prenda.color },
-    { icon: 'sunny-outline', label: 'Temporada', value: prenda.season },
-    { icon: 'sparkles-outline', label: 'Ocasión', value: prenda.ocasion },
-    { icon: 'document-text-outline', label: 'Descripción', value: prenda.description },
-    { icon: 'calendar-outline', label: 'Fecha de creación', value: prenda.createdAt },
+    {
+      icon: 'shirt-outline',
+      label: 'Categoría',
+      value: cleanText(prenda.category),
+    },
+    {
+      icon: 'color-palette-outline',
+      label: 'Color',
+      value: colorName,
+      colorHex: colorName ? getColorHex(colorName) : null,
+    },
+    {
+      icon: 'sunny-outline',
+      label: 'Temporada',
+      value: cleanText(prenda.season),
+    },
+    {
+      icon: 'sparkles-outline',
+      label: 'Ocasión',
+      value: cleanText(prenda.ocasion),
+    },
+    {
+      icon: 'calendar-outline',
+      label: 'Fecha de creación',
+      value: cleanText(formatDateOnly(prenda.createdAt)),
+    },
   ];
+
+  const description = cleanText(prenda.description);
 
   // ==========================================================
   // INTERFAZ
@@ -191,37 +259,23 @@ export default function ClothingDetailScreen({ navigation, route }) {
         >
           <View style={styles.mainContent}>
 
-            {/* GALERÍA + TÍTULO */}
+            {/* IMAGEN + TÍTULO */}
             <View style={styles.leftColumn}>
 
-              <View
-                style={styles.galleryContainer}
-                onLayout={(e) => setGalleryWidth(e.nativeEvent.layout.width)}
-              >
-                <ScrollView
-                  horizontal
-                  pagingEnabled
-                  showsHorizontalScrollIndicator={false}
-                  onMomentumScrollEnd={handleScrollEnd}
-                >
-                  {images.map((imgUri, index) => (
-                    <View key={index} style={[styles.imageSlide, { width: galleryWidth || '100%' }]}>
-                      {imgUri ? (
-                        <Image source={{ uri: imgUri }} style={styles.image} resizeMode="contain" />
-                      ) : (
-                        <View style={styles.imagePlaceholder}>
-                          <Ionicons name="shirt-outline" size={64} color={COLORS.icon} />
-                        </View>
-                      )}
-                    </View>
-                  ))}
-                </ScrollView>
-
-                {images.length > 1 && (
-                  <View style={styles.imageCounter}>
-                    <Text style={styles.imageCounterText}>
-                      {currentImageIndex + 1}/{images.length}
-                    </Text>
+              <View style={styles.imageContainer}>
+                {imageUri ? (
+                  <Image
+                    source={{ uri: imageUri }}
+                    style={styles.image}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <View style={styles.imagePlaceholder}>
+                    <Ionicons
+                      name="shirt-outline"
+                      size={64}
+                      color={COLORS.icon}
+                    />
                   </View>
                 )}
               </View>
@@ -229,14 +283,31 @@ export default function ClothingDetailScreen({ navigation, route }) {
               <Text style={styles.title}>{prenda.title}</Text>
 
               <View style={styles.buttonRow}>
-                <TouchableOpacity style={styles.editButton} onPress={handleEdit}>
-                  <Ionicons name="pencil-outline" size={18} color={COLORS.buttonDark} />
+                <TouchableOpacity
+                  style={styles.editButton}
+                  onPress={handleEdit}
+                  disabled={deleting}
+                >
+                  <Ionicons
+                    name="pencil-outline"
+                    size={18}
+                    color={COLORS.buttonDark}
+                  />
                   <Text style={styles.editButtonText}>Editar</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+                <TouchableOpacity
+                  style={[
+                    styles.deleteButton,
+                    deleting && styles.buttonDisabled,
+                  ]}
+                  onPress={handleDelete}
+                  disabled={deleting}
+                >
                   <Ionicons name="trash-outline" size={18} color="#FFFFFF" />
-                  <Text style={styles.deleteButtonText}>Eliminar</Text>
+                  <Text style={styles.deleteButtonText}>
+                    {deleting ? 'Eliminando...' : 'Eliminar'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -244,29 +315,72 @@ export default function ClothingDetailScreen({ navigation, route }) {
             {/* TARJETA DE DATOS */}
             <View style={styles.rightColumn}>
               <View style={styles.infoCard}>
-                {infoRows.map((row, index) => (
-                  <View
-                    key={row.label}
-                    style={[
-                      styles.infoRow,
-                      index === infoRows.length - 1 && styles.infoRowLast,
-                    ]}
-                  >
+                {infoRows.map((row) => (
+                  <View key={row.label} style={styles.infoRow}>
                     <View style={styles.infoLabelContainer}>
                       <View style={styles.infoIconCircle}>
-                        <Ionicons name={row.icon} size={16} color={COLORS.icon} />
+                        <Ionicons
+                          name={row.icon}
+                          size={16}
+                          color={COLORS.icon}
+                        />
                       </View>
                       <Text style={styles.infoLabel}>{row.label}</Text>
                     </View>
-                    <Text style={styles.infoValue}>{row.value}</Text>
+
+                    <View style={styles.infoValueWrap}>
+                      {!!row.colorHex && (
+                        <View
+                          style={[
+                            styles.colorDot,
+                            { backgroundColor: row.colorHex },
+                          ]}
+                        />
+                      )}
+
+                      <Text
+                        style={[
+                          styles.infoValue,
+                          !row.value && styles.infoValueEmpty,
+                        ]}
+                      >
+                        {row.value || 'Sin especificar'}
+                      </Text>
+                    </View>
                   </View>
                 ))}
+
+                {/* DESCRIPCIÓN: bloque de ancho completo */}
+                <View style={styles.descriptionBlock}>
+                  <View style={styles.infoLabelContainer}>
+                    <View style={styles.infoIconCircle}>
+                      <Ionicons
+                        name="document-text-outline"
+                        size={16}
+                        color={COLORS.icon}
+                      />
+                    </View>
+                    <Text style={styles.infoLabel}>Descripción</Text>
+                  </View>
+
+                  <Text
+                    style={[
+                      styles.descriptionText,
+                      !description && styles.infoValueEmpty,
+                    ]}
+                  >
+                    {description || 'Sin descripción'}
+                  </Text>
+                </View>
               </View>
             </View>
 
           </View>
 
-          <TouchableOpacity style={styles.backLinkButton} onPress={handleGoBack}>
+          <TouchableOpacity
+            style={styles.backLinkButton}
+            onPress={handleGoBack}
+          >
             <Ionicons name="arrow-back" size={16} color={COLORS.primary} />
             <Text style={styles.backLinkText}>Volver</Text>
           </TouchableOpacity>
@@ -310,15 +424,12 @@ const styles = StyleSheet.create({
     maxWidth: 480,
     flexGrow: 1,
   },
-  galleryContainer: {
+  imageContainer: {
     width: '100%',
     height: 320,
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#F1EDF7',
-  },
-  imageSlide: {
-    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -332,20 +443,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#F1EDF7',
-  },
-  imageCounter: {
-    position: 'absolute',
-    bottom: 12,
-    right: 12,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  imageCounterText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontFamily: 'Poppins_600SemiBold',
   },
   title: {
     fontSize: 22,
@@ -375,13 +472,10 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#F0EAF8',
-  },
-  infoRowLast: {
-    borderBottomWidth: 0,
   },
   infoLabelContainer: {
     flexDirection: 'row',
@@ -403,13 +497,43 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_400Regular',
     color: COLORS.textLight,
   },
+  infoValueWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexShrink: 1,
+    maxWidth: '55%',
+    gap: 8,
+  },
+  colorDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#D7D1DD',
+  },
   infoValue: {
     fontSize: 14,
     fontFamily: 'Poppins_600SemiBold',
     color: COLORS.textDark,
     textAlign: 'right',
     flexShrink: 1,
-    maxWidth: '55%',
+  },
+  infoValueEmpty: {
+    fontFamily: 'Poppins_400Regular',
+    color: COLORS.textLight,
+    fontStyle: 'italic',
+  },
+  descriptionBlock: {
+    paddingVertical: 16,
+  },
+  descriptionText: {
+    width: '100%',
+    marginTop: 10,
+    fontSize: 14,
+    lineHeight: 21,
+    fontFamily: 'Poppins_400Regular',
+    color: COLORS.textDark,
   },
   editButton: {
     flex: 1,
@@ -437,6 +561,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: COLORS.buttonDark,
     gap: 8,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   deleteButtonText: {
     color: '#FFFFFF',

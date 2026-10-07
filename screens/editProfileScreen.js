@@ -9,6 +9,7 @@ import {
   TextInput,
   Alert,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
@@ -21,7 +22,12 @@ import { OutfitScreenLayout } from '../navigation/MainTabNavigator';
 
 
 // ============================================================
-// PANTALLA
+// PANTALLA (TODO EN UNA SOLA VISTA)
+//
+// El contenido está compactado y centrado para que entre
+// completo sin scrollear. El ScrollView queda solo como
+// seguro: si aparece el teclado en un celular chico, se puede
+// desplazar; si no, no se mueve.
 // ============================================================
 
 export default function EditProfileScreen({ navigation, route }) {
@@ -34,7 +40,8 @@ export default function EditProfileScreen({ navigation, route }) {
   const [name, setName] = useState(user?.name || '');
   const [lastname, setLastname] = useState(user?.lastname || '');
   const [email, setEmail] = useState(user?.email || '');
-  const [password, setPassword] = useState(user?.password || '');
+  const [password, setPassword] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -94,6 +101,10 @@ export default function EditProfileScreen({ navigation, route }) {
     try {
       setLoading(true);
 
+      // ------------------------------------------------------
+      // 1. ACTUALIZAR DATOS DEL PERFIL
+      // ------------------------------------------------------
+
       const profileResult = await updateUserProfile(user.id, {
         name: cleanName,
         lastname: cleanLastname,
@@ -114,20 +125,52 @@ export default function EditProfileScreen({ navigation, route }) {
         throw new Error(profileResult?.error || 'PROFILE_ERROR');
       }
 
-      const oldPassword = user?.password || '';
-
-      if (cleanPassword && cleanPassword !== oldPassword) {
-        await resetUserPassword(cleanEmail, cleanPassword);
-      }
-
       const updatedUser = {
         ...user,
         id: user.id,
         name: cleanName,
         lastname: cleanLastname,
         email: cleanEmail,
-        ...(cleanPassword ? { password: cleanPassword } : {}),
       };
+
+      // ------------------------------------------------------
+      // 2. CAMBIAR CONTRASEÑA SOLO SI EL USUARIO INGRESÓ UNA
+      // ------------------------------------------------------
+
+      if (cleanPassword) {
+        const pwdResult = await resetUserPassword(
+          cleanEmail,
+          cleanPassword,
+          currentPassword
+        );
+
+        // El perfil YA fue guardado: si falla la contraseña
+        // no se informa que falló todo.
+        if (!pwdResult?.success) {
+          Alert.alert(
+            'Perfil actualizado',
+            pwdResult?.message === 'INVALID_CURRENT_PASSWORD'
+              ? 'Tus datos del perfil se guardaron correctamente, pero la contraseña no se pudo cambiar porque la contraseña actual no es correcta.'
+              : 'Tus datos del perfil se guardaron correctamente, pero no se pudo cambiar la contraseña.',
+            [
+              {
+                text: 'Aceptar',
+                onPress: () => {
+                  navigation.navigate('Profile', {
+                    user: updatedUser,
+                  });
+                },
+              },
+            ]
+          );
+
+          return;
+        }
+      }
+
+      // ------------------------------------------------------
+      // 3. TODO GUARDADO
+      // ------------------------------------------------------
 
       Alert.alert(
         'Perfil actualizado',
@@ -136,7 +179,9 @@ export default function EditProfileScreen({ navigation, route }) {
           {
             text: 'Aceptar',
             onPress: () => {
-              navigation.navigate('Profile', { user: updatedUser });
+              navigation.navigate('Profile', {
+                user: updatedUser,
+              });
             },
           },
         ]
@@ -169,6 +214,8 @@ export default function EditProfileScreen({ navigation, route }) {
           isDesktop && styles.scrollContentDesktop,
         ]}
         showsVerticalScrollIndicator={false}
+        bounces={false}
+        keyboardShouldPersistTaps="handled"
       >
         <View style={styles.formContainer}>
 
@@ -176,21 +223,28 @@ export default function EditProfileScreen({ navigation, route }) {
           <View style={styles.formCard}>
             <Text style={styles.sectionTitle}>Datos personales</Text>
 
-            <ProfileInput
-              label="Nombre"
-              icon="person-outline"
-              value={name}
-              onChangeText={setName}
-              placeholder="Ingresá tu nombre"
-            />
+            {/* NOMBRE + APELLIDO EN LA MISMA FILA */}
+            <View style={styles.row}>
+              <View style={styles.rowItem}>
+                <ProfileInput
+                  label="Nombre"
+                  icon="person-outline"
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Tu nombre"
+                />
+              </View>
 
-            <ProfileInput
-              label="Apellido"
-              icon="person-outline"
-              value={lastname}
-              onChangeText={setLastname}
-              placeholder="Ingresá tu apellido"
-            />
+              <View style={styles.rowItem}>
+                <ProfileInput
+                  label="Apellido"
+                  icon="person-outline"
+                  value={lastname}
+                  onChangeText={setLastname}
+                  placeholder="Tu apellido"
+                />
+              </View>
+            </View>
 
             <ProfileInput
               label="Correo electrónico"
@@ -203,26 +257,39 @@ export default function EditProfileScreen({ navigation, route }) {
             />
 
             <ProfileInput
-              label="Contraseña"
+              label="Nueva contraseña (opcional)"
               icon="lock-closed-outline"
               value={password}
               onChangeText={setPassword}
-              placeholder="Ingresá tu contraseña"
+              placeholder="Dejá vacío para no cambiarla"
               secureTextEntry={!showPassword}
               rightIcon={showPassword ? 'eye-off-outline' : 'eye-outline'}
               onRightPress={() => setShowPassword(!showPassword)}
+              autoCapitalize="none"
             />
+
+            {Platform.OS === 'web' && !!password.trim() && (
+              <ProfileInput
+                label="Contraseña actual"
+                icon="lock-closed-outline"
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+                placeholder="Ingresá tu contraseña actual"
+                secureTextEntry
+                autoCapitalize="none"
+              />
+            )}
           </View>
 
           {/* ACCIONES */}
-          <View style={styles.actions}>
+          <View style={[styles.actions, isDesktop && styles.actionsDesktop]}>
             <TouchableOpacity
               style={styles.primaryButton}
               activeOpacity={0.85}
               disabled={loading}
               onPress={handleSave}
             >
-              <Ionicons name="checkmark-outline" size={20} color="#FFFFFF" />
+              <Ionicons name="checkmark-outline" size={19} color="#FFFFFF" />
               <Text style={styles.primaryButtonText}>
                 {loading ? 'Guardando...' : 'Guardar cambios'}
               </Text>
@@ -250,15 +317,28 @@ export default function EditProfileScreen({ navigation, route }) {
 // ============================================================
 
 function ProfileInput({
-  label, icon, value, onChangeText, placeholder,
-  keyboardType, secureTextEntry, autoCapitalize, rightIcon, onRightPress,
+  label,
+  icon,
+  value,
+  onChangeText,
+  placeholder,
+  keyboardType,
+  secureTextEntry,
+  autoCapitalize,
+  rightIcon,
+  onRightPress,
 }) {
   return (
     <View style={styles.inputGroup}>
       <Text style={styles.inputLabel}>{label}</Text>
 
       <View style={styles.inputContainer}>
-        <Ionicons name={icon} size={20} color={COLORS.primary} style={styles.inputIcon} />
+        <Ionicons
+          name={icon}
+          size={18}
+          color={COLORS.primary}
+          style={styles.inputIcon}
+        />
 
         <TextInput
           style={styles.input}
@@ -277,7 +357,11 @@ function ProfileInput({
             activeOpacity={0.7}
             onPress={onRightPress}
           >
-            <Ionicons name={rightIcon} size={21} color={COLORS.textLight} />
+            <Ionicons
+              name={rightIcon}
+              size={20}
+              color={COLORS.textLight}
+            />
           </TouchableOpacity>
         )}
       </View>
@@ -297,17 +381,18 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
+  // flexGrow + center: el formulario queda centrado y,
+  // como entra completo, no hay nada que scrollear.
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 20,
-    paddingTop: 25,
-    paddingBottom: 45,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
   },
 
   scrollContentDesktop: {
-    alignItems: 'center',
     paddingHorizontal: 40,
-    paddingTop: 35,
   },
 
   formContainer: {
@@ -318,8 +403,8 @@ const styles = StyleSheet.create({
   formCard: {
     width: '100%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 24,
+    borderRadius: 16,
+    padding: 16,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08,
@@ -328,26 +413,36 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    fontSize: 19,
+    fontSize: 16,
     color: COLORS.textDark,
     fontFamily: 'Poppins_600SemiBold',
-    marginBottom: 20,
+    marginBottom: 10,
+  },
+
+  row: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+
+  rowItem: {
+    flex: 1,
+    minWidth: 0,
   },
 
   inputGroup: {
     width: '100%',
-    marginBottom: 17,
+    marginBottom: 8,
   },
 
   inputLabel: {
     fontSize: 12,
     color: COLORS.textDark,
     fontFamily: 'Poppins_500Medium',
-    marginBottom: 7,
+    marginBottom: 4,
   },
 
   inputContainer: {
-    minHeight: 50,
+    minHeight: 44,
     width: '100%',
     backgroundColor: COLORS.inputBg,
     borderWidth: 1,
@@ -358,35 +453,40 @@ const styles = StyleSheet.create({
   },
 
   inputIcon: {
-    marginLeft: 14,
-    marginRight: 9,
+    marginLeft: 12,
+    marginRight: 8,
   },
 
   input: {
     flex: 1,
-    minHeight: 48,
+    minWidth: 0,
+    minHeight: 42,
     color: COLORS.textDark,
     fontSize: 13,
     fontFamily: 'Poppins_400Regular',
-    paddingVertical: 8,
+    paddingVertical: 6,
   },
 
   rightIconButton: {
-    width: 45,
-    height: 45,
+    width: 42,
+    height: 42,
     justifyContent: 'center',
     alignItems: 'center',
   },
 
   actions: {
     width: '100%',
-    marginTop: 22,
-    gap: 12,
+    marginTop: 12,
+    gap: 8,
+  },
+
+  actionsDesktop: {
+    flexDirection: 'row',
   },
 
   primaryButton: {
-    minHeight: 52,
-    width: '100%',
+    minHeight: 46,
+    flex: 1,
     borderRadius: 14,
     backgroundColor: COLORS.buttonDark,
     flexDirection: 'row',
@@ -402,8 +502,8 @@ const styles = StyleSheet.create({
   },
 
   secondaryButton: {
-    minHeight: 52,
-    width: '100%',
+    minHeight: 46,
+    flex: 1,
     borderRadius: 14,
     backgroundColor: '#FFFFFF',
     borderWidth: 1.5,

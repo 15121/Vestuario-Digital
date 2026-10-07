@@ -1,16 +1,23 @@
 // ============================================================
 // services/database.js
 // Base de datos de Vestuario Digital
-// Web: localStorage
-// Móvil: SQLite
+//
+// Web (PC)  -> servidor Node + MySQL (ver services/api.js)
+// Móvil     -> SQLite local (expo-sqlite)
+//
+// Los nombres de las funciones y lo que devuelven son iguales
+// en ambas plataformas, así las pantallas no cambian.
 // ============================================================
 
 import { Platform } from 'react-native';
+import { api, setAuthToken, isSessionExpiredError } from './api';
+
+const IS_WEB = Platform.OS === 'web';
 
 let db = null;
 
 // ============================================================
-// CONFIGURACIÓN ROOT
+// CONFIGURACIÓN ROOT (solo la usa SQLite; en web lo hace el servidor)
 // ============================================================
 
 const ROOT_EMAIL = 'cazoncontreras.iara@tecnica7.edu.ar';
@@ -19,17 +26,176 @@ const ROOT_NAME = 'Iara';
 const ROOT_LASTNAME = 'Cazón';
 
 // ============================================================
-// REGISTRO DE ACTIVIDAD ADMINISTRATIVA (helper interno)
-// Guarda una entrada en adminRequests. Está envuelto en
-// try/catch: si algo falla, el flujo original NO se ve afectado.
+// HELPERS
 // ============================================================
 
-const logAdminRequest = (
-  userId,
-  type,
-  user,
-  status = 'resolved'
+// Devuelve la conexión SQLite (la abre si hace falta)
+const getDb = () => {
+  if (!db) {
+    initDatabase();
+  }
+  return db;
+};
+
+// Ejecuta un SELECT y devuelve la primera fila
+const getFirst = (sql, params = []) =>
+  getDb().prepareSync(sql).executeSync(params).getFirstSync();
+
+// Ejecuta un SELECT y devuelve todas las filas
+const getAll = (sql, params = []) =>
+  getDb().prepareSync(sql).executeSync(params).getAllSync();
+
+// Ejecuta INSERT / UPDATE / DELETE
+const run = (sql, params = []) =>
+  getDb().prepareSync(sql).executeSync(params);
+
+const normalizeUser = (user) =>
+  user && {
+    ...user,
+    role: user.role || 'user',
+    status: user.status || 'active',
+  };
+
+// ------------------------------------------------------------
+// Sesión vencida (web)
+// api.js ya avisó al handler global (logout). Acá solo evitamos
+// devolver [] / null como si el usuario no tuviera datos.
+// ------------------------------------------------------------
+const rethrowIfSessionExpired = (error) => {
+  if (isSessionExpiredError(error)) {
+    throw error;
+  }
+};
+
+// ------------------------------------------------------------
+// Fechas y estado de maletas
+// El estado y "activa" SIEMPRE se calculan por fechas
+// (misma regla que suitcasesScreen y packingModeScreen).
+// activa = todavía no terminó (Planificada o En curso).
+// ------------------------------------------------------------
+const pad2 = (n) => String(n).padStart(2, '0');
+
+export const todayString = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export const computeSuitcaseStatus = (
+  fechaInicio,
+  fechaFin,
+  fallback = 'Planificada'
 ) => {
+  const start = String(fechaInicio || '').slice(0, 10);
+  const end = String(fechaFin || '').slice(0, 10);
+
+  if (!DATE_ONLY_RE.test(start) || !DATE_ONLY_RE.test(end)) {
+    return fallback;
+  }
+
+  const today = todayString();
+
+  if (today < start) return 'Planificada';
+  if (today > end) return 'Finalizada';
+  return 'En curso';
+};
+
+// Condición SQL de "maleta activa" (parámetro: fecha de hoy YYYY-MM-DD)
+const ACTIVE_SUITCASE_SQL =
+  "(fechaFin IS NULL OR fechaFin = '' OR fechaFin >= ?)";
+
+// ------------------------------------------------------------
+// Referencias a prendas dentro de outfits y maletas (SQLite)
+// ------------------------------------------------------------
+const safeParse = (text, fallback) => {
+  try {
+    return text ? JSON.parse(text) : fallback;
+  } catch (error) {
+    return fallback;
+  }
+};
+
+const sameId = (a, b) =>
+  a !== null && a !== undefined && String(a) === String(b);
+
+// Devuelve los items del outfit sin la prenda indicada
+const stripClothingFromOutfitItems = (items, clothingId) => {
+  const result =
+    items && typeof items === 'object' && !Array.isArray(items)
+      ? { ...items }
+      : {};
+
+  let changed = false;
+
+  ['superior', 'inferior', 'calzado'].forEach((key) => {
+    if (sameId(result[key], clothingId)) {
+      result[key] = null;
+      changed = true;
+    }
+  });
+
+  if (Array.isArray(result.accesorios)) {
+    const filtered = result.accesorios.filter(
+      (id) => !sameId(id, clothingId)
+    );
+
+    if (filtered.length !== result.accesorios.length) {
+      result.accesorios = filtered;
+      changed = true;
+    }
+  }
+
+  return { items: result, changed };
+};
+
+// Busca los outfits y maletas del dueño que usan la prenda
+const findClothingReferences = (clothing) => {
+  const outfits = [];
+  const suitcases = [];
+
+  getAll('SELECT id, name, items FROM outfits WHERE userId = ?', [
+    clothing.userId,
+  ]).forEach((row) => {
+    const { items, changed } = stripClothingFromOutfitItems(
+      safeParse(row.items, {}),
+      clothing.id
+    );
+
+    if (changed) {
+      outfits.push({ id: row.id, name: row.name, items });
+    }
+  });
+
+  getAll('SELECT id, destino, items FROM suitcases WHERE userId = ?', [
+    clothing.userId,
+  ]).forEach((row) => {
+    const current = safeParse(row.items, []);
+    const list = Array.isArray(current) ? current : [];
+    const filtered = list.filter(
+      (item) => !sameId(item?.clothingId, clothing.id)
+    );
+
+    if (filtered.length !== list.length) {
+      suitcases.push({ id: row.id, destino: row.destino, items: filtered });
+    }
+  });
+
+  return { outfits, suitcases };
+};
+
+// El servidor devuelve { ...usuario, token }. Guardamos el token
+// en api.js y devolvemos solo el usuario.
+const acceptSession = (session) => {
+  if (!session) return session;
+  const { token, ...user } = session;
+  if (token) setAuthToken(token);
+  return user;
+};
+
+// Registro de actividad administrativa (solo SQLite).
+// Si falla, el flujo original NO se ve afectado.
+const logAdminRequest = (userId, type, user, status = 'resolved') => {
   try {
     const fullName = `${user?.name || ''} ${user?.lastname || ''}`.trim();
     const email = user?.email || '';
@@ -48,370 +214,189 @@ const logAdminRequest = (
 // ============================================================
 
 export const initDatabase = () => {
-  if (Platform.OS === 'web') {
-    if (!localStorage.getItem('users')) {
-      localStorage.setItem('users', JSON.stringify([]));
-    }
-
-    if (!localStorage.getItem('clothes')) {
-      localStorage.setItem('clothes', JSON.stringify([]));
-    }
-
-    if (!localStorage.getItem('outfits')) {
-      localStorage.setItem('outfits', JSON.stringify([]));
-    }
-
-    if (!localStorage.getItem('history')) {
-      localStorage.setItem('history', JSON.stringify([]));
-    }
-
-    if (!localStorage.getItem('suitcases')) {
-      localStorage.setItem('suitcases', JSON.stringify([]));
-    }
-
-    if (!localStorage.getItem('adminRequests')) {
-      localStorage.setItem('adminRequests', JSON.stringify([]));
-    }
-
-    ensureRootUser();
-
-    console.log('Base de datos Web (localStorage) inicializada.');
-  } else {
-    try {
-      const SQLite = require('expo-sqlite');
-
-      db = SQLite.openDatabaseSync('vestuario.db');
-
-      db.execSync(`
-        CREATE TABLE IF NOT EXISTS users (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT,
-          lastname TEXT,
-          email TEXT UNIQUE,
-          password TEXT,
-          role TEXT DEFAULT 'user',
-          status TEXT DEFAULT 'active',
-          createdAt TEXT,
-          lastAccess TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS clothes (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          userId INTEGER,
-          title TEXT,
-          category TEXT,
-          imageUri TEXT,
-          color TEXT,
-          season TEXT,
-          ocasion TEXT,
-          description TEXT,
-          createdAt TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS outfits (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          userId INTEGER,
-          name TEXT,
-          description TEXT,
-          items TEXT,
-          createdAt TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS history (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          userId INTEGER,
-          outfitId INTEGER,
-          outfitName TEXT,
-          imageUri TEXT,
-          note TEXT,
-          date TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS suitcases (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          userId INTEGER,
-          destino TEXT,
-          fechaInicio TEXT,
-          fechaFin TEXT,
-          estado TEXT,
-          items TEXT,
-          active INTEGER,
-          createdAt TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS adminRequests (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          userId INTEGER,
-          type TEXT,
-          date TEXT,
-          status TEXT,
-          details TEXT
-        );
-      `);
-
-      // --------------------------------------------------------
-      // MIGRACIÓN USERS
-      // --------------------------------------------------------
-
-      const usersNewColumns = [
-        ['role', "TEXT DEFAULT 'user'"],
-        ['status', "TEXT DEFAULT 'active'"],
-        ['createdAt', 'TEXT'],
-        ['lastAccess', 'TEXT'],
-      ];
-
-      usersNewColumns.forEach(([column, definition]) => {
-        try {
-          db.execSync(
-            `ALTER TABLE users ADD COLUMN ${column} ${definition};`
-          );
-        } catch (e) {
-          // La columna ya existe.
-        }
-      });
-
-      // --------------------------------------------------------
-      // MIGRACIÓN CLOTHES
-      // --------------------------------------------------------
-
-      const clothesNewColumns = [
-        'color',
-        'season',
-        'ocasion',
-        'description',
-        'createdAt',
-      ];
-
-      clothesNewColumns.forEach((column) => {
-        try {
-          db.execSync(
-            `ALTER TABLE clothes ADD COLUMN ${column} TEXT;`
-          );
-        } catch (e) {
-          // La columna ya existe.
-        }
-      });
-
-      // --------------------------------------------------------
-      // MIGRACIÓN OUTFITS
-      // --------------------------------------------------------
-
-      const outfitsNewColumns = [
-        'description',
-        'createdAt',
-      ];
-
-      outfitsNewColumns.forEach((column) => {
-        try {
-          db.execSync(
-            `ALTER TABLE outfits ADD COLUMN ${column} TEXT;`
-          );
-        } catch (e) {
-          // La columna ya existe.
-        }
-      });
-
-      // --------------------------------------------------------
-      // MIGRACIÓN HISTORY (instalaciones viejas)
-      // --------------------------------------------------------
-
-      const historyNewColumns = [
-        ['outfitId', 'INTEGER'],
-        ['outfitName', 'TEXT'],
-        ['imageUri', 'TEXT'],
-        ['note', 'TEXT'],
-        ['date', 'TEXT'],
-      ];
-
-      historyNewColumns.forEach(([column, definition]) => {
-        try {
-          db.execSync(
-            `ALTER TABLE history ADD COLUMN ${column} ${definition};`
-          );
-        } catch (e) {
-          // La columna ya existe.
-        }
-      });
-
-      // --------------------------------------------------------
-      // MIGRACIÓN SUITCASES (instalaciones viejas)
-      // --------------------------------------------------------
-
-      const suitcasesNewColumns = [
-        ['destino', 'TEXT'],
-        ['fechaInicio', 'TEXT'],
-        ['fechaFin', 'TEXT'],
-        ['estado', 'TEXT'],
-        ['items', 'TEXT'],
-        ['active', 'INTEGER DEFAULT 1'],
-        ['createdAt', 'TEXT'],
-      ];
-
-      suitcasesNewColumns.forEach(([column, definition]) => {
-        try {
-          db.execSync(
-            `ALTER TABLE suitcases ADD COLUMN ${column} ${definition};`
-          );
-        } catch (e) {
-          // La columna ya existe.
-        }
-      });
-
-      ensureRootUser();
-
-      console.log('Base de datos SQLite inicializada en Móvil.');
-    } catch (e) {
-      console.log('Error al inicializar SQLite:', e);
-    }
-  }
-};
-
-// ============================================================
-// ASEGURAR CUENTA ROOT
-// ============================================================
-
-export const ensureRootUser = () => {
-  const now = new Date().toISOString();
-
-  if (Platform.OS === 'web') {
-    const users = JSON.parse(
-      localStorage.getItem('users') || '[]'
-    );
-
-    const rootIndex = users.findIndex(
-      (user) =>
-        (user.email || '').toLowerCase() ===
-        ROOT_EMAIL.toLowerCase()
-    );
-
-    if (rootIndex === -1) {
-      users.push({
-        id: Date.now(),
-        name: ROOT_NAME,
-        lastname: ROOT_LASTNAME,
-        email: ROOT_EMAIL,
-        password: ROOT_INITIAL_PASSWORD,
-        role: 'root',
-        status: 'active',
-        createdAt: now,
-        lastAccess: null,
-      });
-    } else {
-      users[rootIndex] = {
-        ...users[rootIndex],
-        name: ROOT_NAME,
-        lastname: ROOT_LASTNAME,
-        email: ROOT_EMAIL,
-        password: ROOT_INITIAL_PASSWORD,
-        role: 'root',
-        status: 'active',
-        createdAt:
-          users[rootIndex].createdAt || now,
-      };
-    }
-
-    // Garantiza que no haya otro Root (igual que en SQLite).
-    const finalRootIndex = users.findIndex(
-      (user) =>
-        (user.email || '').toLowerCase() ===
-        ROOT_EMAIL.toLowerCase()
-    );
-
-    users.forEach((user, index) => {
-      if (
-        index !== finalRootIndex &&
-        user.role === 'root'
-      ) {
-        user.role = 'user';
-      }
-    });
-
-    localStorage.setItem(
-      'users',
-      JSON.stringify(users)
-    );
-
-    return;
-  }
-
-  if (!db) {
+  // En la web la base vive en MySQL y la inicializa el servidor.
+  if (IS_WEB) {
+    console.log('Web: se usa el servidor MySQL (sin inicialización local).');
     return;
   }
 
   try {
-    const rootStatement = db.prepareSync(
-      'SELECT * FROM users WHERE LOWER(email) = ?'
-    );
+    const SQLite = require('expo-sqlite');
 
-    const root = rootStatement
-      .executeSync([ROOT_EMAIL.toLowerCase()])
-      .getFirstSync();
+    db = SQLite.openDatabaseSync('vestuario.db');
+
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        lastname TEXT,
+        email TEXT UNIQUE,
+        password TEXT,
+        role TEXT DEFAULT 'user',
+        status TEXT DEFAULT 'active',
+        createdAt TEXT,
+        lastAccess TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS clothes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId INTEGER,
+        title TEXT,
+        category TEXT,
+        imageUri TEXT,
+        color TEXT,
+        season TEXT,
+        ocasion TEXT,
+        description TEXT,
+        createdAt TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS outfits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId INTEGER,
+        name TEXT,
+        description TEXT,
+        items TEXT,
+        createdAt TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId INTEGER,
+        outfitId INTEGER,
+        outfitName TEXT,
+        imageUri TEXT,
+        note TEXT,
+        date TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS suitcases (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId INTEGER,
+        destino TEXT,
+        fechaInicio TEXT,
+        fechaFin TEXT,
+        estado TEXT,
+        items TEXT,
+        active INTEGER,
+        createdAt TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS adminRequests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId INTEGER,
+        type TEXT,
+        date TEXT,
+        status TEXT,
+        details TEXT
+      );
+    `);
+
+    // Migraciones para instalaciones viejas
+    const migrations = [
+      ['users', 'role', "TEXT DEFAULT 'user'"],
+      ['users', 'status', "TEXT DEFAULT 'active'"],
+      ['users', 'createdAt', 'TEXT'],
+      ['users', 'lastAccess', 'TEXT'],
+
+      ['clothes', 'color', 'TEXT'],
+      ['clothes', 'season', 'TEXT'],
+      ['clothes', 'ocasion', 'TEXT'],
+      ['clothes', 'description', 'TEXT'],
+      ['clothes', 'createdAt', 'TEXT'],
+
+      ['outfits', 'description', 'TEXT'],
+      ['outfits', 'createdAt', 'TEXT'],
+
+      ['history', 'outfitId', 'INTEGER'],
+      ['history', 'outfitName', 'TEXT'],
+      ['history', 'imageUri', 'TEXT'],
+      ['history', 'note', 'TEXT'],
+      ['history', 'date', 'TEXT'],
+
+      ['suitcases', 'destino', 'TEXT'],
+      ['suitcases', 'fechaInicio', 'TEXT'],
+      ['suitcases', 'fechaFin', 'TEXT'],
+      ['suitcases', 'estado', 'TEXT'],
+      ['suitcases', 'items', 'TEXT'],
+      ['suitcases', 'active', 'INTEGER DEFAULT 1'],
+      ['suitcases', 'createdAt', 'TEXT'],
+    ];
+
+    migrations.forEach(([table, column, definition]) => {
+      try {
+        db.execSync(
+          `ALTER TABLE ${table} ADD COLUMN ${column} ${definition};`
+        );
+      } catch (e) {
+        // La columna ya existe.
+      }
+    });
+
+    ensureRootUser();
+
+    console.log('Base de datos SQLite inicializada en Móvil.');
+  } catch (e) {
+    console.log('Error al inicializar SQLite:', e);
+  }
+};
+
+// ============================================================
+// ASEGURAR CUENTA ROOT (solo SQLite)
+// ============================================================
+
+export const ensureRootUser = () => {
+  if (IS_WEB || !db) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+
+  try {
+    const root = getFirst(
+      'SELECT * FROM users WHERE LOWER(email) = ?',
+      [ROOT_EMAIL.toLowerCase()]
+    );
 
     let rootId;
 
     if (!root) {
-      const insertStatement = db.prepareSync(`
-        INSERT INTO users
-        (
-          name,
-          lastname,
-          email,
-          password,
-          role,
-          status,
-          createdAt,
-          lastAccess
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-
-      const result = insertStatement.executeSync([
-        ROOT_NAME,
-        ROOT_LASTNAME,
-        ROOT_EMAIL,
-        ROOT_INITIAL_PASSWORD,
-        'root',
-        'active',
-        now,
-        null,
-      ]);
+      const result = run(
+        `INSERT INTO users
+         (name, lastname, email, password, role, status, createdAt, lastAccess)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          ROOT_NAME,
+          ROOT_LASTNAME,
+          ROOT_EMAIL,
+          ROOT_INITIAL_PASSWORD,
+          'root',
+          'active',
+          now,
+          null,
+        ]
+      );
 
       rootId = result.lastInsertRowId;
     } else {
       rootId = root.id;
 
-      db.prepareSync(`
-        UPDATE users
-        SET
-          name = ?,
-          lastname = ?,
-          email = ?,
-          password = ?,
-          role = 'root',
-          status = 'active'
-        WHERE id = ?
-      `).executeSync([
-        ROOT_NAME,
-        ROOT_LASTNAME,
-        ROOT_EMAIL,
-        ROOT_INITIAL_PASSWORD,
-        rootId,
-      ]);
+      run(
+        `UPDATE users
+         SET name = ?, lastname = ?, email = ?,
+             role = 'root', status = 'active'
+         WHERE id = ?`,
+        [ROOT_NAME, ROOT_LASTNAME, ROOT_EMAIL, rootId]
+      );
     }
 
     // Garantiza que no haya otro Root.
-    db.prepareSync(`
-      UPDATE users
-      SET role = 'user'
-      WHERE role = 'root'
-      AND id != ?
-    `).executeSync([rootId]);
-
-  } catch (error) {
-    console.log(
-      'Error al asegurar cuenta Root:',
-      error
+    run(
+      `UPDATE users SET role = 'user' WHERE role = 'root' AND id != ?`,
+      [rootId]
     );
+  } catch (error) {
+    console.log('Error al asegurar cuenta Root:', error);
   }
 };
 
@@ -419,96 +404,36 @@ export const ensureRootUser = () => {
 // REGISTRAR USUARIO
 // ============================================================
 
-export const registerUser = async (
-  name,
-  lastname,
-  email,
-  password
-) => {
+export const registerUser = async (name, lastname, email, password) => {
+  if (IS_WEB) {
+    setAuthToken(null);
+    const session = await api('/auth/register', {
+      method: 'POST',
+      body: { name, lastname, email, password },
+    });
+    return acceptSession(session);
+  }
+
   const cleanEmail = email.trim().toLowerCase();
   const now = new Date().toISOString();
 
-  if (
-    cleanEmail === ROOT_EMAIL.toLowerCase()
-  ) {
+  if (cleanEmail === ROOT_EMAIL.toLowerCase()) {
     throw new Error('ROOT_EMAIL_RESERVED');
   }
 
-  if (Platform.OS === 'web') {
-    const users = JSON.parse(
-      localStorage.getItem('users') || '[]'
+  try {
+    const result = run(
+      `INSERT INTO users
+       (name, lastname, email, password, role, status, createdAt, lastAccess)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, lastname, cleanEmail, password, 'user', 'active', now, null]
     );
 
-    const existing = users.find(
-      (user) =>
-        (user.email || '').toLowerCase() ===
-        cleanEmail
-    );
-
-    if (existing) {
-      throw new Error('EMAIL_EXISTS');
-    }
-
-    const newUser = {
-      id: Date.now(),
+    logAdminRequest(result.lastInsertRowId, 'Registro de usuario', {
       name,
       lastname,
       email: cleanEmail,
-      password,
-      role: 'user',
-      status: 'active',
-      createdAt: now,
-      lastAccess: null,
-    };
-
-    users.push(newUser);
-
-    localStorage.setItem(
-      'users',
-      JSON.stringify(users)
-    );
-
-    logAdminRequest(newUser.id, 'Registro de usuario', newUser);
-
-    return newUser;
-  }
-
-  try {
-    if (!db) {
-      initDatabase();
-    }
-
-    const statement = db.prepareSync(`
-      INSERT INTO users
-      (
-        name,
-        lastname,
-        email,
-        password,
-        role,
-        status,
-        createdAt,
-        lastAccess
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const result = statement.executeSync([
-      name,
-      lastname,
-      cleanEmail,
-      password,
-      'user',
-      'active',
-      now,
-      null,
-    ]);
-
-    logAdminRequest(
-      result.lastInsertRowId,
-      'Registro de usuario',
-      { name, lastname, email: cleanEmail }
-    );
+    });
 
     return {
       id: result.lastInsertRowId,
@@ -520,21 +445,12 @@ export const registerUser = async (
       createdAt: now,
       lastAccess: null,
     };
-
   } catch (error) {
-    console.log(
-      '--- ERROR DETALLADO EN SQLITE CELULAR ---',
-      error
-    );
+    console.log('--- ERROR DETALLADO EN SQLITE CELULAR ---', error);
 
-    const errStr = String(
-      error?.message || error
-    );
+    const errStr = String(error?.message || error);
 
-    if (
-      errStr.includes('UNIQUE') ||
-      errStr.includes('CONSTRAINT')
-    ) {
+    if (errStr.includes('UNIQUE') || errStr.includes('CONSTRAINT')) {
       throw new Error('EMAIL_EXISTS');
     }
 
@@ -544,79 +460,35 @@ export const registerUser = async (
 
 // ============================================================
 // INICIAR SESIÓN
+// En web devuelve una Promesa; en móvil devuelve el usuario.
+// Usar siempre: await loginUser(...)
 // ============================================================
 
-export const loginUser = (
-  email,
-  password
-) => {
+export const loginUser = (email, password) => {
+  if (IS_WEB) {
+    setAuthToken(null);
+    return api('/auth/login', {
+      method: 'POST',
+      body: { email, password },
+    }).then(acceptSession);
+  }
+
   const cleanEmail = email.trim().toLowerCase();
   const now = new Date().toISOString();
 
-  if (Platform.OS === 'web') {
-    const users = JSON.parse(
-      localStorage.getItem('users') || '[]'
-    );
-
-    const index = users.findIndex(
-      (user) =>
-        (user.email || '').toLowerCase() ===
-          cleanEmail &&
-        user.password === password
-    );
-
-    if (index === -1) {
-      throw new Error('USER_NOT_FOUND');
-    }
-
-    const user = {
-      ...users[index],
-      role: users[index].role || 'user',
-      status:
-        users[index].status || 'active',
-      createdAt:
-        users[index].createdAt || null,
-      lastAccess: now,
-    };
-
-    if (user.status !== 'active') {
-      throw new Error('USER_INACTIVE');
-    }
-
-    users[index] = user;
-
-    localStorage.setItem(
-      'users',
-      JSON.stringify(users)
-    );
-
-    return user;
-  }
-
-  if (!db) {
-    initDatabase();
-  }
-
-  const statement = db.prepareSync(`
-    SELECT *
-    FROM users
-    WHERE LOWER(email) = ?
-    AND password = ?
-  `);
-
-  const result = statement.executeSync([
-    cleanEmail,
-    password,
-  ]);
-
-  const user = result.getFirstSync();
+  const user = getFirst(
+    'SELECT * FROM users WHERE LOWER(email) = ? AND password = ?',
+    [cleanEmail, password]
+  );
 
   if (!user) {
     throw new Error('USER_NOT_FOUND');
   }
 
+  const { password: _password, ...userWithoutPassword } = user;
+
   const normalizedUser = {
-    ...user,
+    ...userWithoutPassword,
     role: user.role || 'user',
     status: user.status || 'active',
     createdAt: user.createdAt || null,
@@ -627,19 +499,15 @@ export const loginUser = (
     throw new Error('USER_INACTIVE');
   }
 
-  db.prepareSync(`
-    UPDATE users
-    SET
-      role = ?,
-      status = ?,
-      lastAccess = ?
-    WHERE id = ?
-  `).executeSync([
-    normalizedUser.role,
-    normalizedUser.status,
-    normalizedUser.lastAccess,
-    normalizedUser.id,
-  ]);
+  run(
+    'UPDATE users SET role = ?, status = ?, lastAccess = ? WHERE id = ?',
+    [
+      normalizedUser.role,
+      normalizedUser.status,
+      normalizedUser.lastAccess,
+      normalizedUser.id,
+    ]
+  );
 
   return normalizedUser;
 };
@@ -648,741 +516,242 @@ export const loginUser = (
 // RESTABLECER CONTRASEÑA
 // ============================================================
 
-export const resetUserPassword = async (
-  email,
-  newPassword
-) => {
-  const cleanEmail = email.trim().toLowerCase();
-
-  if (Platform.OS === 'web') {
-    const users = JSON.parse(
-      localStorage.getItem('users') || '[]'
-    );
-
-    const userIndex = users.findIndex(
-      (user) =>
-        (user.email || '').toLowerCase() ===
-        cleanEmail
-    );
-
-    if (userIndex === -1) {
-      return {
-        success: false,
-        message: 'USER_NOT_FOUND',
-      };
+export const resetUserPassword = async (email, newPassword, currentPassword) => {
+  if (IS_WEB) {
+    try {
+      // Cambio de clave del usuario autenticado.
+      // Si entró con un código de recuperación, no hace falta la clave actual.
+      const result = await api('/auth/password', {
+        method: 'PUT',
+        body: { newPassword, currentPassword },
+      });
+      if (result?.token) setAuthToken(result.token);
+      return { success: true };
+    } catch (error) {
+      return { success: false, message: error.message };
     }
-
-    // Root no puede restablecer su contraseña
-    if (
-      users[userIndex].role === 'root' ||
-      (users[userIndex].email || '').toLowerCase() ===
-        ROOT_EMAIL.toLowerCase()
-    ) {
-      return {
-        success: false,
-        message: 'ROOT_PROTECTED',
-      };
-    }
-
-    users[userIndex].password =
-      newPassword;
-
-    logAdminRequest(
-      users[userIndex].id,
-      'Restablecer contraseña',
-      users[userIndex]
-    );
-
-    localStorage.setItem(
-      'users',
-      JSON.stringify(users)
-    );
-
-    return {
-      success: true,
-    };
   }
 
+  const cleanEmail = email.trim().toLowerCase();
+
   try {
-    if (!db) {
-      initDatabase();
-    }
-
-    const selectStatement = db.prepareSync(`
-      SELECT *
-      FROM users
-      WHERE LOWER(email) = ?
-    `);
-
-    const userResult =
-      selectStatement.executeSync([
-        cleanEmail,
-      ]);
-
-    const user =
-      userResult.getFirstSync();
+    const user = getFirst(
+      'SELECT * FROM users WHERE LOWER(email) = ?',
+      [cleanEmail]
+    );
 
     if (!user) {
-      return {
-        success: false,
-        message: 'USER_NOT_FOUND',
-      };
+      return { success: false, message: 'USER_NOT_FOUND' };
     }
 
-    // Root no puede restablecer su contraseña
     if (
       user.role === 'root' ||
-      (user.email || '').toLowerCase() ===
-        ROOT_EMAIL.toLowerCase()
+      (user.email || '').toLowerCase() === ROOT_EMAIL.toLowerCase()
     ) {
-      return {
-        success: false,
-        message: 'ROOT_PROTECTED',
-      };
+      return { success: false, message: 'ROOT_PROTECTED' };
     }
 
-    const updateStatement =
-      db.prepareSync(`
-        UPDATE users
-        SET password = ?
-        WHERE LOWER(email) = ?
-      `);
-
-    updateStatement.executeSync([
+    run('UPDATE users SET password = ? WHERE LOWER(email) = ?', [
       newPassword,
       cleanEmail,
     ]);
 
-    logAdminRequest(
-      user.id,
-      'Restablecer contraseña',
-      user
-    );
+    logAdminRequest(user.id, 'Restablecer contraseña', user);
 
-    return {
-      success: true,
-    };
-
+    return { success: true };
   } catch (error) {
-    return {
-      success: false,
-      message: error.message,
-    };
+    return { success: false, message: error.message };
   }
+};
+
+// ============================================================
+// RECUPERAR CONTRASEÑA (web): el servidor genera el código y envía el mail
+// ============================================================
+
+export const requestPasswordReset = async (email) => {
+  if (IS_WEB) {
+    try {
+      await api('/auth/forgot-password', { method: 'POST', body: { email } });
+      return { success: true };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+  return { success: false, message: 'NOT_SUPPORTED_ON_MOBILE' };
 };
 
 // ============================================================
 // ACTUALIZAR PERFIL
-// ============================================================
-//
-// Protección Root:
-// - Si el email cambia y el usuario es Root, se rechaza.
-// - Si el email nuevo es el reservado de Root, se rechaza.
-// Si el email NO cambia, todo funciona igual que antes.
+// Devuelve { success, error, message, user }
 // ============================================================
 
-export const updateUserProfile = async (
-  userId,
-  profileData
-) => {
-  const {
-    name,
-    lastname,
-    email,
-  } = profileData;
-
-  const cleanEmail = email
-    ? email.trim().toLowerCase()
-    : undefined;
-
-  if (Platform.OS === 'web') {
+export const updateUserProfile = async (userId, profileData) => {
+  if (IS_WEB) {
     try {
-      const users = JSON.parse(
-        localStorage.getItem('users') || '[]'
-      );
-
-      const userIndex =
-        users.findIndex(
-          (user) =>
-            String(user.id) === String(userId)
-        );
-
-      if (userIndex === -1) {
-        return {
-          success: false,
-          message: 'USER_NOT_FOUND',
-        };
-      }
-
-      const target = users[userIndex];
-
-      // Root no puede modificar ningún dato personal
-      if (
-        target.role === 'root' ||
-        (target.email || '').toLowerCase() ===
-          ROOT_EMAIL.toLowerCase()
-      ) {
-        return {
-          success: false,
-          message: 'ROOT_PROTECTED',
-        };
-      }
-
-      const emailChanged =
-        cleanEmail &&
-        cleanEmail !==
-          (target.email || '').toLowerCase();
-
-      if (emailChanged) {
-        // Nadie más puede tomar el email reservado de Root
-        if (cleanEmail === ROOT_EMAIL.toLowerCase()) {
-          return {
-            success: false,
-            message: 'ROOT_EMAIL_RESERVED',
-          };
-        }
-
-        const collision =
-          users.some(
-            (user) =>
-              String(user.id) !== String(userId) &&
-              (user.email || '')
-                .toLowerCase() ===
-                cleanEmail
-          );
-
-        if (collision) {
-          return {
-            success: false,
-            message: 'EMAIL_EXISTS',
-          };
-        }
-      }
-
-      users[userIndex] = {
-        ...users[userIndex],
-        name:
-          name ??
-          users[userIndex].name,
-        lastname:
-          lastname ??
-          users[userIndex].lastname,
-        email:
-          cleanEmail ??
-          users[userIndex].email,
-      };
-
-      localStorage.setItem(
-        'users',
-        JSON.stringify(users)
-      );
-
-      logAdminRequest(
-        users[userIndex].id,
-        emailChanged
-          ? 'Cambio de email'
-          : 'Edición de datos',
-        users[userIndex]
-      );
-
-      return {
-  success: true,
-  user: getUserById(userId),
-};
-
+      return await api(`/users/${userId}/profile`, {
+        method: 'PUT',
+        body: profileData,
+      });
     } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
+      return { success: false, error: error.message, message: error.message };
     }
   }
 
-  try {
-    if (!db) {
-      initDatabase();
-    }
+  const { name, lastname, email } = profileData;
 
-    const current =
-      db.prepareSync(
-        'SELECT * FROM users WHERE id = ?'
-      )
-        .executeSync([userId])
-        .getFirstSync();
+  const cleanEmail = email ? email.trim().toLowerCase() : undefined;
+
+  const fail = (code) => ({ success: false, error: code, message: code });
+
+  try {
+    const current = getFirst('SELECT * FROM users WHERE id = ?', [userId]);
 
     if (!current) {
-      return {
-        success: false,
-        message: 'USER_NOT_FOUND',
-      };
+      return fail('USER_NOT_FOUND');
     }
 
-    // Root no puede modificar ningún dato personal
     if (
       current.role === 'root' ||
-      (current.email || '').toLowerCase() ===
-        ROOT_EMAIL.toLowerCase()
+      (current.email || '').toLowerCase() === ROOT_EMAIL.toLowerCase()
     ) {
-      return {
-        success: false,
-        message: 'ROOT_PROTECTED',
-      };
+      return fail('ROOT_PROTECTED');
     }
 
     const emailChanged =
-      cleanEmail &&
-      cleanEmail !==
-        (current.email || '').toLowerCase();
+      cleanEmail && cleanEmail !== (current.email || '').toLowerCase();
 
-    if (emailChanged) {
-      // Nadie más puede tomar el email reservado de Root
-      if (cleanEmail === ROOT_EMAIL.toLowerCase()) {
-        return {
-          success: false,
-          message: 'ROOT_EMAIL_RESERVED',
-        };
-      }
+    if (emailChanged && cleanEmail === ROOT_EMAIL.toLowerCase()) {
+      return fail('ROOT_EMAIL_RESERVED');
     }
 
     if (cleanEmail) {
-      const collisionStmt =
-        db.prepareSync(`
-          SELECT id
-          FROM users
-          WHERE LOWER(email) = ?
-          AND id != ?
-        `);
-
-      const collision =
-        collisionStmt
-          .executeSync([
-            cleanEmail,
-            userId,
-          ])
-          .getFirstSync();
+      const collision = getFirst(
+        'SELECT id FROM users WHERE LOWER(email) = ? AND id != ?',
+        [cleanEmail, userId]
+      );
 
       if (collision) {
-        return {
-          success: false,
-          message: 'EMAIL_EXISTS',
-        };
+        return fail('EMAIL_EXISTS');
       }
     }
 
-    const statement =
-      db.prepareSync(`
-        UPDATE users
-        SET
-          name = ?,
-          lastname = ?,
-          email = ?
-        WHERE id = ?
-      `);
-
-    statement.executeSync([
+    run('UPDATE users SET name = ?, lastname = ?, email = ? WHERE id = ?', [
       name ?? current.name,
       lastname ?? current.lastname,
       cleanEmail ?? current.email,
       userId,
     ]);
 
-    const selectStmt =
-      db.prepareSync(
-        'SELECT * FROM users WHERE id = ?'
-      );
-
-    const updatedUser =
-      selectStmt
-        .executeSync([userId])
-        .getFirstSync();
+    const updatedUser = getFirst('SELECT * FROM users WHERE id = ?', [userId]);
 
     logAdminRequest(
       updatedUser?.id ?? userId,
-      emailChanged
-        ? 'Cambio de email'
-        : 'Edición de datos',
+      emailChanged ? 'Cambio de email' : 'Edición de datos',
       updatedUser
     );
 
-    return {
-      success: true,
-      user: updatedUser,
-    };
-
+    return { success: true, user: updatedUser };
   } catch (error) {
-    console.log(
-      'Error al actualizar perfil en SQLite:',
-      error
-    );
-
-    return {
-      success: false,
-      message: error.message,
-    };
+    console.log('Error al actualizar perfil en SQLite:', error);
+    return { success: false, error: error.message, message: error.message };
   }
 };
 
 // ============================================================
 // FUNCIONES PARA ROOT / ADMIN
+// (en web devuelven Promesas: usar await)
 // ============================================================
 
 export const getAllUsers = () => {
-  if (Platform.OS === 'web') {
-    const users = JSON.parse(
-      localStorage.getItem('users') || '[]'
-    );
-
-    return users
-      .map((user) => {
-        const {
-          password,
-          ...safeUser
-        } = user;
-
-        return {
-          ...safeUser,
-          role: safeUser.role || 'user',
-          status:
-            safeUser.status || 'active',
-        };
-      })
-      // Mismo orden que SQLite (más nuevos primero)
-      .sort(
-        (a, b) =>
-          Number(b.id) - Number(a.id)
-      );
+  if (IS_WEB) {
+    return api('/users');
   }
 
-  if (!db) {
-    initDatabase();
-  }
-
-  const statement = db.prepareSync(`
-    SELECT
-      id,
-      name,
-      lastname,
-      email,
-      role,
-      status,
-      createdAt,
-      lastAccess
+  return getAll(`
+    SELECT id, name, lastname, email, role, status, createdAt, lastAccess
     FROM users
     ORDER BY id DESC
-  `);
+  `).map(normalizeUser);
+};
 
-  const result =
-    statement.executeSync([]);
+export const getUserById = (userId) => {
+  if (IS_WEB) {
+    return api(`/users/${userId}`);
+  }
 
-  return result.getAllSync().map(
-    (user) => ({
-      ...user,
-      role: user.role || 'user',
-      status:
-        user.status || 'active',
-    })
+  const user = getFirst(
+    `SELECT id, name, lastname, email, role, status, createdAt, lastAccess
+     FROM users WHERE id = ?`,
+    [userId]
   );
+
+  return user ? normalizeUser(user) : null;
 };
 
-export const getUserById = (
-  userId
-) => {
-  if (Platform.OS === 'web') {
-    const users = JSON.parse(
-      localStorage.getItem('users') || '[]'
-    );
-
-    const user =
-      users.find(
-        (item) =>
-          String(item.id) ===
-          String(userId)
-      );
-
-    if (!user) {
-      return null;
-    }
-
-    const {
-      password,
-      ...safeUser
-    } = user;
-
-    return {
-      ...safeUser,
-      role:
-        safeUser.role || 'user',
-      status:
-        safeUser.status || 'active',
-    };
+export const updateUserStatus = (userId, status) => {
+  if (status !== 'active' && status !== 'suspended') {
+    throw new Error('INVALID_STATUS');
   }
 
-  if (!db) {
-    initDatabase();
+  if (IS_WEB) {
+    return api(`/users/${userId}/status`, {
+      method: 'PUT',
+      body: { status },
+    });
   }
 
-  const statement = db.prepareSync(`
-    SELECT
-      id,
-      name,
-      lastname,
-      email,
-      role,
-      status,
-      createdAt,
-      lastAccess
-    FROM users
-    WHERE id = ?
-  `);
-
-  const user =
-    statement
-      .executeSync([userId])
-      .getFirstSync();
+  const user = getFirst('SELECT * FROM users WHERE id = ?', [userId]);
 
   if (!user) {
-    return null;
-  }
-
-  return {
-    ...user,
-    role: user.role || 'user',
-    status:
-      user.status || 'active',
-  };
-};
-
-export const updateUserStatus = (
-  userId,
-  status
-) => {
-  if (
-    status !== 'active' &&
-    status !== 'suspended'
-  ) {
-    throw new Error(
-      'INVALID_STATUS'
-    );
-  }
-
-  if (Platform.OS === 'web') {
-    const users = JSON.parse(
-      localStorage.getItem('users') || '[]'
-    );
-
-    const index =
-      users.findIndex(
-        (user) =>
-          String(user.id) ===
-          String(userId)
-      );
-
-    if (index === -1) {
-      throw new Error(
-        'USER_NOT_FOUND'
-      );
-    }
-
-    if (
-      users[index].role ===
-      'root'
-    ) {
-      throw new Error(
-        'ROOT_PROTECTED'
-      );
-    }
-
-    users[index].status =
-      status;
-
-    localStorage.setItem(
-      'users',
-      JSON.stringify(users)
-    );
-
-    logAdminRequest(
-      users[index].id,
-      status === 'suspended'
-        ? 'Cuenta suspendida'
-        : 'Cuenta reactivada',
-      users[index]
-    );
-
-    return getUserById(userId);
-  }
-
-  if (!db) {
-    initDatabase();
-  }
-
-  const user =
-    db.prepareSync(
-      'SELECT * FROM users WHERE id = ?'
-    )
-      .executeSync([userId])
-      .getFirstSync();
-
-  if (!user) {
-    throw new Error(
-      'USER_NOT_FOUND'
-    );
+    throw new Error('USER_NOT_FOUND');
   }
 
   if (user.role === 'root') {
-    throw new Error(
-      'ROOT_PROTECTED'
-    );
+    throw new Error('ROOT_PROTECTED');
   }
 
-  db.prepareSync(`
-    UPDATE users
-    SET status = ?
-    WHERE id = ?
-  `).executeSync([
-    status,
-    userId,
-  ]);
+  run('UPDATE users SET status = ? WHERE id = ?', [status, userId]);
 
   logAdminRequest(
     user.id,
-    status === 'suspended'
-      ? 'Cuenta suspendida'
-      : 'Cuenta reactivada',
+    status === 'suspended' ? 'Cuenta suspendida' : 'Cuenta reactivada',
     user
   );
 
   return getUserById(userId);
 };
 
-export const updateUserRole = (
-  userId,
-  role
-) => {
-  if (
-    role !== 'user' &&
-    role !== 'root'
-  ) {
-    throw new Error(
-      'INVALID_ROLE'
-    );
+export const updateUserRole = (userId, role) => {
+  if (role !== 'user' && role !== 'root') {
+    throw new Error('INVALID_ROLE');
   }
 
-  if (Platform.OS === 'web') {
-    const users = JSON.parse(
-      localStorage.getItem('users') || '[]'
-    );
-
-    const index =
-      users.findIndex(
-        (user) =>
-          String(user.id) ===
-          String(userId)
-      );
-
-    if (index === -1) {
-      throw new Error(
-        'USER_NOT_FOUND'
-      );
-    }
-
-    const user = users[index];
-
-    if (
-      user.role === 'root' &&
-      role === 'user'
-    ) {
-      throw new Error(
-        'ROOT_PROTECTED'
-      );
-    }
-
-    if (role === 'root') {
-      if (
-        (user.email || '')
-          .toLowerCase() !==
-        ROOT_EMAIL.toLowerCase()
-      ) {
-        throw new Error(
-          'ONLY_ONE_ROOT'
-        );
-      }
-
-      users.forEach(
-        (item, itemIndex) => {
-          if (
-            itemIndex !== index &&
-            item.role === 'root'
-          ) {
-            item.role = 'user';
-          }
-        }
-      );
-    }
-
-    users[index].role =
-      role;
-
-    localStorage.setItem(
-      'users',
-      JSON.stringify(users)
-    );
-
-    return getUserById(userId);
+  if (IS_WEB) {
+    // Solo existe un Root fijo; el servidor lo gestiona.
+    throw new Error('NOT_SUPPORTED_ON_WEB');
   }
 
-  if (!db) {
-    initDatabase();
-  }
-
-  const user =
-    db.prepareSync(
-      'SELECT * FROM users WHERE id = ?'
-    )
-      .executeSync([userId])
-      .getFirstSync();
+  const user = getFirst('SELECT * FROM users WHERE id = ?', [userId]);
 
   if (!user) {
-    throw new Error(
-      'USER_NOT_FOUND'
-    );
+    throw new Error('USER_NOT_FOUND');
   }
 
-  if (
-    user.role === 'root' &&
-    role === 'user'
-  ) {
-    throw new Error(
-      'ROOT_PROTECTED'
-    );
+  if (user.role === 'root' && role === 'user') {
+    throw new Error('ROOT_PROTECTED');
   }
 
   if (
     role === 'root' &&
-    (user.email || '')
-      .toLowerCase() !==
-    ROOT_EMAIL.toLowerCase()
+    (user.email || '').toLowerCase() !== ROOT_EMAIL.toLowerCase()
   ) {
-    throw new Error(
-      'ONLY_ONE_ROOT'
-    );
+    throw new Error('ONLY_ONE_ROOT');
   }
 
-  db.prepareSync(`
-    UPDATE users
-    SET role = ?
-    WHERE id = ?
-  `).executeSync([
-    role,
-    userId,
-  ]);
+  run('UPDATE users SET role = ? WHERE id = ?', [role, userId]);
 
   if (role === 'root') {
-    db.prepareSync(`
-      UPDATE users
-      SET role = 'user'
-      WHERE role = 'root'
-      AND id != ?
-    `).executeSync([
+    run(`UPDATE users SET role = 'user' WHERE role = 'root' AND id != ?`, [
       userId,
     ]);
   }
@@ -1390,367 +759,96 @@ export const updateUserRole = (
   return getUserById(userId);
 };
 
-// ============================================================
-// ELIMINAR USUARIO (NUEVA - solo para Root/Admin)
-// Borra el usuario y todos sus datos. Rechaza a la cuenta Root.
-// Todavía no la usa ninguna pantalla.
-// ============================================================
-
-export const deleteUser = (
-  userId
-) => {
-  if (Platform.OS === 'web') {
-    const users = JSON.parse(
-      localStorage.getItem('users') || '[]'
-    );
-
-    const target = users.find(
-      (user) =>
-        String(user.id) === String(userId)
-    );
-
-    if (!target) {
-      throw new Error(
-        'USER_NOT_FOUND'
-      );
-    }
-
-    if (
-      target.role === 'root' ||
-      (target.email || '').toLowerCase() ===
-        ROOT_EMAIL.toLowerCase()
-    ) {
-      throw new Error(
-        'ROOT_PROTECTED'
-      );
-    }
-
-    logAdminRequest(
-      target.id,
-      'Eliminación de cuenta',
-      target
-    );
-
-    localStorage.setItem(
-      'users',
-      JSON.stringify(
-        users.filter(
-          (user) =>
-            String(user.id) !==
-            String(userId)
-        )
-      )
-    );
-
-    ['clothes', 'outfits', 'history', 'suitcases']
-      .forEach((key) => {
-        const list = JSON.parse(
-          localStorage.getItem(key) || '[]'
-        );
-
-        localStorage.setItem(
-          key,
-          JSON.stringify(
-            list.filter(
-              (item) =>
-                String(item.userId) !==
-                String(userId)
-            )
-          )
-        );
-      });
-
-    return {
-      success: true,
-    };
+export const deleteUser = (userId) => {
+  if (IS_WEB) {
+    return api(`/users/${userId}`, { method: 'DELETE' });
   }
 
-  if (!db) {
-    initDatabase();
-  }
-
-  const target =
-    db.prepareSync(
-      'SELECT * FROM users WHERE id = ?'
-    )
-      .executeSync([userId])
-      .getFirstSync();
+  const target = getFirst('SELECT * FROM users WHERE id = ?', [userId]);
 
   if (!target) {
-    throw new Error(
-      'USER_NOT_FOUND'
-    );
+    throw new Error('USER_NOT_FOUND');
   }
 
   if (
     target.role === 'root' ||
-    (target.email || '').toLowerCase() ===
-      ROOT_EMAIL.toLowerCase()
+    (target.email || '').toLowerCase() === ROOT_EMAIL.toLowerCase()
   ) {
-    throw new Error(
-      'ROOT_PROTECTED'
-    );
+    throw new Error('ROOT_PROTECTED');
   }
 
-  logAdminRequest(
-    target.id,
-    'Eliminación de cuenta',
-    target
-  );
+  logAdminRequest(target.id, 'Eliminación de cuenta', target);
 
-  ['clothes', 'outfits', 'history', 'suitcases']
-    .forEach((table) => {
-      try {
-        db.prepareSync(
-          `DELETE FROM ${table} WHERE userId = ?`
-        ).executeSync([userId]);
-      } catch (error) {
-        console.log(
-          `Error al borrar datos de ${table}:`,
-          error
-        );
-      }
-    });
+  ['clothes', 'outfits', 'history', 'suitcases'].forEach((table) => {
+    try {
+      run(`DELETE FROM ${table} WHERE userId = ?`, [userId]);
+    } catch (error) {
+      console.log(`Error al borrar datos de ${table}:`, error);
+    }
+  });
 
-  db.prepareSync(
-    'DELETE FROM users WHERE id = ?'
-  ).executeSync([userId]);
+  run('DELETE FROM users WHERE id = ?', [userId]);
 
-  return {
-    success: true,
-  };
+  return { success: true };
 };
 
 // ============================================================
 // RESUMEN ADMINISTRATIVO ROOT
 // ============================================================
 
-export const getAdminSummary = () => {
+const EMPTY_ADMIN_SUMMARY = {
+  usersCount: 0,
+  clothesCount: 0,
+  outfitsCount: 0,
+  usedThisWeekCount: 0,
+  activeSuitcasesCount: 0,
+};
 
-  // ==========================================================
-  // WEB
-  // ==========================================================
-
-  if (Platform.OS === 'web') {
+export const getAdminSummary = async () => {
+  if (IS_WEB) {
     try {
-
-      const users =
-        JSON.parse(
-          localStorage.getItem('users') || '[]'
-        );
-
-      const clothes =
-        JSON.parse(
-          localStorage.getItem('clothes') || '[]'
-        );
-
-      const outfits =
-        JSON.parse(
-          localStorage.getItem('outfits') || '[]'
-        );
-
-      const history =
-        JSON.parse(
-          localStorage.getItem('history') || '[]'
-        );
-
-      const suitcases =
-        JSON.parse(
-          localStorage.getItem('suitcases') || '[]'
-        );
-
-      // USOS DURANTE LOS ÚLTIMOS 7 DÍAS
-
-      const sevenDaysAgo =
-        Date.now() -
-        7 * 24 * 60 * 60 * 1000;
-
-      const usedThisWeek =
-        history.filter((item) => {
-
-          const itemDate =
-            new Date(item.date).getTime();
-
-          return (
-            !Number.isNaN(itemDate) &&
-            itemDate >= sevenDaysAgo
-          );
-
-        });
-
-      // MALETAS ACTIVAS
-
-      const activeSuitcases =
-        suitcases.filter(
-          (item) =>
-            item.active === true ||
-            item.active === 1
-        );
-
-      return {
-
-        usersCount:
-          users.length,
-
-        clothesCount:
-          clothes.length,
-
-        outfitsCount:
-          outfits.length,
-
-        usedThisWeekCount:
-          usedThisWeek.length,
-
-        activeSuitcasesCount:
-          activeSuitcases.length,
-
-      };
-
+      return await api('/admin/summary');
     } catch (error) {
-
-      console.log(
-        'Error al obtener resumen administrativo (Web):',
-        error
-      );
-
-      return {
-
-        usersCount: 0,
-        clothesCount: 0,
-        outfitsCount: 0,
-        usedThisWeekCount: 0,
-        activeSuitcasesCount: 0,
-
-      };
-
+      console.log('Error al obtener resumen administrativo (Web):', error);
+      return EMPTY_ADMIN_SUMMARY;
     }
   }
 
-  // ==========================================================
-  // SQLITE
-  // ==========================================================
-
   try {
-
-    if (!db) {
-      initDatabase();
-    }
-
-    const usersResult =
-      db.prepareSync(`
-        SELECT COUNT(*) AS total
-        FROM users
-      `)
-        .executeSync([])
-        .getFirstSync();
-
-    const clothesResult =
-      db.prepareSync(`
-        SELECT COUNT(*) AS total
-        FROM clothes
-      `)
-        .executeSync([])
-        .getFirstSync();
-
-    const outfitsResult =
-      db.prepareSync(`
-        SELECT COUNT(*) AS total
-        FROM outfits
-      `)
-        .executeSync([])
-        .getFirstSync();
-
-    // USOS DURANTE LOS ÚLTIMOS 7 DÍAS
+    const total = (sql, params = []) => getFirst(sql, params)?.total || 0;
 
     let usedThisWeekCount = 0;
-
-    try {
-
-      const historyResult =
-        db.prepareSync(`
-          SELECT COUNT(*) AS total
-          FROM history
-          WHERE julianday(date) >=
-                julianday('now', '-7 days')
-        `)
-          .executeSync([])
-          .getFirstSync();
-
-      usedThisWeekCount =
-        historyResult?.total || 0;
-
-    } catch (error) {
-
-      console.log(
-        'Error obteniendo usos recientes del resumen administrativo:',
-        error
-      );
-
-    }
-
-    // MALETAS ACTIVAS
-
     let activeSuitcasesCount = 0;
 
     try {
-
-      const suitcasesResult =
-        db.prepareSync(`
-          SELECT COUNT(*) AS total
-          FROM suitcases
-          WHERE active = 1
-        `)
-          .executeSync([])
-          .getFirstSync();
-
-      activeSuitcasesCount =
-        suitcasesResult?.total || 0;
-
+      usedThisWeekCount = total(`
+        SELECT COUNT(*) AS total FROM history
+        WHERE julianday(date) >= julianday('now', '-7 days')
+      `);
     } catch (error) {
+      console.log('Error obteniendo usos recientes:', error);
+    }
 
-      console.log(
-        'Error obteniendo maletas activas del resumen administrativo:',
-        error
+    try {
+      activeSuitcasesCount = total(
+        `SELECT COUNT(*) AS total FROM suitcases
+         WHERE ${ACTIVE_SUITCASE_SQL}`,
+        [todayString()]
       );
-
+    } catch (error) {
+      console.log('Error obteniendo maletas activas:', error);
     }
 
     return {
-
-      usersCount:
-        usersResult?.total || 0,
-
-      clothesCount:
-        clothesResult?.total || 0,
-
-      outfitsCount:
-        outfitsResult?.total || 0,
-
-      usedThisWeekCount:
-        usedThisWeekCount,
-
-      activeSuitcasesCount:
-        activeSuitcasesCount,
-
+      usersCount: total('SELECT COUNT(*) AS total FROM users'),
+      clothesCount: total('SELECT COUNT(*) AS total FROM clothes'),
+      outfitsCount: total('SELECT COUNT(*) AS total FROM outfits'),
+      usedThisWeekCount,
+      activeSuitcasesCount,
     };
-
   } catch (error) {
-
-    console.log(
-      'Error al obtener resumen administrativo:',
-      error
-    );
-
-    return {
-
-      usersCount: 0,
-      clothesCount: 0,
-      outfitsCount: 0,
-      usedThisWeekCount: 0,
-      activeSuitcasesCount: 0,
-
-    };
-
+    console.log('Error al obtener resumen administrativo:', error);
+    return EMPTY_ADMIN_SUMMARY;
   }
 };
 
@@ -1759,82 +857,28 @@ export const getAdminSummary = () => {
 // ============================================================
 
 export const getAdminRequests = () => {
-  // Devuelve los mismos campos de siempre (id, userId, type, date,
-  // status, details) y agrega userName y userEmail cuando el
-  // usuario todavía existe. Si fue eliminado, quedan vacíos y la
-  // pantalla puede usar "details".
-  if (Platform.OS === 'web') {
-    const requests =
-      JSON.parse(
-        localStorage.getItem(
-          'adminRequests'
-        ) || '[]'
-      );
-
-    const users =
-      JSON.parse(
-        localStorage.getItem('users') || '[]'
-      );
-
-    return requests
-      .map((request) => {
-        const owner = users.find(
-          (user) =>
-            String(user.id) ===
-            String(request.userId)
-        );
-
-        return {
-          ...request,
-          userName: owner
-            ? `${owner.name || ''} ${owner.lastname || ''}`.trim()
-            : '',
-          userEmail: owner
-            ? owner.email || ''
-            : '',
-        };
-      })
-      .sort(
-        (a, b) =>
-          new Date(b.date) -
-          new Date(a.date)
-      );
+  if (IS_WEB) {
+    return api('/admin/requests');
   }
 
-  if (!db) {
-    initDatabase();
-  }
+  return getAll(`
+    SELECT
+      r.*,
+      u.name AS ownerName,
+      u.lastname AS ownerLastname,
+      u.email AS userEmail
+    FROM adminRequests r
+    LEFT JOIN users u ON u.id = r.userId
+    ORDER BY r.date DESC
+  `).map((row) => {
+    const { ownerName, ownerLastname, ...request } = row;
 
-  const statement =
-    db.prepareSync(`
-      SELECT
-        r.*,
-        u.name AS ownerName,
-        u.lastname AS ownerLastname,
-        u.email AS userEmail
-      FROM adminRequests r
-      LEFT JOIN users u ON u.id = r.userId
-      ORDER BY r.date DESC
-    `);
-
-  return statement
-    .executeSync([])
-    .getAllSync()
-    .map((row) => {
-      const {
-        ownerName,
-        ownerLastname,
-        ...request
-      } = row;
-
-      return {
-        ...request,
-        userName:
-          `${ownerName || ''} ${ownerLastname || ''}`.trim(),
-        userEmail:
-          row.userEmail || '',
-      };
-    });
+    return {
+      ...request,
+      userName: `${ownerName || ''} ${ownerLastname || ''}`.trim(),
+      userEmail: row.userEmail || '',
+    };
+  });
 };
 
 export const addAdminRequest = (
@@ -1843,63 +887,20 @@ export const addAdminRequest = (
   status = 'pending',
   details = ''
 ) => {
-  const date =
-    new Date().toISOString();
-
-  if (Platform.OS === 'web') {
-    const requests =
-      JSON.parse(
-        localStorage.getItem(
-          'adminRequests'
-        ) || '[]'
-      );
-
-    const newRequest = {
-      id: Date.now(),
-      userId,
-      type,
-      date,
-      status,
-      details,
-    };
-
-    requests.push(
-      newRequest
-    );
-
-    localStorage.setItem(
-      'adminRequests',
-      JSON.stringify(requests)
-    );
-
-    return newRequest;
+  if (IS_WEB) {
+    return api('/admin/requests', {
+      method: 'POST',
+      body: { userId, type, status, details },
+    });
   }
 
-  if (!db) {
-    initDatabase();
-  }
+  const date = new Date().toISOString();
 
-  const statement =
-    db.prepareSync(`
-      INSERT INTO adminRequests
-      (
-        userId,
-        type,
-        date,
-        status,
-        details
-      )
-      VALUES (?, ?, ?, ?, ?)
-    `);
-
-  const result =
-    statement.executeSync([
-      userId,
-      type,
-      date,
-      status,
-      details,
-    ]);
+  const result = run(
+    `INSERT INTO adminRequests (userId, type, date, status, details)
+     VALUES (?, ?, ?, ?, ?)`,
+    [userId, type, date, status, details]
+  );
 
   return {
     id: result.lastInsertRowId,
@@ -1911,279 +912,90 @@ export const addAdminRequest = (
   };
 };
 
-export const updateAdminRequestStatus = (
-  requestId,
-  status
-) => {
-  if (
-    status !== 'pending' &&
-    status !== 'resolved'
-  ) {
-    throw new Error(
-      'INVALID_STATUS'
-    );
+export const updateAdminRequestStatus = (requestId, status) => {
+  if (status !== 'pending' && status !== 'resolved') {
+    throw new Error('INVALID_STATUS');
   }
 
-  if (Platform.OS === 'web') {
-    const requests =
-      JSON.parse(
-        localStorage.getItem(
-          'adminRequests'
-        ) || '[]'
-      );
-
-    const index =
-      requests.findIndex(
-        (request) =>
-          String(request.id) ===
-          String(requestId)
-      );
-
-    if (index === -1) {
-      throw new Error(
-        'REQUEST_NOT_FOUND'
-      );
-    }
-
-    requests[index].status =
-      status;
-
-    localStorage.setItem(
-      'adminRequests',
-      JSON.stringify(requests)
-    );
-
-    return requests[index];
+  if (IS_WEB) {
+    return api(`/admin/requests/${requestId}`, {
+      method: 'PUT',
+      body: { status },
+    });
   }
 
-  if (!db) {
-    initDatabase();
-  }
-
-  const request =
-    db.prepareSync(
-      'SELECT * FROM adminRequests WHERE id = ?'
-    )
-      .executeSync([
-        requestId,
-      ])
-      .getFirstSync();
-
-  if (!request) {
-    throw new Error(
-      'REQUEST_NOT_FOUND'
-    );
-  }
-
-  db.prepareSync(`
-    UPDATE adminRequests
-    SET status = ?
-    WHERE id = ?
-  `).executeSync([
-    status,
+  const request = getFirst('SELECT * FROM adminRequests WHERE id = ?', [
     requestId,
   ]);
 
-  return db.prepareSync(
-    'SELECT * FROM adminRequests WHERE id = ?'
-  )
-    .executeSync([
-      requestId,
-    ])
-    .getFirstSync();
+  if (!request) {
+    throw new Error('REQUEST_NOT_FOUND');
+  }
+
+  run('UPDATE adminRequests SET status = ? WHERE id = ?', [status, requestId]);
+
+  return getFirst('SELECT * FROM adminRequests WHERE id = ?', [requestId]);
 };
 
 // ============================================================
 // RESUMEN DEL ARMARIO
+// (en web devuelve Promesa: usar await)
 // ============================================================
 
+const EMPTY_SUMMARY = {
+  clothesCount: 0,
+  outfitsCount: 0,
+  usedThisWeekCount: 0,
+  activeSuitcasesCount: 0,
+};
+
 export const getArmarioSummary = (userId) => {
-  if (Platform.OS === 'web') {
-    try {
-      const clothes = JSON.parse(
-        localStorage.getItem('clothes') || '[]'
-      );
-
-      const outfits = JSON.parse(
-        localStorage.getItem('outfits') || '[]'
-      );
-
-      const history = JSON.parse(
-        localStorage.getItem('history') || '[]'
-      );
-
-      const suitcases = JSON.parse(
-        localStorage.getItem('suitcases') || '[]'
-      );
-
-      const userClothes = clothes.filter(
-        (item) =>
-          String(item.userId) === String(userId)
-      );
-
-      const userOutfits = outfits.filter(
-        (item) =>
-          String(item.userId) === String(userId)
-      );
-
-      const sevenDaysAgo =
-        Date.now() -
-        7 * 24 * 60 * 60 * 1000;
-
-      const userUsed = history.filter(
-        (item) => {
-          if (
-            String(item.userId) !==
-            String(userId)
-          ) {
-            return false;
-          }
-
-          const itemDate =
-            new Date(item.date).getTime();
-
-          return (
-            !Number.isNaN(itemDate) &&
-            itemDate >= sevenDaysAgo
-          );
-        }
-      );
-
-      const userSuitcases =
-        suitcases.filter(
-          (item) =>
-            String(item.userId) ===
-              String(userId) &&
-            item.active !== false
-        );
-
-      return {
-        clothesCount:
-          userClothes.length,
-
-        outfitsCount:
-          userOutfits.length,
-
-        usedThisWeekCount:
-          userUsed.length,
-
-        activeSuitcasesCount:
-          userSuitcases.length,
-      };
-
-    } catch (error) {
-      console.log(
-        'Error al obtener resumen del armario (Web):',
-        error
-      );
-
-      return {
-        clothesCount: 0,
-        outfitsCount: 0,
-        usedThisWeekCount: 0,
-        activeSuitcasesCount: 0,
-      };
-    }
+  if (IS_WEB) {
+    return api(`/summary/${userId}`).catch((error) => {
+      console.log('Error al obtener resumen del armario (Web):', error);
+      return EMPTY_SUMMARY;
+    });
   }
 
   try {
-    if (!db) {
-      initDatabase();
-    }
-
-    const clothesStmt =
-      db.prepareSync(`
-        SELECT COUNT(*) AS total
-        FROM clothes
-        WHERE userId = ?
-      `);
-
-    const clothesRes =
-      clothesStmt
-        .executeSync([userId])
-        .getFirstSync();
-
-    const outfitsStmt =
-      db.prepareSync(`
-        SELECT COUNT(*) AS total
-        FROM outfits
-        WHERE userId = ?
-      `);
-
-    const outfitsRes =
-      outfitsStmt
-        .executeSync([userId])
-        .getFirstSync();
+    const count = (sql) => getFirst(sql, [userId])?.total || 0;
 
     let usedCount = 0;
     let suitcasesCount = 0;
 
     try {
-      const usedStmt =
-        db.prepareSync(`
-          SELECT COUNT(*) AS total
-          FROM history
-          WHERE userId = ?
-          AND date >= date('now', '-7 days')
-        `);
-
-      usedCount =
-        usedStmt
-          .executeSync([userId])
-          .getFirstSync()?.total || 0;
+      usedCount = count(`
+        SELECT COUNT(*) AS total FROM history
+        WHERE userId = ? AND date >= date('now', '-7 days')
+      `);
     } catch (error) {
-      console.log(
-        'Error obteniendo historial del resumen:',
-        error
-      );
+      console.log('Error obteniendo historial del resumen:', error);
     }
 
     try {
-      const suitcasesStmt =
-        db.prepareSync(`
-          SELECT COUNT(*) AS total
-          FROM suitcases
-          WHERE userId = ?
-          AND active = 1
-        `);
-
       suitcasesCount =
-        suitcasesStmt
-          .executeSync([userId])
-          .getFirstSync()?.total || 0;
+        getFirst(
+          `SELECT COUNT(*) AS total FROM suitcases
+           WHERE userId = ? AND ${ACTIVE_SUITCASE_SQL}`,
+          [userId, todayString()]
+        )?.total || 0;
     } catch (error) {
-      console.log(
-        'Error obteniendo maletas del resumen:',
-        error
-      );
+      console.log('Error obteniendo maletas del resumen:', error);
     }
 
     return {
-      clothesCount:
-        clothesRes?.total || 0,
-
-      outfitsCount:
-        outfitsRes?.total || 0,
-
-      usedThisWeekCount:
-        usedCount,
-
-      activeSuitcasesCount:
-        suitcasesCount,
+      clothesCount: count(
+        'SELECT COUNT(*) AS total FROM clothes WHERE userId = ?'
+      ),
+      outfitsCount: count(
+        'SELECT COUNT(*) AS total FROM outfits WHERE userId = ?'
+      ),
+      usedThisWeekCount: usedCount,
+      activeSuitcasesCount: suitcasesCount,
     };
-
   } catch (error) {
-    console.log(
-      'Error al obtener resumen del armario:',
-      error
-    );
-
-    return {
-      clothesCount: 0,
-      outfitsCount: 0,
-      usedThisWeekCount: 0,
-      activeSuitcasesCount: 0,
-    };
+    console.log('Error al obtener resumen del armario:', error);
+    return EMPTY_SUMMARY;
   }
 };
 
@@ -2191,9 +1003,15 @@ export const getArmarioSummary = (userId) => {
 // PRENDAS
 // ============================================================
 
-export const addClothingItem = async (
-  clothingData
-) => {
+export const addClothingItem = async (clothingData) => {
+  if (IS_WEB) {
+    try {
+      return await api('/clothes', { method: 'POST', body: clothingData });
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  }
+
   const {
     userId,
     title,
@@ -2205,76 +1023,14 @@ export const addClothingItem = async (
     imageUri,
   } = clothingData;
 
-  if (Platform.OS === 'web') {
-    try {
-      const clothes =
-        JSON.parse(
-          localStorage.getItem(
-            'clothes'
-          ) || '[]'
-        );
-
-      const newItem = {
-        id: Date.now(),
-        userId,
-        title,
-        category,
-        color: color || '',
-        season: season || '',
-        ocasion: ocasion || '',
-        description: description || '',
-        imageUri,
-        createdAt:
-          new Date().toISOString(),
-      };
-
-      clothes.push(newItem);
-
-      localStorage.setItem(
-        'clothes',
-        JSON.stringify(clothes)
-      );
-
-      return {
-        success: true,
-        item: newItem,
-      };
-
-    } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
-    }
-  }
-
   try {
-    if (!db) {
-      initDatabase();
-    }
+    const createdAt = new Date().toISOString();
 
-    const statement =
-      db.prepareSync(`
-        INSERT INTO clothes
-        (
-          userId,
-          title,
-          category,
-          color,
-          season,
-          ocasion,
-          description,
-          imageUri,
-          createdAt
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-
-    const createdAt =
-      new Date().toISOString();
-
-    const result =
-      statement.executeSync([
+    const result = run(
+      `INSERT INTO clothes
+       (userId, title, category, color, season, ocasion, description, imageUri, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
         userId,
         title,
         category,
@@ -2284,7 +1040,8 @@ export const addClothingItem = async (
         description || '',
         imageUri,
         createdAt,
-      ]);
+      ]
+    );
 
     return {
       success: true,
@@ -2301,370 +1058,190 @@ export const addClothingItem = async (
         createdAt,
       },
     };
-
   } catch (error) {
-    console.log(
-      'Error al guardar prenda en SQLite:',
-      error
-    );
-
-    return {
-      success: false,
-      message: error.message,
-    };
+    console.log('Error al guardar prenda en SQLite:', error);
+    return { success: false, message: error.message };
   }
 };
 
-export const updateClothingItem = async (
-  clothingId,
-  clothingData
-) => {
-  const {
-    title,
-    category,
-    color,
-    season,
-    ocasion,
-    description,
-    imageUri,
-  } = clothingData;
-
-  if (Platform.OS === 'web') {
+export const updateClothingItem = async (clothingId, clothingData) => {
+  if (IS_WEB) {
     try {
-      const clothes =
-        JSON.parse(
-          localStorage.getItem(
-            'clothes'
-          ) || '[]'
-        );
-
-      const normalizedClothingId = Number(clothingId);
-
-      const index =
-        clothes.findIndex(
-          (item) =>
-            Number(item.id) === normalizedClothingId
-        );
-
-      if (index === -1) {
-        return {
-          success: false,
-          message: 'ITEM_NOT_FOUND',
-        };
-      }
-
-      clothes[index] = {
-        ...clothes[index],
-        title:
-          title ??
-          clothes[index].title,
-
-        category:
-          category ??
-          clothes[index].category,
-
-        color:
-          color ??
-          clothes[index].color,
-
-        season:
-          season ??
-          clothes[index].season,
-
-        ocasion:
-          ocasion ??
-          clothes[index].ocasion,
-
-        description:
-          description ??
-          clothes[index].description,
-
-        imageUri:
-          imageUri ??
-          clothes[index].imageUri,
-      };
-
-      localStorage.setItem(
-        'clothes',
-        JSON.stringify(clothes)
-      );
-
-      return {
-        success: true,
-        item: clothes[index],
-      };
-
+      return await api(`/clothes/${clothingId}`, {
+        method: 'PUT',
+        body: clothingData,
+      });
     } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
+      return { success: false, message: error.message };
     }
   }
 
+  const { title, category, color, season, ocasion, description, imageUri } =
+    clothingData;
+
   try {
-    if (!db) {
-      initDatabase();
-    }
-
-    const selectStmt =
-      db.prepareSync(
-        'SELECT * FROM clothes WHERE id = ?'
-      );
-
-    const current =
-      selectStmt
-        .executeSync([clothingId])
-        .getFirstSync();
-
-    if (!current) {
-      return {
-        success: false,
-        message: 'ITEM_NOT_FOUND',
-      };
-    }
-
-    const statement =
-      db.prepareSync(`
-        UPDATE clothes
-        SET
-          title = ?,
-          category = ?,
-          color = ?,
-          season = ?,
-          ocasion = ?,
-          description = ?,
-          imageUri = ?
-        WHERE id = ?
-      `);
-
-    statement.executeSync([
-      title ?? current.title,
-      category ?? current.category,
-      color ?? current.color,
-      season ?? current.season,
-      ocasion ?? current.ocasion,
-      description ?? current.description,
-      imageUri ?? current.imageUri,
+    const current = getFirst('SELECT * FROM clothes WHERE id = ?', [
       clothingId,
     ]);
 
-    const updated =
-      selectStmt
-        .executeSync([clothingId])
-        .getFirstSync();
+    if (!current) {
+      return { success: false, message: 'ITEM_NOT_FOUND' };
+    }
 
-    return {
-      success: true,
-      item: updated,
-    };
-
-  } catch (error) {
-    console.log(
-      'Error al editar prenda en SQLite:',
-      error
+    run(
+      `UPDATE clothes
+       SET title = ?, category = ?, color = ?, season = ?,
+           ocasion = ?, description = ?, imageUri = ?
+       WHERE id = ?`,
+      [
+        title ?? current.title,
+        category ?? current.category,
+        color ?? current.color,
+        season ?? current.season,
+        ocasion ?? current.ocasion,
+        description ?? current.description,
+        imageUri ?? current.imageUri,
+        clothingId,
+      ]
     );
 
     return {
-      success: false,
-      message: error.message,
+      success: true,
+      item: getFirst('SELECT * FROM clothes WHERE id = ?', [clothingId]),
     };
+  } catch (error) {
+    console.log('Error al editar prenda en SQLite:', error);
+    return { success: false, message: error.message };
   }
 };
 
-export const deleteClothingItem = async (
-  clothingId
-) => {
-  const normalizedClothingId = Number(clothingId);
+// Cuántos outfits y maletas usan la prenda (para avisar antes de borrar).
+// Devuelve { outfitCount, suitcaseCount, outfitNames }
+export const getClothingUsage = async (clothingId) => {
+  const EMPTY = { outfitCount: 0, suitcaseCount: 0, outfitNames: [] };
 
-  if (Platform.OS === 'web') {
+  if (IS_WEB) {
     try {
-      const clothes = JSON.parse(
-        localStorage.getItem('clothes') || '[]'
-      );
-
-      const exists = clothes.some(
-        (item) => Number(item.id) === normalizedClothingId
-      );
-
-      if (!exists) {
-        return {
-          success: false,
-          message: 'ITEM_NOT_FOUND',
-        };
-      }
-
-      const updatedClothes = clothes.filter(
-        (item) => Number(item.id) !== normalizedClothingId
-      );
-
-      localStorage.setItem(
-        'clothes',
-        JSON.stringify(updatedClothes)
-      );
-
-      return {
-        success: true,
-      };
+      return await api(`/clothes/${clothingId}/usage`);
     } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
+      console.log('Error al obtener uso de la prenda (Web):', error);
+      rethrowIfSessionExpired(error);
+      return EMPTY;
     }
   }
 
   try {
-    if (!db) {
-      initDatabase();
-    }
-
-    const statement = db.prepareSync(
-      'DELETE FROM clothes WHERE id = ?'
-    );
-
-    statement.executeSync([
-      normalizedClothingId,
+    const clothing = getFirst('SELECT id, userId FROM clothes WHERE id = ?', [
+      Number(clothingId),
     ]);
 
-    return {
-      success: true,
-    };
-  } catch (error) {
-    console.log(
-      'Error al eliminar prenda:',
-      error
-    );
+    if (!clothing) {
+      return EMPTY;
+    }
+
+    const { outfits, suitcases } = findClothingReferences(clothing);
 
     return {
-      success: false,
-      message: error.message,
+      outfitCount: outfits.length,
+      suitcaseCount: suitcases.length,
+      outfitNames: outfits.map((outfit) => outfit.name).filter(Boolean),
     };
+  } catch (error) {
+    console.log('Error al obtener uso de la prenda (Móvil):', error);
+    return EMPTY;
   }
 };
 
-export const getUserClothes = async (
-  userId
-) => {
-  if (Platform.OS === 'web') {
+// Borra la prenda Y la quita de los outfits y maletas que la usan.
+// Devuelve { success, affectedOutfits, affectedSuitcases }
+export const deleteClothingItem = async (clothingId) => {
+  if (IS_WEB) {
     try {
-      const clothes =
-        JSON.parse(
-          localStorage.getItem(
-            'clothes'
-          ) || '[]'
-        );
-
-      const userClothes =
-        clothes.filter(
-          (item) =>
-            String(item.userId) ===
-            String(userId)
-        );
-
-      userClothes.sort(
-        (a, b) =>
-          new Date(b.createdAt) -
-          new Date(a.createdAt)
-      );
-
-      return userClothes;
-
+      return await api(`/clothes/${clothingId}`, { method: 'DELETE' });
     } catch (error) {
-      console.log(
-        'Error al obtener prendas (Web):',
-        error
-      );
+      return { success: false, message: error.message };
+    }
+  }
 
+  try {
+    const id = Number(clothingId);
+
+    const clothing = getFirst('SELECT id, userId FROM clothes WHERE id = ?', [
+      id,
+    ]);
+
+    let affectedOutfits = 0;
+    let affectedSuitcases = 0;
+
+    getDb().withTransactionSync(() => {
+      if (clothing) {
+        const { outfits, suitcases } = findClothingReferences(clothing);
+
+        outfits.forEach((outfit) => {
+          run('UPDATE outfits SET items = ? WHERE id = ?', [
+            JSON.stringify(outfit.items),
+            outfit.id,
+          ]);
+        });
+
+        suitcases.forEach((suitcase) => {
+          run('UPDATE suitcases SET items = ? WHERE id = ?', [
+            JSON.stringify(suitcase.items),
+            suitcase.id,
+          ]);
+        });
+
+        affectedOutfits = outfits.length;
+        affectedSuitcases = suitcases.length;
+      }
+
+      run('DELETE FROM clothes WHERE id = ?', [id]);
+    });
+
+    return { success: true, affectedOutfits, affectedSuitcases };
+  } catch (error) {
+    console.log('Error al eliminar prenda:', error);
+    return { success: false, message: error.message };
+  }
+};
+
+export const getUserClothes = async (userId) => {
+  if (IS_WEB) {
+    try {
+      return await api(`/clothes?userId=${userId}`);
+    } catch (error) {
+      console.log('Error al obtener prendas (Web):', error);
+      rethrowIfSessionExpired(error);
       return [];
     }
   }
 
   try {
-    if (!db) {
-      initDatabase();
-    }
-
-    const statement =
-      db.prepareSync(`
-        SELECT *
-        FROM clothes
-        WHERE userId = ?
-        ORDER BY createdAt DESC
-      `);
-
-    const result =
-      statement.executeSync([
-        userId,
-      ]);
-
-    return result.getAllSync();
-
-  } catch (error) {
-    console.log(
-      'Error al obtener prendas (Móvil):',
-      error
+    return getAll(
+      'SELECT * FROM clothes WHERE userId = ? ORDER BY createdAt DESC',
+      [userId]
     );
-
+  } catch (error) {
+    console.log('Error al obtener prendas (Móvil):', error);
     return [];
   }
 };
 
-export const getClothingItemById = async (
-  clothingId
-) => {
-  if (Platform.OS === 'web') {
+export const getClothingItemById = async (clothingId) => {
+  if (IS_WEB) {
     try {
-      const clothes =
-        JSON.parse(
-          localStorage.getItem(
-            'clothes'
-          ) || '[]'
-        );
-
-      return (
-        clothes.find(
-          (item) =>
-            item.id === clothingId
-        ) || null
-      );
-
+      return await api(`/clothes/${clothingId}`);
     } catch (error) {
-      console.log(
-        'Error al obtener prenda (Web):',
-        error
-      );
-
+      console.log('Error al obtener prenda (Web):', error);
+      rethrowIfSessionExpired(error);
       return null;
     }
   }
 
   try {
-    if (!db) {
-      initDatabase();
-    }
-
-    const statement =
-      db.prepareSync(
-        'SELECT * FROM clothes WHERE id = ?'
-      );
-
-    const result =
-      statement.executeSync([
-        clothingId,
-      ]);
-
-    return (
-      result.getFirstSync() ||
-      null
-    );
-
+    return getFirst('SELECT * FROM clothes WHERE id = ?', [clothingId]) || null;
   } catch (error) {
-    console.log(
-      'Error al obtener prenda (Móvil):',
-      error
-    );
-
+    console.log('Error al obtener prenda (Móvil):', error);
     return null;
   }
 };
@@ -2673,87 +1250,31 @@ export const getClothingItemById = async (
 // OUTFITS
 // ============================================================
 
-export const addOutfit = async (
-  outfitData
-) => {
-  const {
-    userId,
-    name,
-    description,
-    items,
-  } = outfitData;
+const parseOutfitRow = (row) =>
+  row && {
+    ...row,
+    items: row.items ? JSON.parse(row.items) : {},
+  };
 
-  if (Platform.OS === 'web') {
+export const addOutfit = async (outfitData) => {
+  if (IS_WEB) {
     try {
-      const outfits =
-        JSON.parse(
-          localStorage.getItem(
-            'outfits'
-          ) || '[]'
-        );
-
-      const newOutfit = {
-        id: Date.now(),
-        userId,
-        name,
-        description:
-          description || '',
-        items: items || {},
-        createdAt:
-          new Date().toISOString(),
-      };
-
-      outfits.push(newOutfit);
-
-      localStorage.setItem(
-        'outfits',
-        JSON.stringify(outfits)
-      );
-
-      return {
-        success: true,
-        outfit: newOutfit,
-      };
-
+      return await api('/outfits', { method: 'POST', body: outfitData });
     } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
+      return { success: false, message: error.message };
     }
   }
 
+  const { userId, name, description, items } = outfitData;
+
   try {
-    if (!db) {
-      initDatabase();
-    }
+    const createdAt = new Date().toISOString();
 
-    const statement =
-      db.prepareSync(`
-        INSERT INTO outfits
-        (
-          userId,
-          name,
-          description,
-          items,
-          createdAt
-        )
-        VALUES (?, ?, ?, ?, ?)
-      `);
-
-    const createdAt =
-      new Date().toISOString();
-
-    const result =
-      statement.executeSync([
-        userId,
-        name,
-        description || '',
-        JSON.stringify(
-          items || {}
-        ),
-        createdAt,
-      ]);
+    const result = run(
+      `INSERT INTO outfits (userId, name, description, items, createdAt)
+       VALUES (?, ?, ?, ?, ?)`,
+      [userId, name, description || '', JSON.stringify(items || {}), createdAt]
+    );
 
     return {
       success: true,
@@ -2766,381 +1287,114 @@ export const addOutfit = async (
         createdAt,
       },
     };
-
   } catch (error) {
-    console.log(
-      'Error al guardar outfit en SQLite:',
-      error
-    );
-
-    return {
-      success: false,
-      message: error.message,
-    };
+    console.log('Error al guardar outfit en SQLite:', error);
+    return { success: false, message: error.message };
   }
 };
 
-export const getUserOutfits = async (
-  userId
-) => {
-  if (Platform.OS === 'web') {
+export const getUserOutfits = async (userId) => {
+  if (IS_WEB) {
     try {
-      const outfits =
-        JSON.parse(
-          localStorage.getItem(
-            'outfits'
-          ) || '[]'
-        );
-
-      const userOutfits =
-        outfits.filter(
-          (item) =>
-            String(item.userId) ===
-            String(userId)
-        );
-
-      userOutfits.sort(
-        (a, b) =>
-          new Date(b.createdAt) -
-          new Date(a.createdAt)
-      );
-
-      return userOutfits;
-
+      return await api(`/outfits?userId=${userId}`);
     } catch (error) {
-      console.log(
-        'Error al obtener outfits (Web):',
-        error
-      );
-
+      console.log('Error al obtener outfits (Web):', error);
+      rethrowIfSessionExpired(error);
       return [];
     }
   }
 
   try {
-    if (!db) {
-      initDatabase();
-    }
-
-    const statement =
-      db.prepareSync(`
-        SELECT *
-        FROM outfits
-        WHERE userId = ?
-        ORDER BY createdAt DESC
-      `);
-
-    const result =
-      statement.executeSync([
-        userId,
-      ]);
-
-    const rows =
-      result.getAllSync();
-
-    return rows.map(
-      (row) => ({
-        ...row,
-        items: row.items
-          ? JSON.parse(row.items)
-          : {},
-      })
-    );
-
+    return getAll(
+      'SELECT * FROM outfits WHERE userId = ? ORDER BY createdAt DESC',
+      [userId]
+    ).map(parseOutfitRow);
   } catch (error) {
-    console.log(
-      'Error al obtener outfits (Móvil):',
-      error
-    );
-
+    console.log('Error al obtener outfits (Móvil):', error);
     return [];
   }
 };
 
-export const getOutfitById = async (
-  outfitId
-) => {
-  if (Platform.OS === 'web') {
+export const getOutfitById = async (outfitId) => {
+  if (IS_WEB) {
     try {
-      const outfits =
-        JSON.parse(
-          localStorage.getItem(
-            'outfits'
-          ) || '[]'
-        );
-
-      return (
-        outfits.find(
-          (item) =>
-            item.id === outfitId
-        ) || null
-      );
-
+      return await api(`/outfits/${outfitId}`);
     } catch (error) {
-      console.log(
-        'Error al obtener outfit (Web):',
-        error
-      );
-
+      console.log('Error al obtener outfit (Web):', error);
+      rethrowIfSessionExpired(error);
       return null;
     }
   }
 
   try {
-    if (!db) {
-      initDatabase();
-    }
-
-    const statement =
-      db.prepareSync(
-        'SELECT * FROM outfits WHERE id = ?'
-      );
-
-    const row =
-      statement
-        .executeSync([outfitId])
-        .getFirstSync();
-
-    if (!row) {
-      return null;
-    }
-
-    return {
-      ...row,
-      items: row.items
-        ? JSON.parse(row.items)
-        : {},
-    };
-
+    const row = getFirst('SELECT * FROM outfits WHERE id = ?', [outfitId]);
+    return row ? parseOutfitRow(row) : null;
   } catch (error) {
-    console.log(
-      'Error al obtener outfit (Móvil):',
-      error
-    );
-
+    console.log('Error al obtener outfit (Móvil):', error);
     return null;
   }
 };
 
-export const updateOutfit = async (
-  outfitId,
-  outfitData
-) => {
-  const {
-    name,
-    description,
-    items,
-  } = outfitData;
-
-  if (Platform.OS === 'web') {
+export const updateOutfit = async (outfitId, outfitData) => {
+  if (IS_WEB) {
     try {
-      const outfits =
-        JSON.parse(
-          localStorage.getItem(
-            'outfits'
-          ) || '[]'
-        );
-
-      const index =
-        outfits.findIndex(
-          (item) =>
-            item.id === outfitId
-        );
-
-      if (index === -1) {
-        return {
-          success: false,
-          message: 'OUTFIT_NOT_FOUND',
-        };
-      }
-
-      outfits[index] = {
-        ...outfits[index],
-
-        name:
-          name ??
-          outfits[index].name,
-
-        description:
-          description ??
-          outfits[index].description,
-
-        items:
-          items ??
-          outfits[index].items,
-      };
-
-      localStorage.setItem(
-        'outfits',
-        JSON.stringify(outfits)
-      );
-
-      return {
-        success: true,
-        outfit: outfits[index],
-      };
-
+      return await api(`/outfits/${outfitId}`, {
+        method: 'PUT',
+        body: outfitData,
+      });
     } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
+      return { success: false, message: error.message };
     }
   }
 
+  const { name, description, items } = outfitData;
+
   try {
-    if (!db) {
-      initDatabase();
-    }
-
-    const selectStmt =
-      db.prepareSync(
-        'SELECT * FROM outfits WHERE id = ?'
-      );
-
-    const current =
-      selectStmt
-        .executeSync([outfitId])
-        .getFirstSync();
+    const current = getFirst('SELECT * FROM outfits WHERE id = ?', [outfitId]);
 
     if (!current) {
-      return {
-        success: false,
-        message: 'OUTFIT_NOT_FOUND',
-      };
+      return { success: false, message: 'OUTFIT_NOT_FOUND' };
     }
 
-    const currentItems =
-      current.items
-        ? JSON.parse(current.items)
-        : {};
+    const currentItems = current.items ? JSON.parse(current.items) : {};
 
-    const statement =
-      db.prepareSync(`
-        UPDATE outfits
-        SET
-          name = ?,
-          description = ?,
-          items = ?
-        WHERE id = ?
-      `);
-
-    statement.executeSync([
-      name ?? current.name,
-      description ??
-        current.description,
-      JSON.stringify(
-        items ?? currentItems
-      ),
-      outfitId,
-    ]);
-
-    const updated =
-      selectStmt
-        .executeSync([outfitId])
-        .getFirstSync();
-
-    return {
-      success: true,
-      outfit: {
-        ...updated,
-        items: JSON.parse(
-          updated.items || '{}'
-        ),
-      },
-    };
-
-  } catch (error) {
-    console.log(
-      'Error al editar outfit en SQLite:',
-      error
+    run(
+      `UPDATE outfits SET name = ?, description = ?, items = ? WHERE id = ?`,
+      [
+        name ?? current.name,
+        description ?? current.description,
+        JSON.stringify(items ?? currentItems),
+        outfitId,
+      ]
     );
 
     return {
-      success: false,
-      message: error.message,
+      success: true,
+      outfit: parseOutfitRow(
+        getFirst('SELECT * FROM outfits WHERE id = ?', [outfitId])
+      ),
     };
+  } catch (error) {
+    console.log('Error al editar outfit en SQLite:', error);
+    return { success: false, message: error.message };
   }
 };
 
-export const deleteOutfit = async (
-  outfitId
-) => {
-  if (Platform.OS === 'web') {
+export const deleteOutfit = async (outfitId) => {
+  if (IS_WEB) {
     try {
-      const outfits =
-        JSON.parse(
-          localStorage.getItem(
-            'outfits'
-          ) || '[]'
-        );
-
-      const exists =
-        outfits.some(
-          (item) =>
-            item.id === outfitId
-        );
-
-      if (!exists) {
-        return {
-          success: false,
-          message: 'OUTFIT_NOT_FOUND',
-        };
-      }
-
-      const updatedOutfits =
-        outfits.filter(
-          (item) =>
-            item.id !== outfitId
-        );
-
-      localStorage.setItem(
-        'outfits',
-        JSON.stringify(
-          updatedOutfits
-        )
-      );
-
-      return {
-        success: true,
-      };
-
+      return await api(`/outfits/${outfitId}`, { method: 'DELETE' });
     } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
+      return { success: false, message: error.message };
     }
   }
 
   try {
-    if (!db) {
-      initDatabase();
-    }
-
-    const statement =
-      db.prepareSync(
-        'DELETE FROM outfits WHERE id = ?'
-      );
-
-    statement.executeSync([
-      outfitId,
-    ]);
-
-    return {
-      success: true,
-    };
-
+    run('DELETE FROM outfits WHERE id = ?', [outfitId]);
+    return { success: true };
   } catch (error) {
-    console.log(
-      'Error al eliminar outfit:',
-      error
-    );
-
-    return {
-      success: false,
-      message: error.message,
-    };
+    console.log('Error al eliminar outfit:', error);
+    return { success: false, message: error.message };
   }
 };
 
@@ -3148,92 +1402,32 @@ export const deleteOutfit = async (
 // HISTORIAL
 // ============================================================
 
-export const addHistoryEntry = async (
-  historyData
-) => {
-  const {
-    userId,
-    outfitId,
-    outfitName,
-    imageUri,
-    note,
-  } = historyData;
-
-  if (Platform.OS === 'web') {
+export const addHistoryEntry = async (historyData) => {
+  if (IS_WEB) {
     try {
-      const history =
-        JSON.parse(
-          localStorage.getItem(
-            'history'
-          ) || '[]'
-        );
-
-      const newEntry = {
-        id: Date.now(),
-        userId,
-        outfitId:
-          outfitId ?? null,
-        outfitName:
-          outfitName || '',
-        imageUri:
-          imageUri || '',
-        note:
-          note || '',
-        date:
-          new Date().toISOString(),
-      };
-
-      history.push(newEntry);
-
-      localStorage.setItem(
-        'history',
-        JSON.stringify(history)
-      );
-
-      return {
-        success: true,
-        entry: newEntry,
-      };
-
+      return await api('/history', { method: 'POST', body: historyData });
     } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
+      return { success: false, message: error.message };
     }
   }
 
+  const { userId, outfitId, outfitName, imageUri, note } = historyData;
+
   try {
-    if (!db) {
-      initDatabase();
-    }
+    const date = new Date().toISOString();
 
-    const statement =
-      db.prepareSync(`
-        INSERT INTO history
-        (
-          userId,
-          outfitId,
-          outfitName,
-          imageUri,
-          note,
-          date
-        )
-        VALUES (?, ?, ?, ?, ?, ?)
-      `);
-
-    const date =
-      new Date().toISOString();
-
-    const result =
-      statement.executeSync([
+    const result = run(
+      `INSERT INTO history (userId, outfitId, outfitName, imageUri, note, date)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
         userId,
         outfitId ?? null,
         outfitName || '',
         imageUri || '',
         note || '',
         date,
-      ]);
+      ]
+    );
 
     return {
       success: true,
@@ -3247,83 +1441,30 @@ export const addHistoryEntry = async (
         date,
       },
     };
-
   } catch (error) {
-    console.log(
-      'Error al guardar historial en SQLite:',
-      error
-    );
-
-    return {
-      success: false,
-      message: error.message,
-    };
+    console.log('Error al guardar historial en SQLite:', error);
+    return { success: false, message: error.message };
   }
 };
 
-export const getUserHistory = async (
-  userId
-) => {
-  if (Platform.OS === 'web') {
+export const getUserHistory = async (userId) => {
+  if (IS_WEB) {
     try {
-      const history =
-        JSON.parse(
-          localStorage.getItem(
-            'history'
-          ) || '[]'
-        );
-
-      const userHistory =
-        history.filter(
-          (item) =>
-            String(item.userId) ===
-            String(userId)
-        );
-
-      userHistory.sort(
-        (a, b) =>
-          new Date(b.date) -
-          new Date(a.date)
-      );
-
-      return userHistory;
-
+      return await api(`/history?userId=${userId}`);
     } catch (error) {
-      console.log(
-        'Error al obtener historial (Web):',
-        error
-      );
-
+      console.log('Error al obtener historial (Web):', error);
+      rethrowIfSessionExpired(error);
       return [];
     }
   }
 
   try {
-    if (!db) {
-      initDatabase();
-    }
-
-    const statement =
-      db.prepareSync(`
-        SELECT *
-        FROM history
-        WHERE userId = ?
-        ORDER BY date DESC
-      `);
-
-    const result =
-      statement.executeSync([
-        userId,
-      ]);
-
-    return result.getAllSync();
-
-  } catch (error) {
-    console.log(
-      'Error al obtener historial (Móvil):',
-      error
+    return getAll(
+      'SELECT * FROM history WHERE userId = ? ORDER BY date DESC',
+      [userId]
     );
-
+  } catch (error) {
+    console.log('Error al obtener historial (Móvil):', error);
     return [];
   }
 };
@@ -3332,103 +1473,65 @@ export const getUserHistory = async (
 // MODO MALETA
 // ============================================================
 
-export const addSuitcase = async (
-  suitcaseData
-) => {
-  const {
-    userId,
-    destino,
-    fechaInicio,
-    fechaFin,
+// estado y active se recalculan SIEMPRE por fechas (no se confía en
+// lo guardado, que se desactualiza cuando pasan los días).
+const parseSuitcaseRow = (row) => {
+  if (!row) {
+    return row;
+  }
+
+  const estado = computeSuitcaseStatus(
+    row.fechaInicio,
+    row.fechaFin,
+    row.estado || 'Planificada'
+  );
+
+  return {
+    ...row,
+    items: safeParse(row.items, []),
     estado,
-    items,
-  } = suitcaseData;
+    active: estado !== 'Finalizada',
+  };
+};
 
-  if (Platform.OS === 'web') {
+export const addSuitcase = async (suitcaseData) => {
+  if (IS_WEB) {
     try {
-      const suitcases =
-        JSON.parse(
-          localStorage.getItem(
-            'suitcases'
-          ) || '[]'
-        );
-
-      const newSuitcase = {
-        id: Date.now(),
-        userId,
-        destino,
-        fechaInicio,
-        fechaFin,
-        estado:
-          estado || 'Planificada',
-        items:
-          items || [],
-        active: true,
-        createdAt:
-          new Date().toISOString(),
-      };
-
-      suitcases.push(
-        newSuitcase
-      );
-
-      localStorage.setItem(
-        'suitcases',
-        JSON.stringify(
-          suitcases
-        )
-      );
-
-      return {
-        success: true,
-        suitcase: newSuitcase,
-      };
-
+      return await api('/suitcases', { method: 'POST', body: suitcaseData });
     } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
+      return { success: false, message: error.message };
     }
   }
 
+  const { userId, destino, fechaInicio, fechaFin, estado, items } =
+    suitcaseData;
+
   try {
-    if (!db) {
-      initDatabase();
-    }
+    const createdAt = new Date().toISOString();
 
-    const statement =
-      db.prepareSync(`
-        INSERT INTO suitcases
-        (
-          userId,
-          destino,
-          fechaInicio,
-          fechaFin,
-          estado,
-          items,
-          active,
-          createdAt
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `);
+    const status = computeSuitcaseStatus(
+      fechaInicio,
+      fechaFin,
+      estado || 'Planificada'
+    );
 
-    const createdAt =
-      new Date().toISOString();
+    const isActive = status !== 'Finalizada';
 
-    const result =
-      statement.executeSync([
+    const result = run(
+      `INSERT INTO suitcases
+       (userId, destino, fechaInicio, fechaFin, estado, items, active, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
         userId,
         destino,
         fechaInicio,
         fechaFin,
-        estado || 'Planificada',
-        JSON.stringify(
-          items || []
-        ),
-        1,
+        status,
+        JSON.stringify(items || []),
+        isActive ? 1 : 0,
         createdAt,
-      ]);
+      ]
+    );
 
     return {
       success: true,
@@ -3438,437 +1541,138 @@ export const addSuitcase = async (
         destino,
         fechaInicio,
         fechaFin,
-        estado:
-          estado || 'Planificada',
-        items:
-          items || [],
-        active: true,
+        estado: status,
+        items: items || [],
+        active: isActive,
         createdAt,
       },
     };
-
   } catch (error) {
-    console.log(
-      'Error al guardar maleta en SQLite:',
-      error
-    );
-
-    return {
-      success: false,
-      message: error.message,
-    };
+    console.log('Error al guardar maleta en SQLite:', error);
+    return { success: false, message: error.message };
   }
 };
 
-export const getUserSuitcases = async (
-  userId
-) => {
-  if (Platform.OS === 'web') {
+export const getUserSuitcases = async (userId) => {
+  if (IS_WEB) {
     try {
-      const suitcases =
-        JSON.parse(
-          localStorage.getItem(
-            'suitcases'
-          ) || '[]'
-        );
-
-      const userSuitcases =
-        suitcases.filter(
-          (item) =>
-            String(item.userId) ===
-            String(userId)
-        );
-
-      userSuitcases.sort(
-        (a, b) =>
-          new Date(b.createdAt) -
-          new Date(a.createdAt)
-      );
-
-      return userSuitcases;
-
+      return await api(`/suitcases?userId=${userId}`);
     } catch (error) {
-      console.log(
-        'Error al obtener maletas (Web):',
-        error
-      );
-
+      console.log('Error al obtener maletas (Web):', error);
+      rethrowIfSessionExpired(error);
       return [];
     }
   }
 
   try {
-    if (!db) {
-      initDatabase();
-    }
-
-    const statement =
-      db.prepareSync(`
-        SELECT *
-        FROM suitcases
-        WHERE userId = ?
-        ORDER BY createdAt DESC
-      `);
-
-    const result =
-      statement.executeSync([
-        userId,
-      ]);
-
-    const rows =
-      result.getAllSync();
-
-    return rows.map(
-      (row) => ({
-        ...row,
-        items: row.items
-          ? JSON.parse(row.items)
-          : [],
-        active: !!row.active,
-      })
-    );
-
+    return getAll(
+      'SELECT * FROM suitcases WHERE userId = ? ORDER BY createdAt DESC',
+      [userId]
+    ).map(parseSuitcaseRow);
   } catch (error) {
-    console.log(
-      'Error al obtener maletas (Móvil):',
-      error
-    );
-
+    console.log('Error al obtener maletas (Móvil):', error);
     return [];
   }
 };
 
-export const getSuitcaseById = async (
-  suitcaseId
-) => {
-  if (Platform.OS === 'web') {
+export const getSuitcaseById = async (suitcaseId) => {
+  if (IS_WEB) {
     try {
-      const suitcases =
-        JSON.parse(
-          localStorage.getItem(
-            'suitcases'
-          ) || '[]'
-        );
-
-      return (
-        suitcases.find(
-          (item) =>
-            item.id === suitcaseId
-        ) || null
-      );
-
+      return await api(`/suitcases/${suitcaseId}`);
     } catch (error) {
-      console.log(
-        'Error al obtener maleta (Web):',
-        error
-      );
-
+      console.log('Error al obtener maleta (Web):', error);
+      rethrowIfSessionExpired(error);
       return null;
     }
   }
 
   try {
-    if (!db) {
-      initDatabase();
-    }
-
-    const statement =
-      db.prepareSync(
-        'SELECT * FROM suitcases WHERE id = ?'
-      );
-
-    const row =
-      statement
-        .executeSync([suitcaseId])
-        .getFirstSync();
-
-    if (!row) {
-      return null;
-    }
-
-    return {
-      ...row,
-      items: row.items
-        ? JSON.parse(row.items)
-        : [],
-      active: !!row.active,
-    };
-
+    const row = getFirst('SELECT * FROM suitcases WHERE id = ?', [suitcaseId]);
+    return row ? parseSuitcaseRow(row) : null;
   } catch (error) {
-    console.log(
-      'Error al obtener maleta (Móvil):',
-      error
-    );
-
+    console.log('Error al obtener maleta (Móvil):', error);
     return null;
   }
 };
 
-export const updateSuitcase = async (
-  suitcaseId,
-  updatedData
-) => {
-  const {
-    destino,
-    fechaInicio,
-    fechaFin,
-    estado,
-    items,
-    active,
-  } = updatedData;
-
-  if (Platform.OS === 'web') {
+export const updateSuitcase = async (suitcaseId, updatedData) => {
+  if (IS_WEB) {
     try {
-      const suitcases =
-        JSON.parse(
-          localStorage.getItem(
-            'suitcases'
-          ) || '[]'
-        );
-
-      const index =
-        suitcases.findIndex(
-          (item) =>
-            item.id === suitcaseId
-        );
-
-      if (index === -1) {
-        return {
-          success: false,
-          message:
-            'SUITCASE_NOT_FOUND',
-        };
-      }
-
-      suitcases[index] = {
-        ...suitcases[index],
-
-        destino:
-          destino ??
-          suitcases[index].destino,
-
-        fechaInicio:
-          fechaInicio ??
-          suitcases[index]
-            .fechaInicio,
-
-        fechaFin:
-          fechaFin ??
-          suitcases[index]
-            .fechaFin,
-
-        estado:
-          estado ??
-          suitcases[index].estado,
-
-        items:
-          items ??
-          suitcases[index].items,
-
-        active:
-          active ??
-          suitcases[index].active,
-      };
-
-      localStorage.setItem(
-        'suitcases',
-        JSON.stringify(
-          suitcases
-        )
-      );
-
-      return {
-        success: true,
-        suitcase:
-          suitcases[index],
-      };
-
+      return await api(`/suitcases/${suitcaseId}`, {
+        method: 'PUT',
+        body: updatedData,
+      });
     } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
+      return { success: false, message: error.message };
     }
   }
 
+  const { destino, fechaInicio, fechaFin, estado, items } = updatedData;
+
   try {
-    if (!db) {
-      initDatabase();
-    }
-
-    const selectStmt =
-      db.prepareSync(
-        'SELECT * FROM suitcases WHERE id = ?'
-      );
-
-    const current =
-      selectStmt
-        .executeSync([suitcaseId])
-        .getFirstSync();
-
-    if (!current) {
-      return {
-        success: false,
-        message:
-          'SUITCASE_NOT_FOUND',
-      };
-    }
-
-    const currentItems =
-      current.items
-        ? JSON.parse(
-            current.items
-          )
-        : [];
-
-    const statement =
-      db.prepareSync(`
-        UPDATE suitcases
-        SET
-          destino = ?,
-          fechaInicio = ?,
-          fechaFin = ?,
-          estado = ?,
-          items = ?,
-          active = ?
-        WHERE id = ?
-      `);
-
-    statement.executeSync([
-      destino ??
-        current.destino,
-
-      fechaInicio ??
-        current.fechaInicio,
-
-      fechaFin ??
-        current.fechaFin,
-
-      estado ??
-        current.estado,
-
-      JSON.stringify(
-        items ??
-          currentItems
-      ),
-
-      active !== undefined
-        ? active
-          ? 1
-          : 0
-        : current.active,
-
+    const current = getFirst('SELECT * FROM suitcases WHERE id = ?', [
       suitcaseId,
     ]);
 
-    const updated =
-      selectStmt
-        .executeSync([suitcaseId])
-        .getFirstSync();
+    if (!current) {
+      return { success: false, message: 'SUITCASE_NOT_FOUND' };
+    }
 
-    return {
-      success: true,
-      suitcase: {
-        ...updated,
-        items: JSON.parse(
-          updated.items || '[]'
-        ),
-        active:
-          !!updated.active,
-      },
-    };
+    const currentItems = safeParse(current.items, []);
 
-  } catch (error) {
-    console.log(
-      'Error al editar maleta en SQLite:',
-      error
+    const nextStart = fechaInicio ?? current.fechaInicio;
+    const nextEnd = fechaFin ?? current.fechaFin;
+
+    // estado y active se derivan de las fechas (ya no se confía en
+    // el "active" que manda la pantalla)
+    const status = computeSuitcaseStatus(
+      nextStart,
+      nextEnd,
+      estado ?? current.estado ?? 'Planificada'
+    );
+
+    run(
+      `UPDATE suitcases
+       SET destino = ?, fechaInicio = ?, fechaFin = ?, estado = ?,
+           items = ?, active = ?
+       WHERE id = ?`,
+      [
+        destino ?? current.destino,
+        nextStart,
+        nextEnd,
+        status,
+        JSON.stringify(items ?? currentItems),
+        status !== 'Finalizada' ? 1 : 0,
+        suitcaseId,
+      ]
     );
 
     return {
-      success: false,
-      message: error.message,
+      success: true,
+      suitcase: parseSuitcaseRow(
+        getFirst('SELECT * FROM suitcases WHERE id = ?', [suitcaseId])
+      ),
     };
+  } catch (error) {
+    console.log('Error al editar maleta en SQLite:', error);
+    return { success: false, message: error.message };
   }
 };
 
-export const deleteSuitcase = async (
-  suitcaseId
-) => {
-  if (Platform.OS === 'web') {
+export const deleteSuitcase = async (suitcaseId) => {
+  if (IS_WEB) {
     try {
-      const suitcases =
-        JSON.parse(
-          localStorage.getItem(
-            'suitcases'
-          ) || '[]'
-        );
-
-      const exists =
-        suitcases.some(
-          (item) =>
-            item.id === suitcaseId
-        );
-
-      if (!exists) {
-        return {
-          success: false,
-          message:
-            'SUITCASE_NOT_FOUND',
-        };
-      }
-
-      const updatedSuitcases =
-        suitcases.filter(
-          (item) =>
-            item.id !== suitcaseId
-        );
-
-      localStorage.setItem(
-        'suitcases',
-        JSON.stringify(
-          updatedSuitcases
-        )
-      );
-
-      return {
-        success: true,
-      };
-
+      return await api(`/suitcases/${suitcaseId}`, { method: 'DELETE' });
     } catch (error) {
-      return {
-        success: false,
-        message: error.message,
-      };
+      return { success: false, message: error.message };
     }
   }
 
   try {
-    if (!db) {
-      initDatabase();
-    }
-
-    const statement =
-      db.prepareSync(
-        'DELETE FROM suitcases WHERE id = ?'
-      );
-
-    statement.executeSync([
-      suitcaseId,
-    ]);
-
-    return {
-      success: true,
-    };
-
+    run('DELETE FROM suitcases WHERE id = ?', [suitcaseId]);
+    return { success: true };
   } catch (error) {
-    console.log(
-      'Error al eliminar maleta:',
-      error
-    );
-
-    return {
-      success: false,
-      message: error.message,
-    };
+    console.log('Error al eliminar maleta:', error);
+    return { success: false, message: error.message };
   }
 };

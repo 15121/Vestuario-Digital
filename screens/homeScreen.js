@@ -354,22 +354,16 @@ export default function HomeScreen({
 
 
   useFocusEffect(
-    useCallback(() => {
-      if (
-        user?.id ||
-        user?.id_usuario
-      ) {
-        const currentUserId =
-          user?.id ||
-          user?.id_usuario;
+  useCallback(() => {
+    const currentUserId = user?.id || user?.id_usuario;
+    if (!currentUserId) return;
 
-        const data =
-          getArmarioSummary(currentUserId);
-
-        setSummary(data);
-      }
-    }, [user])
-  );
+    (async () => {
+      const data = await getArmarioSummary(currentUserId);
+      setSummary(data);
+    })();
+  }, [user])
+);
 
 
   // ==========================================================
@@ -414,7 +408,7 @@ export default function HomeScreen({
 
           <View style={styles.greetingContainer}>
             <Text style={styles.greetingTitle}>
-              ¡Hola, {user?.name || 'Mateo'}! 👋
+              ¡Hola, {user?.name || 'Usuario'}! 👋
             </Text>
 
             <Text style={styles.greetingSubtitle}>

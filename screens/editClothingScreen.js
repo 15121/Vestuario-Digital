@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import { toPersistentUri } from '../services/imageUtils';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +11,6 @@ import {
   ActivityIndicator,
   Alert,
   useWindowDimensions,
-  SafeAreaView,
   Platform,
 } from 'react-native';
 
@@ -20,6 +20,11 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import jpeg from 'jpeg-js';
 
 import { COLORS } from '../theme/colours';
+import {
+  COLOR_OPTIONS,
+  rgbToCss,
+  findClosestColor,
+} from '../utils/colorutils';
 import ResponsiveContainer from '../components/ResponsiveContainer';
 import {
   updateClothingItem,
@@ -28,6 +33,12 @@ import {
   removeBackground,
 } from '../services/bgRemoveService';
 import AlertMessage from '../components/AlertMessage';
+import { OutfitScreenLayout } from '../navigation/MainTabNavigator';
+import { MESSAGES } from '../theme/messages';
+import {
+  validateClothingForm,
+  findDuplicateClothing,
+} from '../services/clothingValidation';
 
 /* ============================================================
    CATEGORÍAS
@@ -58,7 +69,7 @@ const SEASONS = [
   'Invierno',
   'Primavera',
   'Otoño',
-  'Todas',
+  'Todo el año',
   'Otra temporada',
 ];
 
@@ -85,105 +96,51 @@ const OCASIONES = [
    COLORES
    ============================================================ */
 
-const COLORS_LIST = [
-  { name: 'Negro', rgb: [0, 0, 0] },
-  { name: 'Blanco', rgb: [255, 255, 255] },
-  { name: 'Gris oscuro', rgb: [75, 85, 99] },
-  { name: 'Gris', rgb: [128, 128, 128] },
-  { name: 'Gris claro', rgb: [209, 213, 219] },
-
-  { name: 'Rojo', rgb: [220, 38, 38] },
-  { name: 'Rojo oscuro', rgb: [153, 27, 27] },
-  { name: 'Rosa', rgb: [236, 72, 153] },
-  { name: 'Rosa claro', rgb: [249, 168, 212] },
-
-  { name: 'Naranja', rgb: [249, 115, 22] },
-  { name: 'Amarillo', rgb: [234, 179, 8] },
-  { name: 'Crema', rgb: [255, 247, 214] },
-
-  { name: 'Verde', rgb: [22, 163, 74] },
-  { name: 'Verde oscuro', rgb: [22, 101, 52] },
-  { name: 'Verde claro', rgb: [134, 239, 172] },
-
-  { name: 'Celeste', rgb: [56, 189, 248] },
-  { name: 'Azul', rgb: [30, 64, 175] },
-  { name: 'Azul oscuro', rgb: [30, 58, 138] },
-
-  { name: 'Violeta', rgb: [156, 78, 221] },
-  { name: 'Lila', rgb: [196, 181, 253] },
-
-  { name: 'Marrón', rgb: [146, 64, 14] },
-  { name: 'Beige', rgb: [212, 185, 150] },
-
-  {
-    name: 'Multicolor',
-    rgb: null,
-  },
-];
+// La lista de colores vive en utils/colorUtils.js (COLOR_OPTIONS)
 
 const OTHER_COLOR_OPTION = 'Otro color';
 const DESCRIPTION_MAX_LENGTH = 150;
+const TITLE_MAX_LENGTH = 60;
+const CUSTOM_OPTION_MAX_LENGTH = 40;
 const IMAGE_BOX_SIZE = 220;
 
 /* ============================================================
-   UTILIDADES DE COLOR
+   NORMALIZACIÓN DE OPCIONES PERSONALIZADAS
+   ("camperas", "Camperas " y "CAMPERAS" pasan a ser "Camperas";
+   si coincide con una opción fija se usa esa, sin tildes ni
+   mayúsculas de por medio).
    ============================================================ */
 
-const rgbToCss = (rgb) => {
-  if (!rgb || !Array.isArray(rgb)) {
-    return null;
+const stripAccents = (value) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ');
+
+const normalizeCustomOption = (text, fixedOptions) => {
+  const clean = String(text || '').trim().replace(/\s+/g, ' ');
+
+  if (!clean) {
+    return '';
   }
 
-  const [r, g, b] = rgb;
+  const key = stripAccents(clean);
 
-  return `rgb(${r}, ${g}, ${b})`;
-};
-
-const colorDistance = (a, b) => {
-  return (
-    Math.pow(a[0] - b[0], 2) +
-    Math.pow(a[1] - b[1], 2) +
-    Math.pow(a[2] - b[2], 2)
+  const match = fixedOptions.find(
+    (option) =>
+      !option.startsWith('Otra ') &&
+      stripAccents(option) === key
   );
-};
 
-const findClosestColor = (
-  r,
-  g,
-  b
-) => {
-  const sample = [r, g, b];
+  if (match) {
+    return match;
+  }
 
-  let closest =
-    COLORS_LIST.find(
-      (color) => color.rgb
-    ) || COLORS_LIST[0];
+  const lower = clean.toLowerCase();
 
-  let distance = Infinity;
-
-  COLORS_LIST.forEach((color) => {
-    if (!color.rgb) {
-      return;
-    }
-
-    const currentDistance =
-      colorDistance(
-        sample,
-        color.rgb
-      );
-
-    if (
-      currentDistance <
-      distance
-    ) {
-      distance =
-        currentDistance;
-
-      closest = color;
-    }
-  });
-
-  return closest;
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
 };
 
 /* ============================================================
@@ -704,8 +661,11 @@ export default function EditClothingScreen({
   const initialCategory =
     prenda?.category || '';
 
+  // Las prendas viejas guardadas como "Todas" pasan a "Todo el año"
   const initialSeason =
-    prenda?.season || '';
+    prenda?.season === 'Todas'
+      ? 'Todo el año'
+      : prenda?.season || '';
 
   const initialOcasion =
     prenda?.ocasion || '';
@@ -889,10 +849,26 @@ const [imageUri, setImageUri] = useState(
     setIsSaving,
   ] = useState(false);
 
-  const [
-    alertMessage,
-    setAlertMessage,
-  ] = useState('');
+    const [alertInfo, setAlertInfo] = useState({ type: '', message: '' });
+  const alertTimer = useRef(null);
+  const navTimer = useRef(null);
+
+  const showAlert = (type, message) => {
+    clearTimeout(alertTimer.current);
+    setAlertInfo({ type, message });
+    alertTimer.current = setTimeout(
+      () => setAlertInfo({ type: '', message: '' }),
+      3500
+    );
+  };
+
+  useEffect(
+    () => () => {
+      clearTimeout(alertTimer.current);
+      clearTimeout(navTimer.current);
+    },
+    []
+  );
 
   /* ==========================================================
      DROPDOWN DESKTOP
@@ -909,17 +885,17 @@ const [imageUri, setImageUri] = useState(
 
   const finalCategory =
     isCustomCategory
-      ? customCategory.trim()
+      ? normalizeCustomOption(customCategory, CATEGORIES)
       : category;
 
   const finalSeason =
     isCustomSeason
-      ? customSeason.trim()
+      ? normalizeCustomOption(customSeason, SEASONS)
       : season;
 
   const finalOcasion =
     isCustomOcasion
-      ? customOcasion.trim()
+      ? normalizeCustomOption(customOcasion, OCASIONES)
       : ocasion;
 
   /* ==========================================================
@@ -1098,7 +1074,7 @@ const [imageUri, setImageUri] = useState(
   const selectColor =
     (colorName) => {
       const color =
-        COLORS_LIST.find(
+        COLOR_OPTIONS.find(
           (item) =>
             item.name ===
             colorName
@@ -1453,146 +1429,85 @@ const [imageUri, setImageUri] = useState(
      GUARDAR CAMBIOS
      ========================================================== */
 
-  const handleSave =
-    async () => {
-      if (!prenda?.id) {
-        Alert.alert(
-          'Error',
-          'No se encontró el identificador de la prenda.'
-        );
+    const handleSave = async () => {
+    if (!prenda?.id) {
+      showAlert('error', 'No se encontró el identificador de la prenda.');
+      return;
+    }
 
-        return;
-      }
+    const validationError = validateClothingForm({
+      title,
+      imageUri,
+      category: finalCategory,
+      color: selectedColor,
+      season: finalSeason,
+      ocasion: finalOcasion,
+    });
 
-      if (!title.trim()) {
-        Alert.alert(
-          'Campo obligatorio',
-          'Ingresá un nombre para la prenda.'
-        );
+    if (validationError) {
+      showAlert('error', validationError);
+      return;
+    }
 
-        return;
-      }
+    setIsSaving(true);
 
-      if (!imageUri) {
-        Alert.alert(
-          'Campo obligatorio',
-          'La prenda necesita una imagen.'
-        );
+    try {
+      const currentUser = route?.params?.user;
+      const ownerId = prenda?.userId ?? currentUser?.id;
 
-        return;
-      }
-
-      if (!finalCategory) {
-        Alert.alert(
-          'Campo obligatorio',
-          'Seleccioná una categoría.'
-        );
-
-        return;
-      }
-
-      if (
-        isCustomSeason &&
-        !finalSeason
-      ) {
-        Alert.alert(
-          'Campo obligatorio',
-          'Escribí una temporada personalizada.'
-        );
-
-        return;
-      }
-
-      if (
-        isCustomOcasion &&
-        !finalOcasion
-      ) {
-        Alert.alert(
-          'Campo obligatorio',
-          'Escribí una ocasión personalizada.'
-        );
-
-        return;
-      }
-
-      setIsSaving(
-        true
+      // ignoreId: la propia prenda no cuenta como duplicada
+      const duplicate = await findDuplicateClothing(
+        ownerId,
+        { title, category: finalCategory, color: selectedColor },
+        prenda.id
       );
 
-      setAlertMessage('');
-
-      try {
-        const clothingData =
-          {
-            title:
-              title.trim(),
-
-            category:
-              finalCategory,
-
-            color:
-              selectedColor,
-
-            season:
-              finalSeason,
-
-            ocasion:
-              finalOcasion,
-
-            description:
-              description.trim(),
-
-            imageUri,
-          };
-
-        const result =
-          await updateClothingItem(
-            prenda.id,
-            clothingData
-          );
-
-        if (
-          result.success
-        ) {
-          setAlertMessage(
-            'Prenda actualizada correctamente.'
-          );
-
-          /*
-           * Actualizamos también los datos locales
-           * para que la pantalla de detalle reciba
-           * la versión modificada al volver.
-           */
-          navigation.navigate(
-            'ClothingDetail',
-            {
-              prenda:
-                result.item,
-            }
-          );
-        } else {
-          Alert.alert(
-            'Error',
-            result.message ||
-              'No se pudo actualizar la prenda.'
-          );
-        }
-      } catch (error) {
-        console.error(
-          'Error al actualizar prenda:',
-          error
-        );
-
-        Alert.alert(
-          'Error',
-          'Surgió un error al intentar actualizar la prenda.'
-        );
-      } finally {
-        setIsSaving(
-          false
-        );
+      if (duplicate) {
+        showAlert('error', MESSAGES.ITEM_DUPLICATED);
+        return;
       }
-    };
+
+      const savedImage = await toPersistentUri(imageUri);
+
+      const clothingData = {
+        title: title.trim(),
+        category: finalCategory,
+        color: selectedColor,
+        season: finalSeason,
+        ocasion: finalOcasion,
+        description: description.trim(),
+        imageUri: savedImage,
+      };
+
+      const result = await updateClothingItem(prenda.id, clothingData);
+
+      if (result.success) {
+        showAlert('success', MESSAGES.ITEM_UPDATED);
+
+        // Si el servidor no devuelve la prenda, la armamos localmente
+        const updatedItem = result.item || {
+          ...prenda,
+          ...clothingData,
+          images: savedImage ? [savedImage] : [],
+        };
+
+        navTimer.current = setTimeout(() => {
+          navigation.navigate('ClothingDetail', {
+            prenda: updatedItem,
+            clothingId: prenda.id,
+            user: currentUser,
+          });
+        }, 1200);
+      } else {
+        showAlert('error', result.message || MESSAGES.ITEM_SAVE_ERROR);
+      }
+    } catch (error) {
+      console.error('Error al actualizar prenda:', error);
+      showAlert('error', MESSAGES.ITEM_SAVE_ERROR);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   /* ==========================================================
      INPUT PERSONALIZADO
@@ -1651,9 +1566,10 @@ const [imageUri, setImageUri] = useState(
 
           <TextInput
             value={value}
-            onChangeText={
-              setValue
+            onChangeText={(text) =>
+              setValue(text.slice(0, CUSTOM_OPTION_MAX_LENGTH))
             }
+            maxLength={CUSTOM_OPTION_MAX_LENGTH}
             placeholder={
               placeholder
             }
@@ -1721,7 +1637,7 @@ const [imageUri, setImageUri] = useState(
 
       const selectedColorObject =
         isColorRow
-          ? COLORS_LIST.find(
+          ? COLOR_OPTIONS.find(
               (c) =>
                 c.name ===
                 displayValue
@@ -2443,7 +2359,7 @@ const [imageUri, setImageUri] = useState(
         }
       >
         Nombre de la prenda
-        {!isDesktop && ' *'}
+        {' *'}
       </Text>
 
       {isDesktop ? (
@@ -2472,9 +2388,10 @@ const [imageUri, setImageUri] = useState(
               COLORS.textLight
             }
             value={title}
-            onChangeText={
-              setTitle
+            onChangeText={(text) =>
+              setTitle(text.slice(0, TITLE_MAX_LENGTH))
             }
+            maxLength={TITLE_MAX_LENGTH}
           />
         </View>
       ) : (
@@ -2487,9 +2404,10 @@ const [imageUri, setImageUri] = useState(
             COLORS.textLight
           }
           value={title}
-          onChangeText={
-            setTitle
-          }
+          onChangeText={(text) =>
+              setTitle(text.slice(0, TITLE_MAX_LENGTH))
+            }
+            maxLength={TITLE_MAX_LENGTH}
         />
       )}
     </View>
@@ -2586,7 +2504,7 @@ const [imageUri, setImageUri] = useState(
           styles.label
         }
       >
-        Color Principal
+        Color principal *
       </Text>
 
       <View
@@ -2594,7 +2512,7 @@ const [imageUri, setImageUri] = useState(
           styles.colorsContainer
         }
       >
-        {COLORS_LIST.map(
+        {COLOR_OPTIONS.map(
           (color) => {
             const isMulticolor =
               color.name ===
@@ -2752,7 +2670,7 @@ const [imageUri, setImageUri] = useState(
           styles.label
         }
       >
-        Temporada
+        Temporada *
       </Text>
 
       <View
@@ -2828,7 +2746,7 @@ const [imageUri, setImageUri] = useState(
           styles.label
         }
       >
-        Ocasión
+        Ocasión *
       </Text>
 
       <View
@@ -2949,49 +2867,13 @@ const [imageUri, setImageUri] = useState(
      ========================================================== */
 
   return (
-    <ResponsiveContainer>
-      <SafeAreaView
-        style={
-          styles.safeArea
-        }
-      >
-        {/* HEADER */}
-
-        <View
-          style={
-            styles.header
-          }
-        >
-          <Pressable
-            onPress={() =>
-              navigation.goBack()
-            }
-            style={
-              styles.backButton
-            }
-          >
-            <Ionicons
-              name="arrow-back"
-              size={24}
-              color="white"
-            />
-          </Pressable>
-
-          <Text
-            style={
-              styles.headerTitle
-            }
-          >
-            Editar Prenda
-          </Text>
-
-          <View
-            style={{
-              width: 40,
-            }}
-          />
-        </View>
-
+    <OutfitScreenLayout
+      title="Editar Prenda"
+      navigation={navigation}
+      user={route?.params?.user}
+      activeTab="Prendas"
+    >
+      <ResponsiveContainer>
         <ScrollView
           style={
             styles.scrollArea
@@ -3005,14 +2887,7 @@ const [imageUri, setImageUri] = useState(
             false
           }
         >
-          {alertMessage ? (
-            <AlertMessage
-              type="success"
-              message={
-                alertMessage
-              }
-            />
-          ) : null}
+          
 
           {isDesktop ? (
             <>
@@ -3052,7 +2927,7 @@ const [imageUri, setImageUri] = useState(
                     {renderDropdownRow(
                       'category',
                       'shirt-outline',
-                      'Categoría',
+                      'Categoría *',
                       category,
                       'Seleccionar categoría',
                       CATEGORIES,
@@ -3062,10 +2937,10 @@ const [imageUri, setImageUri] = useState(
                     {renderDropdownRow(
                       'color',
                       'color-palette-outline',
-                      'Color',
+                      'Color *',
                       selectedColor,
                       'Seleccionar color',
-                      COLORS_LIST,
+                      COLOR_OPTIONS,
                       selectColor,
                       true
                     )}
@@ -3073,7 +2948,7 @@ const [imageUri, setImageUri] = useState(
                     {renderDropdownRow(
                       'season',
                       'sunny-outline',
-                      'Temporada',
+                      'Temporada *',
                       season,
                       'Seleccionar temporada',
                       SEASONS,
@@ -3083,7 +2958,7 @@ const [imageUri, setImageUri] = useState(
                     {renderDropdownRow(
                       'ocasion',
                       'sparkles-outline',
-                      'Ocasión',
+                      'Ocasión *',
                       ocasion,
                       'Seleccionar ocasión',
                       OCASIONES,
@@ -3274,9 +3149,16 @@ const [imageUri, setImageUri] = useState(
               </Pressable>
             </>
           )}
-        </ScrollView>
-      </SafeAreaView>
-    </ResponsiveContainer>
+               </ScrollView>
+
+        <AlertMessage
+          floating
+          top={12}
+          type={alertInfo.type}
+          message={alertInfo.message}
+        />
+      </ResponsiveContainer>
+    </OutfitScreenLayout>
   );
 }
 
@@ -3286,34 +3168,6 @@ const [imageUri, setImageUri] = useState(
 
 const styles =
   StyleSheet.create({
-    safeArea: {
-      flex: 1,
-      backgroundColor:
-        COLORS.background,
-    },
-
-    header: {
-      height: 60,
-      backgroundColor:
-        COLORS.primary,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent:
-        'space-between',
-      paddingHorizontal: 16,
-    },
-
-    backButton: {
-      padding: 8,
-    },
-
-    headerTitle: {
-      color: 'white',
-      fontSize: 18,
-      fontFamily:
-        'Poppins_600SemiBold',
-    },
-
     scrollArea: {
       flex: 1,
     },

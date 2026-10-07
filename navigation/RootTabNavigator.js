@@ -37,6 +37,8 @@ import AdminEditUserScreen from '../screens/AdminEditUserScreen';
 import AdminRequestsScreen from '../screens/AdminRequestsScreen';
 
 import { COLORS } from '../theme/colours';
+import { confirmLogout, logout } from '../services/session';
+import { setUnauthorizedHandler } from '../services/api';
 
 
 // ============================================================
@@ -465,48 +467,27 @@ export default function RootTabNavigator({
   // ==========================================================
 
   const handleLogout = () => {
-
-    const doLogout = () =>
-      navigation.reset({
-        index: 0,
-        routes: [
-          {
-            name: 'Welcome',
-          },
-        ],
-      });
-
-
-    if (Platform.OS === 'web') {
-
-      if (
-        window.confirm(
-          '¿Querés cerrar sesión?'
-        )
-      ) {
-        doLogout();
-      }
-
-      return;
-    }
-
-
-    Alert.alert(
-      'Cerrar sesión',
-      '¿Querés cerrar sesión?',
-      [
-        {
-          text: 'Cancelar',
-          style: 'cancel',
-        },
-
-        {
-          text: 'Cerrar sesión',
-          onPress: doLogout,
-        },
-      ]
-    );
+    confirmLogout(navigation);
   };
+
+
+  // ==========================================================
+  // SESIÓN VENCIDA (401 del servidor estando logueado)
+  // Vuelve al login y avisa, igual que MainTabNavigator.
+  // ==========================================================
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      logout(navigation);
+
+      Alert.alert(
+        'Sesión vencida',
+        'Tu sesión expiró. Iniciá sesión nuevamente.'
+      );
+    });
+
+    return () => setUnauthorizedHandler(null);
+  }, [navigation]);
 
 
   // ==========================================================

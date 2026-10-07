@@ -2,7 +2,7 @@
 // SERVICIO DE CLIMA - OPENWEATHERMAP
 // ============================================================
 
-const API_KEY = '4fef9b7a6ae73acafddd96e31a199cfc';
+const API_KEY = process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY;
 
 const BASE_URL =
   'https://api.openweathermap.org/data/2.5/weather';
@@ -155,262 +155,423 @@ export const getWeatherByCity = async (city) => {
     );
   }
 
-  try {
-    const cleanCity = city.trim();
-
-    const url =
-      `${BASE_URL}?q=${encodeURIComponent(
-        cleanCity
-      )}&units=metric&lang=es&appid=${API_KEY}`;
-
-    const response = await fetch(url);
-
-    const data = await response.json();
-
-
-    // ========================================================
-    // CIUDAD NO ENCONTRADA
-    // ========================================================
-
-    if (response.status === 404) {
-      throw new Error(
-        'Ciudad no encontrada. Verifica el nombre ingresado.'
-      );
-    }
-
-
-    // ========================================================
-    // OTROS ERRORES DE LA API
-    // ========================================================
-
-    if (!response.ok) {
-      throw new Error(
-        'No se pudo obtener el clima en este momento.'
-      );
-    }
-
-
-    // ========================================================
-    // VALIDACIÓN DE LA RESPUESTA
-    // ========================================================
-
-    if (
-      !data ||
-      !data.main ||
-      !Array.isArray(data.weather) ||
-      !data.weather[0]
-    ) {
-      throw new Error(
-        'La información climática recibida no es válida.'
-      );
-    }
-
-
-    // ========================================================
-    // INFORMACIÓN PRINCIPAL
-    // ========================================================
-
-    const weatherData =
-      data.weather[0];
-
-    const conditionGroup =
-      weatherData.main || '';
-
-    const conditionDescription =
-      weatherData.description || '';
-
-    const iconCode =
-      weatherData.icon || '01d';
-
-
-    // ========================================================
-    // TEMPERATURA
-    // ========================================================
-
-    const temperature =
-      Number(data.main.temp);
-
-    const feelsLike =
-      Number(data.main.feels_like);
-
-    const humidity =
-      Number(data.main.humidity);
-
-
-    // ========================================================
-    // INFORMACIÓN DEL VIENTO
-    // ========================================================
-
-    // Velocidad actual del viento en m/s.
-    const windSpeedMs =
-      Number(data.wind?.speed || 0);
-
-    // Velocidad actual convertida a km/h.
-    const windSpeedKmh =
-      metersPerSecondToKilometersPerHour(
-        windSpeedMs
-      );
-
-    // Dirección del viento en grados.
-    const windDegree =
-      data.wind?.deg ?? null;
-
-    // Ráfaga de viento en m/s.
-    const windGustMs =
-      data.wind?.gust != null
-        ? Number(data.wind.gust)
-        : null;
-
-    // Ráfaga convertida a km/h.
-    const windGustKmh =
-      windGustMs != null
-        ? metersPerSecondToKilometersPerHour(
-            windGustMs
-          )
-        : null;
-
-    // Determinamos si el viento es suficientemente
-    // relevante para modificar visualmente la tarjeta.
-    const isWindy =
-      isWindyWeather(windSpeedMs);
-
-
-    // ========================================================
-    // TIPO DE ICONO
-    // ========================================================
-
-    const weatherIconType =
-      getWeatherIconType(
-        conditionGroup,
-        isWindy
-      );
-
-
-    // ========================================================
-    // DESCRIPCIÓN PARA LA PANTALLA
-    // ========================================================
-
-    const displayDescription =
-      getWeatherDisplayDescription(
-        conditionDescription,
-        isWindy
-      );
-
-
-    // ========================================================
-    // RESULTADO FINAL
-    // ========================================================
-
-    return {
-
-      // ------------------------------------------------------
-      // TEMPERATURA
-      // ------------------------------------------------------
-
-      temp:
-        Math.round(temperature),
-
-      feelsLike:
-        Math.round(feelsLike),
-
-
-      // ------------------------------------------------------
-      // HUMEDAD
-      // ------------------------------------------------------
-
-      humidity,
-
-
-      // ------------------------------------------------------
-      // CONDICIÓN CLIMÁTICA
-      // ------------------------------------------------------
-
-      conditionGroup,
-
-      conditionDescription,
-
-      displayDescription,
-
-
-      // ------------------------------------------------------
-      // ICONO DE OPENWEATHER
-      // ------------------------------------------------------
-
-      iconCode,
-
-
-      // ------------------------------------------------------
-      // TIPO DE ICONO
-      //
-      // "openweather" → icono de OpenWeather
-      // "wind"        → icono propio de viento
-      // ------------------------------------------------------
-
-      weatherIconType,
-
-
-      // ------------------------------------------------------
-      // VIENTO
-      // ------------------------------------------------------
-
-      windSpeedMs,
-
-      windSpeedKmh,
-
-      windDegree,
-
-      windGustMs,
-
-      windGustKmh,
-
-      isWindy,
-
-
-      // ------------------------------------------------------
-      // CIUDAD
-      // ------------------------------------------------------
-
-      city:
-        `${data.name}, ${data.sys.country}`,
-    };
-
-  } catch (error) {
-    throw error;
+  if (!API_KEY) {
+    throw new Error(
+      'Falta configurar EXPO_PUBLIC_OPENWEATHER_API_KEY en el archivo .env.'
+    );
   }
+
+  const cleanCity = city.trim();
+
+  const url =
+    `${BASE_URL}?q=${encodeURIComponent(
+      cleanCity
+    )}&units=metric&lang=es&appid=${API_KEY}`;
+
+
+  // ========================================================
+  // PETICIÓN
+  // ========================================================
+
+  let response;
+
+  try {
+    response = await fetch(url);
+  } catch (networkError) {
+    // Sin conexión, timeout, etc.
+    throw new Error(
+      'No se pudo conectar. Revisá tu conexión a internet.'
+    );
+  }
+
+  // Si la respuesta no es JSON válido, seguimos y dejamos
+  // que las validaciones de abajo informen el error.
+  let data = null;
+
+  try {
+    data = await response.json();
+  } catch (parseError) {
+    data = null;
+  }
+
+
+  // ========================================================
+  // CIUDAD NO ENCONTRADA
+  // ========================================================
+
+  if (response.status === 404) {
+    throw new Error(
+      'Ciudad no encontrada. Verifica el nombre ingresado.'
+    );
+  }
+
+
+  // ========================================================
+  // OTROS ERRORES DE LA API
+  // ========================================================
+
+  if (!response.ok) {
+    throw new Error(
+      'No se pudo obtener el clima en este momento.'
+    );
+  }
+
+
+  // ========================================================
+  // VALIDACIÓN DE LA RESPUESTA
+  // ========================================================
+
+  if (
+    !data ||
+    !data.main ||
+    !Array.isArray(data.weather) ||
+    !data.weather[0]
+  ) {
+    throw new Error(
+      'La información climática recibida no es válida.'
+    );
+  }
+
+
+  // ========================================================
+  // INFORMACIÓN PRINCIPAL
+  // ========================================================
+
+  const weatherData =
+    data.weather[0];
+
+  const conditionGroup =
+    weatherData.main || '';
+
+  const conditionDescription =
+    weatherData.description || '';
+
+  const iconCode =
+    weatherData.icon || '01d';
+
+
+  // ========================================================
+  // TEMPERATURA
+  // ========================================================
+
+  const temperature =
+    Number(data.main.temp);
+
+  const feelsLike =
+    Number(data.main.feels_like);
+
+  const humidity =
+    Number(data.main.humidity);
+
+
+  // ========================================================
+  // INFORMACIÓN DEL VIENTO
+  // ========================================================
+
+  // Velocidad actual del viento en m/s.
+  const windSpeedMs =
+    Number(data.wind?.speed || 0);
+
+  // Velocidad actual convertida a km/h.
+  const windSpeedKmh =
+    metersPerSecondToKilometersPerHour(
+      windSpeedMs
+    );
+
+  // Dirección del viento en grados.
+  const windDegree =
+    data.wind?.deg ?? null;
+
+  // Ráfaga de viento en m/s.
+  const windGustMs =
+    data.wind?.gust != null
+      ? Number(data.wind.gust)
+      : null;
+
+  // Ráfaga convertida a km/h.
+  const windGustKmh =
+    windGustMs != null
+      ? metersPerSecondToKilometersPerHour(
+          windGustMs
+        )
+      : null;
+
+  // Determinamos si el viento es suficientemente
+  // relevante para modificar visualmente la tarjeta.
+  const isWindy =
+    isWindyWeather(windSpeedMs);
+
+
+  // ========================================================
+  // TIPO DE ICONO
+  // ========================================================
+
+  const weatherIconType =
+    getWeatherIconType(
+      conditionGroup,
+      isWindy
+    );
+
+
+  // ========================================================
+  // DESCRIPCIÓN PARA LA PANTALLA
+  // ========================================================
+
+  const displayDescription =
+    getWeatherDisplayDescription(
+      conditionDescription,
+      isWindy
+    );
+
+
+  // ========================================================
+  // RESULTADO FINAL
+  // ========================================================
+
+  return {
+
+    // ------------------------------------------------------
+    // TEMPERATURA
+    // ------------------------------------------------------
+
+    temp:
+      Math.round(temperature),
+
+    feelsLike:
+      Math.round(feelsLike),
+
+
+    // ------------------------------------------------------
+    // HUMEDAD
+    // ------------------------------------------------------
+
+    humidity,
+
+
+    // ------------------------------------------------------
+    // CONDICIÓN CLIMÁTICA
+    // ------------------------------------------------------
+
+    conditionGroup,
+
+    conditionDescription,
+
+    displayDescription,
+
+
+    // ------------------------------------------------------
+    // ICONO DE OPENWEATHER
+    // ------------------------------------------------------
+
+    iconCode,
+
+
+    // ------------------------------------------------------
+    // TIPO DE ICONO
+    //
+    // "openweather" → icono de OpenWeather
+    // "wind"        → icono propio de viento
+    // ------------------------------------------------------
+
+    weatherIconType,
+
+
+    // ------------------------------------------------------
+    // VIENTO
+    // ------------------------------------------------------
+
+    windSpeedMs,
+
+    windSpeedKmh,
+
+    windDegree,
+
+    windGustMs,
+
+    windGustKmh,
+
+    isWindy,
+
+
+    // ------------------------------------------------------
+    // CIUDAD
+    // ------------------------------------------------------
+
+    city:
+      `${data.name}, ${data.sys?.country ?? ''}`,
+  };
 };
 
 
 // ============================================================
 // RECOMENDACIÓN GENERAL DE VESTIMENTA
 // ============================================================
+//
+// IMPORTANTE:
+//
+// Estas funciones devuelven solamente el TEXTO general de
+// recomendación (y etiquetas orientativas).
+//
+// La selección de prendas concretas del armario se realiza
+// en utils/outfitRecommender.js y se muestra en
+// weatherRecScreen.js.
 
 /**
- * Retorna una recomendación general de vestimenta
- * contemplando diferentes condiciones climáticas.
+ * Devuelve la franja de temperatura según la temperatura
+ * efectiva (sensación térmica).
  *
- * IMPORTANTE:
- *
- * Esta función devuelve solamente el TEXTO general
- * de recomendación.
- *
- * La selección de prendas concretas del armario se
- * realiza posteriormente en weatherRecScreen.js.
- *
- * @param {number} temp - Temperatura en °C.
- * @param {string} conditionGroup - Grupo principal del clima.
- * @param {number} humidity - Porcentaje de humedad.
- * @returns {string} Sugerencia de vestimenta.
+ * @param {number} effectiveTemp
+ * @returns {'muy_frio'|'frio'|'fresco'|'templado'|'calido'|'caluroso'}
  */
-export const getOutfitRecommendation = (
+const getTemperatureBand = (effectiveTemp) => {
+  if (effectiveTemp <= 5) return 'muy_frio';
+  if (effectiveTemp <= 11) return 'frio';
+  if (effectiveTemp <= 16) return 'fresco';
+  if (effectiveTemp <= 21) return 'templado';
+  if (effectiveTemp <= 26) return 'calido';
+  return 'caluroso';
+};
+
+
+const BAND_BASE = {
+  muy_frio: {
+    label: 'Clima muy frío',
+    text:
+      'Abrigate por capas: base térmica, sweater grueso y ' +
+      'campera o abrigo pesado.',
+    tags: [
+      'abrigo_pesado',
+      'sweater',
+      'pantalon_largo',
+      'bufanda',
+      'gorro',
+      'guantes',
+      'botas',
+    ],
+  },
+
+  frio: {
+    label: 'Clima frío',
+    text:
+      'Usá campera o abrigo, un sweater o buzo abajo y ' +
+      'pantalón largo.',
+    tags: [
+      'campera',
+      'sweater',
+      'pantalon_largo',
+      'bufanda',
+      'zapatillas',
+    ],
+  },
+
+  fresco: {
+    label: 'Clima fresco',
+    text:
+      'Ideal para buzo o sweater liviano con una campera ' +
+      'fina o saco que puedas sacarte.',
+    tags: [
+      'buzo',
+      'campera_liviana',
+      'camisa_manga_larga',
+      'pantalon_largo',
+      'zapatillas',
+    ],
+  },
+
+  templado: {
+    label: 'Clima templado',
+    text:
+      'Camisa de manga larga o remera con una capa liviana ' +
+      'por si refresca.',
+    tags: [
+      'camisa_manga_larga',
+      'remera',
+      'campera_liviana',
+      'pantalon_largo',
+      'zapatillas',
+    ],
+  },
+
+  calido: {
+    label: 'Clima cálido',
+    text:
+      'Remera, camisa de manga corta o vestido liviano, ' +
+      'preferentemente de algodón.',
+    tags: [
+      'remera',
+      'camisa_manga_corta',
+      'vestido',
+      'bermuda',
+      'zapatillas',
+    ],
+  },
+
+  caluroso: {
+    label: 'Calor intenso',
+    text:
+      'Ropa muy liviana, holgada y de colores claros: ' +
+      'musculosa, remera, shorts o vestido.',
+    tags: [
+      'musculosa',
+      'remera',
+      'shorts',
+      'vestido',
+      'sandalias',
+      'gorra',
+      'anteojos_sol',
+    ],
+  },
+};
+
+
+/**
+ * Devuelve una recomendación general estructurada.
+ *
+ * Contempla: sensación térmica, lluvia, nieve, viento,
+ * humedad, cielo despejado y niebla.
+ *
+ * @param {Object} params
+ * @param {number} params.temp - Temperatura en °C.
+ * @param {number} [params.feelsLike] - Sensación térmica en °C.
+ * @param {string} params.conditionGroup - Grupo principal del clima.
+ * @param {number} [params.humidity] - Porcentaje de humedad.
+ * @param {number} [params.windSpeedMs] - Viento en m/s.
+ * @param {boolean} [params.isWindy] - Si el viento es relevante.
+ * @returns {{
+ *   band: string,
+ *   title: string,
+ *   text: string,
+ *   tips: string[],
+ *   tags: string[]
+ * }}
+ */
+export const getOutfitAdvice = ({
   temp,
+  feelsLike,
   conditionGroup,
-  humidity
-) => {
+  humidity,
+  windSpeedMs,
+  isWindy,
+}) => {
   const temperature =
     Number(temp);
 
+  const feelsLikeValue =
+    feelsLike === undefined || feelsLike === null
+      ? NaN
+      : Number(feelsLike);
+
+  const effectiveTemp =
+    Number.isFinite(feelsLikeValue)
+      ? feelsLikeValue
+      : temperature;
+
   const humidityValue =
-    Number(humidity);
+    Number(humidity || 0);
+
+  const windy =
+    isWindy ??
+    Number(windSpeedMs || 0) >= WINDY_THRESHOLD_MS;
 
 
   // ==========================================================
@@ -425,97 +586,235 @@ export const getOutfitRecommendation = (
   const isSnowing =
     conditionGroup === 'Snow';
 
+  const isFoggy =
+    conditionGroup === 'Mist' ||
+    conditionGroup === 'Fog' ||
+    conditionGroup === 'Haze' ||
+    conditionGroup === 'Smoke';
+
+  const isClear =
+    conditionGroup === 'Clear';
+
   const isHumid =
     humidityValue >= 75;
 
+  const band =
+    getTemperatureBand(effectiveTemp);
 
-  // ==========================================================
-  // 1. LLUVIA / TORMENTA
-  // ==========================================================
+  const base =
+    BAND_BASE[band];
 
-  if (isRaining) {
+  const tags =
+    new Set(base.tags);
 
-    if (temperature <= 15) {
-      return (
-        'Lluvia y frío: Te sugerimos piloto o campera ' +
-        'impermeable, calzado resistente al agua, abrigo ' +
-        'y paraguas.'
-      );
-    }
-
-    return (
-      'Lluvia cálida/templada: Lleva prendas livianas ' +
-      'de rápido secado, impermeables ligeros o piloto ' +
-      'y paraguas.'
-    );
-  }
+  const tips = [];
 
 
   // ==========================================================
-  // 2. NIEVE
+  // PRECIPITACIONES
   // ==========================================================
 
   if (isSnowing) {
-    return (
-      'Clima con nieve: Usa abrigo pesado o campera ' +
-      'térmica, ropa de abrigo por capas, guantes, gorro ' +
-      'y botas impermeables.'
+    [
+      'abrigo_pesado',
+      'guantes',
+      'gorro',
+      'botas',
+      'impermeable',
+    ].forEach((tag) => tags.add(tag));
+
+    tips.push(
+      'Usá calzado impermeable con buen agarre y abrigate por capas.'
     );
+  } else if (isRaining) {
+    ['impermeable', 'paraguas'].forEach(
+      (tag) => tags.add(tag)
+    );
+
+    tags.delete('sandalias');
+    tags.delete('anteojos_sol');
+    tags.delete('gorra');
+
+    if (
+      band === 'calido' ||
+      band === 'caluroso'
+    ) {
+      tips.push(
+        'Elegí prendas de secado rápido y un piloto liviano.'
+      );
+
+      tips.push(
+        'Evitá las sandalias abiertas.'
+      );
+    } else {
+      tips.push(
+        'Llevá piloto o campera impermeable y calzado que aguante el agua.'
+      );
+    }
+
+    if (conditionGroup === 'Thunderstorm') {
+      tips.push(
+        'Hay tormenta eléctrica: evitá quedarte bajo árboles o en espacios abiertos.'
+      );
+    }
   }
 
 
   // ==========================================================
-  // 3. CALOR + HUMEDAD ALTA
+  // VIENTO
+  // ==========================================================
+
+  if (windy) {
+    tags.add('campera_liviana');
+    tags.add('cortaviento');
+
+    // Con viento fuerte el paraguas suele romperse.
+    tags.delete('paraguas');
+
+    if (isRaining) {
+      tips.push(
+        'Con viento fuerte, un piloto con capucha rinde más que el paraguas.'
+      );
+    } else {
+      tips.push(
+        'Hay viento: sumá un cortaviento y evitá prendas muy sueltas o sombreros.'
+      );
+    }
+  }
+
+
+  // ==========================================================
+  // HUMEDAD
   // ==========================================================
 
   if (
-    temperature > 22 &&
-    isHumid
+    isHumid &&
+    effectiveTemp > 22 &&
+    !isRaining
   ) {
-    return (
-      'Calor y humedad alta: Optá por ropa muy liviana ' +
-      'y holgada de algodón o lino, colores claros y ' +
-      'calzado fresco para evitar agobiarte.'
+    ['algodon', 'lino', 'colores_claros'].forEach(
+      (tag) => tags.add(tag)
+    );
+
+    tips.push(
+      'Humedad alta: preferí algodón o lino, holgado y de colores claros.'
+    );
+  }
+
+  if (
+    isHumid &&
+    effectiveTemp <= 11
+  ) {
+    tips.push(
+      'La humedad aumenta la sensación de frío: abrigate un poco más.'
     );
   }
 
 
   // ==========================================================
-  // 4. CLIMA FRÍO
-  // ==========================================================
-
-  if (temperature <= 12) {
-    return (
-      'Clima frío: Te sugerimos usar abrigo pesado, ' +
-      'campera, abrigo o saco térmico y bufanda.'
-    );
-  }
-
-
-  // ==========================================================
-  // 5. CLIMA TEMPLADO / MODERADO
+  // SOL
   // ==========================================================
 
   if (
-    temperature > 12 &&
-    temperature <= 22
+    isClear &&
+    effectiveTemp >= 20 &&
+    !isRaining
   ) {
-    return (
-      'Clima templado: Ideal para llevar buzo, camisas ' +
-      'de manga larga, sweater ligero o campera liviana.'
+    ['anteojos_sol', 'gorra'].forEach(
+      (tag) => tags.add(tag)
+    );
+
+    tips.push(
+      'Día despejado: no te olvides de los anteojos de sol y el protector solar.'
     );
   }
 
 
   // ==========================================================
-  // 6. CALOR SECO / NORMAL
+  // NIEBLA
   // ==========================================================
 
-  return (
-    'Clima cálido: Te recomendamos usar remera, ' +
-    'musculosa, shorts, vestidos o ropa liviana ' +
-    'de algodón.'
-  );
+  if (isFoggy) {
+    tips.push(
+      'Visibilidad reducida: si salís de noche, elegí prendas claras.'
+    );
+  }
+
+
+  // ==========================================================
+  // DIFERENCIA ENTRE TEMPERATURA REAL Y SENSACIÓN
+  // ==========================================================
+
+  if (
+    Number.isFinite(temperature) &&
+    Math.abs(effectiveTemp - temperature) >= 3
+  ) {
+    tips.push(
+      effectiveTemp < temperature
+        ? `La sensación térmica es de ${Math.round(effectiveTemp)}°C, más fría que la temperatura real.`
+        : `La sensación térmica es de ${Math.round(effectiveTemp)}°C, más calurosa que la temperatura real.`
+    );
+  }
+
+
+  // ==========================================================
+  // RESULTADO
+  // ==========================================================
+
+  const title =
+    isSnowing
+      ? `${base.label} con nieve`
+      : isRaining
+        ? `${base.label} con lluvia`
+        : windy
+          ? `${base.label} con viento`
+          : base.label;
+
+  const text =
+    [`${title}: ${base.text}`, ...tips].join(' ');
+
+  return {
+    band,
+    title,
+    text,
+    tips,
+    tags: Array.from(tags),
+  };
+};
+
+
+/**
+ * Versión compatible con el uso anterior: devuelve solo el texto.
+ *
+ * Para aprovechar la sensación térmica y el viento, pasar
+ * el cuarto parámetro:
+ *
+ *   getOutfitRecommendation(temp, group, humidity, {
+ *     feelsLike,
+ *     windSpeedMs,
+ *     isWindy,
+ *   });
+ *
+ * @param {number} temp
+ * @param {string} conditionGroup
+ * @param {number} humidity
+ * @param {Object} [options]
+ * @returns {string}
+ */
+export const getOutfitRecommendation = (
+  temp,
+  conditionGroup,
+  humidity,
+  options = {}
+) => {
+  return getOutfitAdvice({
+    temp,
+    conditionGroup,
+    humidity,
+    feelsLike: options.feelsLike,
+    windSpeedMs: options.windSpeedMs,
+    isWindy: options.isWindy,
+  }).text;
 };
 
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,20 +6,24 @@ import {
   TextInput,
   TouchableOpacity,
   useWindowDimensions,
+  ActivityIndicator,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../theme/colours';
 import { MESSAGES } from '../theme/messages';
 import ResponsiveContainer from '../components/ResponsiveContainer';
 import AlertMessage from '../components/AlertMessage';
-import { resetUserPassword } from '../services/database';
+import { resetUserPassword, requestPasswordReset } from '../services/database';
 import { sendForgotPasswordEmail } from '../services/emailService';
 
 // ============================================================
 // PANTALLA RECUPERAR CONTRASEÑA
 // ============================================================
-
+const COOLDOWN_MS = 5 * 60 * 1000; // 5 minutos
+const COOLDOWN_KEY = 'forgotPasswordCooldownUntil';
 export default function ForgotPasswordScreen({ navigation }) {
 
   // ----------------------------------------------------------
@@ -28,7 +32,40 @@ export default function ForgotPasswordScreen({ navigation }) {
 
   const [email, setEmail] = useState('');
   const [alert, setAlert] = useState({ type: '', message: '' });
+const [loading, setLoading] = useState(false);
+const [cooldownUntil, setCooldownUntil] = useState(0);
+const [now, setNow] = useState(Date.now());
+const sendingRef = useRef(false);
 
+// Recuperar el cooldown guardado (si el usuario salió y volvió)
+useEffect(() => {
+  AsyncStorage.getItem(COOLDOWN_KEY).then((value) => {
+    const until = Number(value) || 0;
+    if (until > Date.now()) {
+      setCooldownUntil(until);
+      setNow(Date.now());
+    }
+  });
+}, []);
+
+// Reloj que actualiza la cuenta regresiva cada segundo
+useEffect(() => {
+  if (!cooldownUntil) return undefined;
+
+  const id = setInterval(() => {
+    const t = Date.now();
+    setNow(t);
+    if (t >= cooldownUntil) clearInterval(id);
+  }, 1000);
+
+  return () => clearInterval(id);
+}, [cooldownUntil]);
+
+const secondsLeft = Math.max(0, Math.ceil((cooldownUntil - now) / 1000));
+const isCoolingDown = secondsLeft > 0;
+
+const formatTime = (s) =>
+  `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   // ----------------------------------------------------------
   // DETECCIÓN DE DISPOSITIVO
   // ----------------------------------------------------------
@@ -58,22 +95,39 @@ export default function ForgotPasswordScreen({ navigation }) {
   // FUNCIÓN PARA RECUPERAR CONTRASEÑA
   // ==========================================================
 
-  const handleResetPassword = async () => {
+ const handleResetPassword = async () => {
+  // Bloqueo inmediato: evita doble toque antes de que React actualice el estado
+  if (sendingRef.current || isCoolingDown) return;
 
-    if (!email) {
-      setAlert({
-        type: 'error',
-        message: MESSAGES.REQUIRED_FIELDS,
-      });
-      return;
-    }
+  const cleanEmail = email.trim();
 
-    try {
-      // 1. Generamos la clave provisoria
+  if (!cleanEmail) {
+    setAlert({
+      type: 'error',
+      message: MESSAGES.REQUIRED_FIELDS,
+    });
+    return;
+  }
+
+  sendingRef.current = true;
+  setLoading(true);
+
+  try {
+    if (Platform.OS === 'web') {
+      // Web: el servidor genera la clave y envía el mail
+      const result = await requestPasswordReset(cleanEmail);
+
+      if (!result.success) {
+        setAlert({
+          type: 'error',
+          message: 'Ocurrió un error al enviar el correo. Intentalo de nuevo.',
+        });
+        return;
+      }
+    } else {
+      // Celular (SQLite local): flujo anterior
       const tempPassword = generateTempPassword();
-
-      // 2. Actualizamos la clave en la base de datos (Web o Celular)
-      const dbResult = await resetUserPassword(email, tempPassword);
+      const dbResult = await resetUserPassword(cleanEmail, tempPassword);
 
       if (!dbResult.success) {
         setAlert({
@@ -83,22 +137,33 @@ export default function ForgotPasswordScreen({ navigation }) {
         return;
       }
 
-      // 3. Envío de correo centralizado vía emailService.js
-      await sendForgotPasswordEmail(email, tempPassword);
-
-      setAlert({
-        type: 'success',
-        message: '¡Correo enviado! Te enviamos una clave temporal para ingresar.',
-      });
-
-    } catch (error) {
-      console.log('Error detallado al enviar correo:', error);
-      setAlert({
-        type: 'error',
-        message: 'Ocurrió un error al enviar el correo. Intentalo de nuevo.',
-      });
+      await sendForgotPasswordEmail(cleanEmail, tempPassword);
     }
-  };
+
+    // 4. Iniciamos el cooldown y lo guardamos
+    const until = Date.now() + COOLDOWN_MS;
+    setCooldownUntil(until);
+    setNow(Date.now());
+    await AsyncStorage.setItem(COOLDOWN_KEY, String(until));
+
+    setAlert({
+      type: 'success',
+      message:
+        Platform.OS === 'web'
+          ? 'Si el correo está registrado, te enviamos una clave temporal.'
+          : '¡Correo enviado! Te enviamos una clave temporal para ingresar.',
+    });
+  } catch (error) {
+    console.log('Error detallado al enviar correo:', error);
+    setAlert({
+      type: 'error',
+      message: 'Ocurrió un error al enviar el correo. Intentalo de nuevo.',
+    });
+  } finally {
+    sendingRef.current = false;
+    setLoading(false);
+  }
+};
 
   // ==========================================================
   // INTERFAZ
@@ -157,7 +222,7 @@ export default function ForgotPasswordScreen({ navigation }) {
 
             <Text style={styles.subtitle}>
               Ingresá tu correo electrónico y te enviaremos
-              un enlace para restablecer tu contraseña.
+              una clave temporal para que puedas ingresar.
             </Text>
 
             <AlertMessage type={alert.type} message={alert.message} />
@@ -181,13 +246,23 @@ export default function ForgotPasswordScreen({ navigation }) {
             </View>
 
             <TouchableOpacity
-              style={styles.submitButton}
-              onPress={handleResetPassword}
-            >
-              <Text style={styles.submitButtonText}>
-                Enviar enlace de recuperación
-              </Text>
-            </TouchableOpacity>
+  style={[
+    styles.submitButton,
+    (loading || isCoolingDown) && styles.submitButtonDisabled,
+  ]}
+  onPress={handleResetPassword}
+  disabled={loading || isCoolingDown}
+>
+  {loading ? (
+    <ActivityIndicator color="#FFFFFF" />
+  ) : (
+    <Text style={styles.submitButtonText}>
+      {isCoolingDown
+        ? `Podés reenviar en ${formatTime(secondsLeft)}`
+        : 'Enviar correo'}
+    </Text>
+  )}
+</TouchableOpacity>
           </View>
 
           {/* ===============================================
@@ -208,9 +283,9 @@ export default function ForgotPasswordScreen({ navigation }) {
                 style={styles.infoIcon}
               />
               <Text style={styles.infoText}>
-                Si el correo está registrado, recibirás un
-                enlace para restablecer tu contraseña en unos
-                minutos.
+                Si el correo está registrado, recibirás una
+                clave temporal en unos minutos. Ingresá con ella
+                y cambiala desde tu Perfil.
               </Text>
             </View>
           </View>
@@ -341,11 +416,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+
   submitButtonText: {
     color: '#FFFFFF',
     fontSize: 15,
     fontFamily: 'Poppins_600SemiBold',
   },
+  submitButtonDisabled: {
+  opacity: 0.6,
+},
   rightColumn: {
     width: '100%',
     marginTop: 20,
