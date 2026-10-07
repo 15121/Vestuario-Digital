@@ -1,0 +1,2623 @@
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+
+import {
+  ActivityIndicator,
+  Image,
+  Keyboard,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+
+import {
+  Ionicons,
+  MaterialCommunityIcons,
+} from '@expo/vector-icons';
+
+import { COLORS } from '../theme/colours';
+
+import {
+  getWeatherByCity,
+  getOutfitAdvice,
+} from '../services/weatherService';
+
+import {
+  getUserClothes,
+} from '../services/database';
+
+import {
+  getUserCity,
+  saveUserCity,
+} from '../services/weatherStorage';
+
+import {
+  AppHeader,
+  DesktopSidebar,
+  MobileAddButton,
+} from '../navigation/MainTabNavigator';
+
+import AddMenuModal from '../components/AddMenuModal';
+import SideMenu from '../components/sideMenu';
+import { confirmLogout } from '../services/session';
+import { getColorHex } from '../utils/colorutils';
+import { buildOutfitRecommendation } from '../utils/outfitrecommender';
+
+
+// ============================================================
+// CONSTANTES
+// ============================================================
+
+const WEATHER_ICON_URL =
+  'https://openweathermap.org/img/wn';
+
+const DESKTOP_BREAKPOINT = 900;
+
+const MOBILE_BOTTOM_NAV_HEIGHT = 78;
+
+
+// ============================================================
+// UTILIDADES
+// ============================================================
+
+const getUserIdentifier = (user) => {
+  return (
+    user?.id ??
+    user?.id_usuario ??
+    null
+  );
+};
+
+
+const getClothingTitle = (item) => {
+  return (
+    item?.title ||
+    item?.name ||
+    item?.nombre ||
+    'Prenda sin nombre'
+  );
+};
+
+
+const getClothingCategory = (item) => {
+  return (
+    item?.category ||
+    item?.categoria ||
+    'Sin categoría'
+  );
+};
+
+
+const getClothingColor = (item) => {
+  return (
+    item?.color ||
+    'Sin color'
+  );
+};
+
+
+const getClothingImage = (item) => {
+  return (
+    item?.imageUri ||
+    item?.image ||
+    item?.foto ||
+    item?.photo ||
+    null
+  );
+};
+
+
+const getItemId = (item, index = 0) => {
+  return (
+    item?.id ??
+    item?.id_prenda ??
+    item?.idClothing ??
+    `clothing-${index}`
+  );
+};
+
+
+// ============================================================
+// TEXTO DEL CLIMA
+// ============================================================
+
+const getConditionLabel = (
+  weather
+) => {
+  if (!weather) {
+    return '';
+  }
+
+  if (
+    weather.weatherIconType === 'wind' ||
+    weather.isWindy === true
+  ) {
+    return 'Viento';
+  }
+
+  if (
+    weather.displayDescription
+  ) {
+    return weather.displayDescription;
+  }
+
+  if (
+    weather.conditionDescription
+  ) {
+    const description =
+      String(
+        weather.conditionDescription
+      );
+
+    return (
+      description.charAt(0).toUpperCase() +
+      description.slice(1)
+    );
+  }
+
+  switch (
+    weather.conditionGroup
+  ) {
+    case 'Clear':
+      return 'Despejado';
+
+    case 'Clouds':
+      return 'Nublado';
+
+    case 'Rain':
+      return 'Lluvia';
+
+    case 'Drizzle':
+      return 'Llovizna';
+
+    case 'Thunderstorm':
+      return 'Tormenta';
+
+    case 'Snow':
+      return 'Nieve';
+
+    case 'Mist':
+      return 'Neblina';
+
+    case 'Fog':
+      return 'Niebla';
+
+    case 'Haze':
+      return 'Calima';
+
+    case 'Dust':
+      return 'Polvo';
+
+    case 'Sand':
+      return 'Arena';
+
+    case 'Smoke':
+      return 'Humo';
+
+    case 'Ash':
+      return 'Ceniza';
+
+    case 'Squall':
+      return 'Ráfaga';
+
+    case 'Tornado':
+      return 'Tornado';
+
+    default:
+      return 'Clima actual';
+  }
+};
+
+
+// ============================================================
+// TARJETA DEL CLIMA
+// ============================================================
+
+const WeatherCard = ({
+  weather,
+  onChangeCity,
+}) => {
+  const iconCode =
+    weather?.iconCode;
+
+  const isWindy =
+    weather?.weatherIconType === 'wind' ||
+    weather?.isWindy === true;
+
+  const weatherIconUri =
+    iconCode
+      ? `${WEATHER_ICON_URL}/${iconCode}@2x.png`
+      : null;
+
+  return (
+    <View
+      style={weatherCardStyles.card}
+    >
+      <View
+        style={weatherCardStyles.topRow}
+      >
+        <View
+          style={
+            weatherCardStyles.cityContainer
+          }
+        >
+          <View
+            style={
+              weatherCardStyles.cityLabelRow
+            }
+          >
+            <Ionicons
+              name="location"
+              size={17}
+              color="#8C73D6"
+            />
+
+            <Text
+              style={
+                weatherCardStyles.cityName
+              }
+              numberOfLines={1}
+            >
+              {weather?.city ||
+                'Ciudad'}
+            </Text>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={onChangeCity}
+          style={
+            weatherCardStyles.changeButton
+          }
+        >
+          <Ionicons
+            name="location-outline"
+            size={15}
+            color="#FFFFFF"
+          />
+
+          <Text
+            style={
+              weatherCardStyles.changeButtonText
+            }
+          >
+            Cambiar
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <View
+        style={
+          weatherCardStyles.weatherMain
+        }
+      >
+        <View
+          style={
+            weatherCardStyles.iconContainer
+          }
+        >
+          {isWindy ? (
+            <MaterialCommunityIcons
+              name="weather-windy"
+              size={64}
+              color="#8C73D6"
+            />
+          ) : weatherIconUri ? (
+            <Image
+              source={{
+                uri: weatherIconUri,
+              }}
+              style={
+                weatherCardStyles.weatherIcon
+              }
+              resizeMode="contain"
+            />
+          ) : (
+            <MaterialCommunityIcons
+              name="weather-partly-cloudy"
+              size={64}
+              color="#8C73D6"
+            />
+          )}
+        </View>
+
+        <View
+          style={
+            weatherCardStyles.temperatureContainer
+          }
+        >
+          <Text
+            style={
+              weatherCardStyles.temperature
+            }
+          >
+            {weather?.temp ?? '--'}°C
+          </Text>
+
+          <Text
+            style={
+              weatherCardStyles.condition
+            }
+          >
+            {getConditionLabel(
+              weather
+            )}
+          </Text>
+        </View>
+      </View>
+
+      <View
+        style={
+          weatherCardStyles.divider
+        }
+      />
+
+      <View
+        style={
+          weatherCardStyles.bottomInfo
+        }
+      >
+        <WeatherInfo
+          icon="thermometer-outline"
+          label="Sensación"
+          value={
+            weather?.feelsLike !==
+              undefined &&
+            weather?.feelsLike !==
+              null
+              ? `${weather.feelsLike}°C`
+              : '--'
+          }
+        />
+
+        {weather?.humidity !==
+          undefined &&
+          weather?.humidity !==
+            null && (
+            <WeatherInfo
+              icon="water-outline"
+              label="Humedad"
+              value={`${weather.humidity}%`}
+            />
+          )}
+
+        {weather?.windSpeedKmh !==
+          undefined &&
+          weather?.windSpeedKmh !==
+            null && (
+            <WeatherInfo
+              icon="weather-windy"
+              label="Viento"
+              value={`${Math.round(
+                Number(
+                  weather.windSpeedKmh
+                )
+              )} km/h`}
+              material
+            />
+          )}
+      </View>
+    </View>
+  );
+};
+
+
+const WeatherInfo = ({
+  icon,
+  label,
+  value,
+  material = false,
+}) => {
+  return (
+    <View
+      style={
+        weatherCardStyles.infoItem
+      }
+    >
+      {material ? (
+        <MaterialCommunityIcons
+          name={icon}
+          size={18}
+          color="#8C73D6"
+        />
+      ) : (
+        <Ionicons
+          name={icon}
+          size={18}
+          color="#8C73D6"
+        />
+      )}
+
+      <Text
+        style={
+          weatherCardStyles.infoLabel
+        }
+      >
+        {label}
+      </Text>
+
+      <Text
+        style={
+          weatherCardStyles.infoValue
+        }
+      >
+        {value}
+      </Text>
+    </View>
+  );
+};
+
+
+// ============================================================
+// COLOR DE PRENDA
+// ============================================================
+
+const getClothingColorDot = (colorName) =>
+  getColorHex(colorName, '#CBD5E1');
+
+
+// ============================================================
+// TARJETA DE PRENDA
+// ============================================================
+
+const ClothingRecommendationCard = ({
+  item,
+  label,
+  reason,
+}) => {
+  const title =
+    getClothingTitle(item);
+
+  const category =
+    getClothingCategory(item);
+
+  const color =
+    getClothingColor(item);
+
+  const image =
+    getClothingImage(item);
+
+  return (
+    <View
+      style={
+        recommendationStyles.card
+      }
+    >
+      <View
+        style={
+          recommendationStyles.imageContainer
+        }
+      >
+        {image ? (
+          <Image
+            source={{
+              uri: image,
+            }}
+            style={
+              recommendationStyles.image
+            }
+            resizeMode="contain"
+          />
+        ) : (
+          <View
+            style={
+              recommendationStyles.placeholder
+            }
+          >
+            <Ionicons
+              name="shirt-outline"
+              size={28}
+              color="#A8A8A8"
+            />
+          </View>
+        )}
+      </View>
+
+      <View
+        style={
+          recommendationStyles.content
+        }
+      >
+        {label ? (
+          <Text
+            style={
+              recommendationStyles.slotLabel
+            }
+            numberOfLines={1}
+          >
+            {label}
+          </Text>
+        ) : null}
+
+        <Text
+          style={
+            recommendationStyles.title
+          }
+          numberOfLines={1}
+        >
+          {title}
+        </Text>
+
+        <Text
+          style={
+            recommendationStyles.category
+          }
+          numberOfLines={1}
+        >
+          Categoría: {category}
+        </Text>
+
+        <View
+          style={
+            recommendationStyles.colorRow
+          }
+        >
+          <View
+            style={[
+              recommendationStyles.colorDot,
+              {
+                backgroundColor:
+                  getClothingColorDot(
+                    color
+                  ),
+              },
+            ]}
+          />
+
+          <Text
+            style={
+              recommendationStyles.colorText
+            }
+            numberOfLines={1}
+          >
+            {color}
+          </Text>
+        </View>
+
+        {reason ? (
+          <Text
+            style={
+              recommendationStyles.reason
+            }
+            numberOfLines={2}
+          >
+            {reason}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+};
+
+
+// ============================================================
+// ESTADO VACÍO
+// ============================================================
+
+const EmptyRecommendationState = ({
+  hasClothes,
+}) => {
+  return (
+    <View
+      style={
+        emptyStateStyles.container
+      }
+    >
+      <View
+        style={
+          emptyStateStyles.iconContainer
+        }
+      >
+        <MaterialCommunityIcons
+          name="hanger"
+          size={48}
+          color="#8C73D6"
+        />
+      </View>
+
+      <Text
+        style={
+          emptyStateStyles.title
+        }
+      >
+        {hasClothes
+          ? 'No hay prendas adecuadas para este clima.'
+          : 'Todavía no tenés prendas.'}
+      </Text>
+
+      <Text
+        style={
+          emptyStateStyles.description
+        }
+      >
+        {hasClothes
+          ? 'Probá agregando prendas que se adapten a las condiciones climáticas actuales.'
+          : 'Agregá prendas a tu armario para recibir recomendaciones según el clima.'}
+      </Text>
+    </View>
+  );
+};
+
+
+// ============================================================
+// MODAL CIUDAD
+// ============================================================
+
+const CityModal = ({
+  visible,
+  cityInput,
+  setCityInput,
+  onClose,
+  onConfirm,
+  loading,
+}) => {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={
+        onClose
+      }
+    >
+      <Pressable
+        style={
+          cityModalStyles.overlay
+        }
+        onPress={onClose}
+      >
+        <Pressable
+          style={
+            cityModalStyles.modal
+          }
+          onPress={(event) =>
+            event.stopPropagation()
+          }
+        >
+          <View
+            style={
+              cityModalStyles.header
+            }
+          >
+            <View
+              style={
+                cityModalStyles.titleContainer
+              }
+            >
+              <Ionicons
+                name="location-outline"
+                size={24}
+                color="#8C73D6"
+              />
+
+              <Text
+                style={
+                  cityModalStyles.title
+                }
+              >
+                Cambiar ciudad
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={onClose}
+              disabled={loading}
+            >
+              <Ionicons
+                name="close"
+                size={26}
+                color="#666666"
+              />
+            </TouchableOpacity>
+          </View>
+
+          <Text
+            style={
+              cityModalStyles.description
+            }
+          >
+            Ingresá la ciudad para consultar
+            el clima y obtener recomendaciones
+            para tus prendas.
+          </Text>
+
+          <TextInput
+            value={cityInput}
+            onChangeText={
+              setCityInput
+            }
+            placeholder="Ej. Buenos Aires"
+            placeholderTextColor="#999999"
+            autoCapitalize="words"
+            autoCorrect={false}
+            returnKeyType="done"
+            editable={!loading}
+            onSubmitEditing={
+              onConfirm
+            }
+            style={
+              cityModalStyles.input
+            }
+          />
+
+          <View
+            style={
+              cityModalStyles.buttons
+            }
+          >
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={onClose}
+              disabled={loading}
+              style={
+                cityModalStyles.cancelButton
+              }
+            >
+              <Text
+                style={
+                  cityModalStyles.cancelText
+                }
+              >
+                Cancelar
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={onConfirm}
+              disabled={loading}
+              style={[
+                cityModalStyles.confirmButton,
+                loading &&
+                  cityModalStyles.disabledButton,
+              ]}
+            >
+              {loading ? (
+                <ActivityIndicator
+                  size="small"
+                  color="#FFFFFF"
+                />
+              ) : (
+                <Text
+                  style={
+                    cityModalStyles.confirmText
+                  }
+                >
+                  Consultar
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+};
+
+
+// ============================================================
+// PANTALLA PRINCIPAL
+// ============================================================
+
+const WeatherRecScreen = ({
+  navigation,
+  route,
+}) => {
+  const { width } =
+    useWindowDimensions();
+
+  const isDesktop =
+    width >= DESKTOP_BREAKPOINT;
+
+  const user =
+    route?.params?.user ||
+    null;
+
+  const userId = useMemo(
+    () =>
+      getUserIdentifier(user),
+    [user]
+  );
+
+
+  // ----------------------------------------------------------
+  // ESTADOS
+  // ----------------------------------------------------------
+
+  const [weather, setWeather] =
+    useState(null);
+
+  const [clothes, setClothes] =
+    useState([]);
+
+  // Cada elemento: { item, id, slot, label, reason }
+  const [recommendations, setRecommendations] =
+    useState([]);
+
+  // Qué le falta al usuario para completar el outfit.
+  const [missingItems, setMissingItems] =
+    useState([]);
+
+  const [city, setCity] =
+    useState('');
+
+  const [cityInput, setCityInput] =
+    useState('');
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [loadingWeather, setLoadingWeather] =
+    useState(false);
+
+  const [refreshingRecommendations, setRefreshingRecommendations] =
+    useState(false);
+
+  const [errorMessage, setErrorMessage] =
+    useState('');
+
+  const [cityModalVisible, setCityModalVisible] =
+    useState(false);
+
+  const [sideMenuVisible, setSideMenuVisible] =
+    useState(false);
+
+  const [addMenuVisible, setAddMenuVisible] =
+    useState(false);
+
+
+  // ----------------------------------------------------------
+  // CONSEJO GENERAL DE VESTIMENTA
+  // ----------------------------------------------------------
+  //
+  // IMPORTANTE: los hooks deben ir antes de cualquier return
+  // condicional (como el de "loading" más abajo).
+
+  const advice = useMemo(() => {
+    if (!weather) {
+      return null;
+    }
+
+    return getOutfitAdvice({
+      temp: weather.temp,
+      feelsLike: weather.feelsLike,
+      conditionGroup: weather.conditionGroup,
+      humidity: weather.humidity,
+      windSpeedMs: weather.windSpeedMs,
+      isWindy: weather.isWindy,
+    });
+  }, [weather]);
+
+
+  // ----------------------------------------------------------
+  // CARGAR PRENDAS
+  // ----------------------------------------------------------
+
+  const loadClothes =
+    useCallback(async () => {
+      if (
+        userId === null ||
+        userId === undefined
+      ) {
+        setClothes([]);
+        return [];
+      }
+
+      try {
+        const result =
+          await getUserClothes(
+            userId
+          );
+
+        const list =
+          Array.isArray(result)
+            ? result
+            : Array.isArray(
+                result?.data
+              )
+              ? result.data
+              : [];
+
+        setClothes(list);
+
+        return list;
+      } catch (error) {
+        console.log(
+          'Error al cargar prendas:',
+          error
+        );
+
+        setClothes([]);
+
+        return [];
+      }
+    }, [userId]);
+
+
+  // ----------------------------------------------------------
+  // ACTUALIZAR RECOMENDACIONES
+  // ----------------------------------------------------------
+
+  const updateRecommendations =
+    useCallback(
+      (
+        weatherResult,
+        clothingList
+      ) => {
+        if (
+          !weatherResult ||
+          !Array.isArray(
+            clothingList
+          )
+        ) {
+          setRecommendations([]);
+          setMissingItems([]);
+          return;
+        }
+
+        const result =
+          buildOutfitRecommendation(
+            clothingList,
+            weatherResult
+          );
+
+        setRecommendations(
+          result.items
+        );
+
+        setMissingItems(
+          result.missing
+        );
+      },
+      []
+    );
+
+
+  // ----------------------------------------------------------
+  // CONSULTAR CLIMA
+  // ----------------------------------------------------------
+
+  const loadWeather =
+    useCallback(
+      async (cityToSearch) => {
+        const cleanCity =
+          String(
+            cityToSearch || ''
+          ).trim();
+
+        if (!cleanCity) {
+          setErrorMessage(
+            'Debés ingresar el nombre de una ciudad.'
+          );
+
+          return false;
+        }
+
+        setLoadingWeather(true);
+        setErrorMessage('');
+
+        try {
+          const result =
+            await getWeatherByCity(
+              cleanCity
+            );
+
+          if (!result) {
+            throw new Error(
+              'No se encontraron datos del clima para esa ciudad.'
+            );
+          }
+
+          setWeather(result);
+
+          const resolvedCity =
+            result.city ||
+            cleanCity;
+
+          setCity(resolvedCity);
+          setCityInput(resolvedCity);
+
+          await saveUserCity(
+            user,
+            resolvedCity
+          );
+
+          const freshClothes =
+            await loadClothes();
+
+          updateRecommendations(
+            result,
+            freshClothes
+          );
+
+          return true;
+        } catch (error) {
+          console.log(
+            'Error al obtener clima:',
+            error
+          );
+
+          setWeather(null);
+          setRecommendations([]);
+          setMissingItems([]);
+
+          setErrorMessage(
+            error?.message ||
+              'No se pudo obtener el clima en este momento.'
+          );
+
+          return false;
+        } finally {
+          setLoadingWeather(false);
+          setLoading(false);
+        }
+      },
+      [
+        loadClothes,
+        updateRecommendations,
+        user,
+      ]
+    );
+
+
+  // ----------------------------------------------------------
+  // INICIALIZACIÓN
+  // ----------------------------------------------------------
+
+  useEffect(() => {
+    let mounted = true;
+
+    const initialize =
+      async () => {
+        setLoading(true);
+        setErrorMessage('');
+
+        try {
+          if (
+            userId === null ||
+            userId === undefined
+          ) {
+            if (mounted) {
+              setClothes([]);
+              setWeather(null);
+              setRecommendations([]);
+              setMissingItems([]);
+              setLoading(false);
+            }
+
+            return;
+          }
+
+          const [
+            savedCity,
+          ] = await Promise.all([
+            getUserCity(user),
+            loadClothes(),
+          ]);
+
+          if (!mounted) {
+            return;
+          }
+
+          if (
+            savedCity &&
+            savedCity.trim()
+          ) {
+            setCity(
+              savedCity
+            );
+
+            setCityInput(
+              savedCity
+            );
+
+            await loadWeather(
+              savedCity
+            );
+          } else {
+            setWeather(null);
+            setRecommendations([]);
+            setMissingItems([]);
+            setCity('');
+            setCityInput('');
+            setLoading(false);
+          }
+        } catch (error) {
+          console.log(
+            'Error inicializando clima:',
+            error
+          );
+
+          if (mounted) {
+            setWeather(null);
+            setRecommendations([]);
+            setMissingItems([]);
+            setLoading(false);
+            setErrorMessage(
+              'No se pudo cargar la información climática.'
+            );
+          }
+        }
+      };
+
+    initialize();
+
+    return () => {
+      mounted = false;
+    };
+  }, [
+    userId,
+    loadClothes,
+    loadWeather,
+    user,
+  ]);
+
+
+  // ----------------------------------------------------------
+  // ACTUALIZAR RECOMENDACIONES CUANDO CAMBIAN LAS PRENDAS
+  // ----------------------------------------------------------
+
+  useEffect(() => {
+    if (!weather) {
+      return;
+    }
+
+    updateRecommendations(
+      weather,
+      clothes
+    );
+  }, [
+    weather,
+    clothes,
+    updateRecommendations,
+  ]);
+
+
+  // ----------------------------------------------------------
+  // CAMBIAR CIUDAD
+  // ----------------------------------------------------------
+
+  const openCityModal =
+    useCallback(() => {
+      setCityInput(
+        city || ''
+      );
+
+      setErrorMessage('');
+
+      setCityModalVisible(
+        true
+      );
+    }, [city]);
+
+
+  const closeCityModal =
+    useCallback(() => {
+      if (loadingWeather) {
+        return;
+      }
+
+      Keyboard.dismiss();
+
+      setCityModalVisible(
+        false
+      );
+    }, [loadingWeather]);
+
+
+  const handleConfirmCity =
+    useCallback(async () => {
+      const cleanCity =
+        cityInput.trim();
+
+      if (!cleanCity) {
+        setErrorMessage(
+          'Debés ingresar el nombre de una ciudad.'
+        );
+
+        return;
+      }
+
+      Keyboard.dismiss();
+
+      const success =
+        await loadWeather(
+          cleanCity
+        );
+
+      if (success) {
+        setCityModalVisible(
+          false
+        );
+      }
+    }, [
+      cityInput,
+      loadWeather,
+    ]);
+
+
+  // ----------------------------------------------------------
+  // ACTUALIZAR
+  // ----------------------------------------------------------
+
+  const handleRefreshRecommendations =
+    useCallback(async () => {
+      if (
+        refreshingRecommendations
+      ) {
+        return;
+      }
+
+      setRefreshingRecommendations(
+        true
+      );
+
+      try {
+        if (city) {
+          await loadWeather(
+            city
+          );
+        } else {
+          const freshClothes =
+            await loadClothes();
+
+          updateRecommendations(
+            weather,
+            freshClothes
+          );
+        }
+      } finally {
+        setRefreshingRecommendations(
+          false
+        );
+      }
+    }, [
+      city,
+      loadClothes,
+      loadWeather,
+      refreshingRecommendations,
+      updateRecommendations,
+      weather,
+    ]);
+
+
+  // ----------------------------------------------------------
+  // MENÚ LATERAL
+  // ----------------------------------------------------------
+
+  const handleOpenAddMenu =
+    useCallback(() => {
+      setAddMenuVisible(true);
+    }, []);
+
+
+  const handleCloseAddMenu =
+    useCallback(() => {
+      setAddMenuVisible(false);
+    }, []);
+
+
+  const handleCloseSideMenu =
+    useCallback(() => {
+      setSideMenuVisible(false);
+    }, []);
+
+
+  // ----------------------------------------------------------
+  // NAVEGACIÓN
+  // ----------------------------------------------------------
+
+  const goToMainTab =
+    useCallback(
+      (tabName) => {
+        navigation?.navigate?.(
+          'Main',
+          {
+            user,
+            initialTab: tabName,
+            navTs: Date.now(),
+          }
+        );
+      },
+      [navigation, user]
+    );
+
+
+  const handleAddClothing =
+    useCallback(() => {
+      setAddMenuVisible(false);
+
+      navigation?.navigate?.(
+        'AddClothing',
+        { user }
+      );
+    }, [
+      navigation,
+      user,
+    ]);
+
+
+  const handleCreateOutfit =
+    useCallback(() => {
+      setAddMenuVisible(false);
+
+      navigation?.navigate?.(
+        'CreateOutfit',
+        { user }
+      );
+    }, [
+      navigation,
+      user,
+    ]);
+
+
+  const handleProfile =
+    useCallback(() => {
+      setSideMenuVisible(false);
+
+      navigation?.navigate?.(
+        'Profile',
+        { user }
+      );
+    }, [
+      navigation,
+      user,
+    ]);
+
+
+  const handleAbout =
+    useCallback(() => {
+      setSideMenuVisible(false);
+
+      navigation?.navigate?.(
+        'AboutApp',
+        { user }
+      );
+    }, [
+      navigation,
+      user,
+    ]);
+
+
+  const handleHelp =
+    useCallback(() => {
+      setSideMenuVisible(false);
+
+      navigation?.navigate?.(
+        'Help',
+        { user }
+      );
+    }, [
+      navigation,
+      user,
+    ]);
+
+
+  const handleLogout =
+    useCallback(() => {
+      setSideMenuVisible(false);
+
+      confirmLogout(
+        navigation
+      );
+    }, [navigation]);
+
+
+  // ----------------------------------------------------------
+  // LOADING
+  // ----------------------------------------------------------
+
+  if (loading) {
+    return (
+      <View
+        style={
+          screenStyles.loadingContainer
+        }
+      >
+        <ActivityIndicator
+          size="large"
+          color="#8C73D6"
+        />
+
+        <Text
+          style={
+            screenStyles.loadingText
+          }
+        >
+          Cargando clima...
+        </Text>
+      </View>
+    );
+  }
+
+
+  const hasClothes =
+    clothes.length > 0;
+
+
+  return (
+    <View
+      style={
+        screenStyles.container
+      }
+    >
+      <AppHeader
+        title="Recomendación Climática"
+        onBack={() =>
+          navigation?.goBack?.()
+        }
+        onOpenProfile={
+          handleProfile
+        }
+      />
+
+      <View
+        style={[
+          screenStyles.body,
+          isDesktop &&
+            screenStyles.bodyDesktop,
+        ]}
+      >
+        {isDesktop && (
+          <DesktopSidebar
+            activeTab={null}
+            onChangeTab={
+              goToMainTab
+            }
+            onOpenAddMenu={
+              handleOpenAddMenu
+            }
+          />
+        )}
+
+        <View
+          style={
+            screenStyles.content
+          }
+        >
+          <ScrollView
+            style={
+              screenStyles.scroll
+            }
+            contentContainerStyle={[
+              screenStyles.scrollContent,
+              isDesktop &&
+                screenStyles.scrollContentDesktop,
+            ]}
+            showsVerticalScrollIndicator={
+              false
+            }
+            keyboardShouldPersistTaps="handled"
+          >
+            <View
+              style={
+                screenStyles.inner
+              }
+            >
+              {errorMessage ? (
+                <View
+                  style={
+                    screenStyles.errorBox
+                  }
+                >
+                  <Ionicons
+                    name="alert-circle-outline"
+                    size={22}
+                    color="#B42318"
+                  />
+
+                  <Text
+                    style={
+                      screenStyles.errorText
+                    }
+                  >
+                    {errorMessage}
+                  </Text>
+
+                  <TouchableOpacity
+                    onPress={() =>
+                      setErrorMessage(
+                        ''
+                      )
+                    }
+                  >
+                    <Ionicons
+                      name="close"
+                      size={20}
+                      color="#B42318"
+                    />
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+
+              <View
+                style={[
+                  screenStyles.mainGrid,
+                  isDesktop &&
+                    screenStyles.mainGridDesktop,
+                ]}
+              >
+                <View
+                  style={
+                    isDesktop
+                      ? screenStyles.weatherColumn
+                      : screenStyles.fullWidthColumn
+                  }
+                >
+                  {weather ? (
+                    <WeatherCard
+                      weather={
+                        weather
+                      }
+                      onChangeCity={
+                        openCityModal
+                      }
+                    />
+                  ) : (
+                    <View
+                      style={
+                        screenStyles.noWeatherCard
+                      }
+                    >
+                      <MaterialCommunityIcons
+                        name="weather-partly-cloudy"
+                        size={52}
+                        color="#8C73D6"
+                      />
+
+                      <Text
+                        style={
+                          screenStyles.noWeatherTitle
+                        }
+                      >
+                        Consultá el clima
+                      </Text>
+
+                      <Text
+                        style={
+                          screenStyles.noWeatherDescription
+                        }
+                      >
+                        Ingresá una ciudad para
+                        conocer las condiciones
+                        actuales y recibir
+                        recomendaciones.
+                      </Text>
+
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={
+                          openCityModal
+                        }
+                        style={
+                          screenStyles.primaryButton
+                        }
+                      >
+                        <Ionicons
+                          name="location-outline"
+                          size={20}
+                          color="#FFFFFF"
+                        />
+
+                        <Text
+                          style={
+                            screenStyles.primaryButtonText
+                          }
+                        >
+                          Ingresar ciudad
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+
+                {weather && (
+                  <View
+                    style={
+                      isDesktop
+                        ? screenStyles.recommendationsColumn
+                        : screenStyles.fullWidthColumn
+                    }
+                  >
+                    <View
+                      style={
+                        screenStyles.recommendationsSection
+                      }
+                    >
+                      <View
+                        style={
+                          screenStyles.sectionHeader
+                        }
+                      >
+                        <View
+                          style={
+                            screenStyles.sectionHeaderIconCircle
+                          }
+                        >
+                          <Ionicons
+                            name="shirt-outline"
+                            size={18}
+                            color="#8C73D6"
+                          />
+                        </View>
+
+                        <Text
+                          style={
+                            screenStyles.sectionTitle
+                          }
+                        >
+                          Prendas recomendadas para hoy
+                        </Text>
+                      </View>
+
+                      {advice ? (
+                        <View
+                          style={[
+                            screenStyles.infoBox,
+                            screenStyles.adviceBox,
+                          ]}
+                        >
+                          <Ionicons
+                            name="partly-sunny-outline"
+                            size={20}
+                            color="#8C73D6"
+                          />
+
+                          <Text
+                            style={
+                              screenStyles.infoBoxText
+                            }
+                          >
+                            {advice.text}
+                          </Text>
+                        </View>
+                      ) : null}
+
+                      {recommendations.length ===
+                      0 ? (
+                        <EmptyRecommendationState
+                          hasClothes={
+                            hasClothes
+                          }
+                        />
+                      ) : (
+                        <View
+                          style={
+                            screenStyles.recommendationsList
+                          }
+                        >
+                          {recommendations.map(
+                            (
+                              entry,
+                              index
+                            ) => (
+                              <ClothingRecommendationCard
+                                key={`${entry.slot}-${String(
+                                  entry.id ??
+                                    getItemId(
+                                      entry.item,
+                                      index
+                                    )
+                                )}`}
+                                item={
+                                  entry.item
+                                }
+                                label={
+                                  entry.label
+                                }
+                                reason={
+                                  entry.reason
+                                }
+                              />
+                            )
+                          )}
+                        </View>
+                      )}
+
+                      {recommendations.length >
+                        0 &&
+                        missingItems.length >
+                          0 && (
+                          <View
+                            style={[
+                              screenStyles.infoBox,
+                              screenStyles.missingBox,
+                            ]}
+                          >
+                            <Ionicons
+                              name="add-circle-outline"
+                              size={20}
+                              color="#8C73D6"
+                            />
+
+                            <Text
+                              style={
+                                screenStyles.infoBoxText
+                              }
+                            >
+                              Para completar el outfit te
+                              vendría bien sumar{' '}
+                              {missingItems.join(', ')}.
+                            </Text>
+                          </View>
+                        )}
+
+                      <View
+                        style={
+                          screenStyles.infoBox
+                        }
+                      >
+                        <Ionicons
+                          name="information-circle-outline"
+                          size={20}
+                          color="#8C73D6"
+                        />
+
+                        <Text
+                          style={
+                            screenStyles.infoBoxText
+                          }
+                        >
+                          Estas recomendaciones se
+                          generan utilizando las prendas
+                          que tenés registradas en tu armario
+                          y las condiciones climáticas actuales.
+                        </Text>
+                      </View>
+
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        disabled={
+                          refreshingRecommendations
+                        }
+                        onPress={
+                          handleRefreshRecommendations
+                        }
+                        style={[
+                          screenStyles.refreshButton,
+                          refreshingRecommendations &&
+                            screenStyles.refreshButtonDisabled,
+                        ]}
+                      >
+                        {refreshingRecommendations ? (
+                          <ActivityIndicator
+                            size="small"
+                            color="#FFFFFF"
+                          />
+                        ) : (
+                          <>
+                            <Ionicons
+                              name="refresh"
+                              size={18}
+                              color="#FFFFFF"
+                            />
+
+                            <Text
+                              style={
+                                screenStyles.refreshButtonText
+                              }
+                            >
+                              Actualizar recomendaciones
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+
+      {!isDesktop && (
+        <View
+          style={
+            bottomNavigationStyles.container
+          }
+        >
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() =>
+              goToMainTab('Inicio')
+            }
+            style={
+              bottomNavigationStyles.item
+            }
+          >
+            <Ionicons
+              name="home-outline"
+              size={23}
+              color="#6F6F6F"
+            />
+
+            <Text
+              style={
+                bottomNavigationStyles.label
+              }
+            >
+              Inicio
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() =>
+              goToMainTab('Prendas')
+            }
+            style={
+              bottomNavigationStyles.item
+            }
+          >
+            <Ionicons
+              name="shirt-outline"
+              size={23}
+              color="#6F6F6F"
+            />
+
+            <Text
+              style={
+                bottomNavigationStyles.label
+              }
+            >
+              Prendas
+            </Text>
+          </TouchableOpacity>
+
+          <MobileAddButton
+            onPress={
+              handleOpenAddMenu
+            }
+          />
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() =>
+              goToMainTab('Outfits')
+            }
+            style={
+              bottomNavigationStyles.item
+            }
+          >
+            <MaterialCommunityIcons
+              name="hanger"
+              size={23}
+              color="#6F6F6F"
+            />
+
+            <Text
+              style={
+                bottomNavigationStyles.label
+              }
+            >
+              Outfits
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() =>
+              goToMainTab('Maleta')
+            }
+            style={
+              bottomNavigationStyles.item
+            }
+          >
+            <Ionicons
+              name="briefcase-outline"
+              size={23}
+              color="#6F6F6F"
+            />
+
+            <Text
+              style={
+                bottomNavigationStyles.label
+              }
+            >
+              Maleta
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <CityModal
+        visible={
+          cityModalVisible
+        }
+        cityInput={
+          cityInput
+        }
+        setCityInput={
+          setCityInput
+        }
+        onClose={
+          closeCityModal
+        }
+        onConfirm={
+          handleConfirmCity
+        }
+        loading={
+          loadingWeather
+        }
+      />
+
+      <SideMenu
+        visible={
+          sideMenuVisible
+        }
+        onClose={
+          handleCloseSideMenu
+        }
+        onProfile={
+          handleProfile
+        }
+        onAbout={
+          handleAbout
+        }
+        onHelp={
+          handleHelp
+        }
+        onLogout={
+          handleLogout
+        }
+        user={user}
+      />
+
+      <AddMenuModal
+        visible={
+          addMenuVisible
+        }
+        onClose={
+          handleCloseAddMenu
+        }
+        onAddPrenda={
+          handleAddClothing
+        }
+        onAddOutfit={
+          handleCreateOutfit
+        }
+      />
+    </View>
+  );
+};
+
+
+// ============================================================
+// ESTILOS
+// ============================================================
+
+const screenStyles =
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: '#F7F5FB',
+    },
+
+    body: {
+      flex: 1,
+    },
+
+    bodyDesktop: {
+      flexDirection: 'row',
+    },
+
+    content: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    scroll: {
+      flex: 1,
+    },
+
+    scrollContent: {
+      paddingBottom:
+        MOBILE_BOTTOM_NAV_HEIGHT + 28,
+    },
+
+    scrollContentDesktop: {
+      paddingBottom: 40,
+    },
+
+    inner: {
+      width: '100%',
+      maxWidth: 1250,
+      alignSelf: 'center',
+      paddingHorizontal: 16,
+      paddingTop: 20,
+    },
+
+    mainGrid: {
+      flexDirection: 'column',
+      gap: 18,
+    },
+
+    mainGridDesktop: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 24,
+    },
+
+    weatherColumn: {
+      width: '40%',
+      minWidth: 320,
+      maxWidth: 500,
+    },
+
+    recommendationsColumn: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    fullWidthColumn: {
+      width: '100%',
+    },
+
+    errorBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 9,
+      backgroundColor: '#FEECEC',
+      borderWidth: 1,
+      borderColor: '#F6B8B8',
+      borderRadius: 13,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      marginBottom: 16,
+    },
+
+    errorText: {
+      flex: 1,
+      color: '#B42318',
+      fontSize: 14,
+      lineHeight: 20,
+    },
+
+    noWeatherCard: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: 20,
+      paddingHorizontal: 24,
+      paddingVertical: 34,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: '#ECE8F3',
+    },
+
+    noWeatherTitle: {
+      marginTop: 10,
+      fontSize: 20,
+      fontWeight: '800',
+      color: '#302B3B',
+    },
+
+    noWeatherDescription: {
+      marginTop: 8,
+      fontSize: 14,
+      lineHeight: 21,
+      color: '#77727F',
+      textAlign: 'center',
+      maxWidth: 540,
+    },
+
+    primaryButton: {
+      marginTop: 20,
+      backgroundColor: '#8C73D6',
+      borderRadius: 12,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+
+    primaryButtonText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '700',
+    },
+
+    recommendationsSection: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: 22,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: '#ECE8F3',
+    },
+
+    sectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginBottom: 16,
+    },
+
+    sectionHeaderIconCircle: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      backgroundColor: '#F0EBFA',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    sectionTitle: {
+      flex: 1,
+      color: '#302B3B',
+      fontSize: 17,
+      fontWeight: '700',
+    },
+
+    recommendationsList: {
+      width: '100%',
+    },
+
+    infoBox: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+      backgroundColor: '#F1ECFB',
+      borderRadius: 14,
+      paddingHorizontal: 15,
+      paddingVertical: 14,
+      marginTop: 6,
+    },
+
+    adviceBox: {
+      marginTop: 0,
+      marginBottom: 14,
+    },
+
+    missingBox: {
+      marginTop: 2,
+      marginBottom: 8,
+    },
+
+    infoBoxText: {
+      flex: 1,
+      color: '#5B5566',
+      fontSize: 13,
+      lineHeight: 19,
+    },
+
+    refreshButton: {
+      minHeight: 50,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      backgroundColor: '#8C73D6',
+      borderRadius: 14,
+      paddingHorizontal: 15,
+      marginTop: 16,
+    },
+
+    refreshButtonDisabled: {
+      opacity: 0.7,
+    },
+
+    refreshButtonText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '700',
+    },
+
+    loadingContainer: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#F7F5FB',
+    },
+
+    loadingText: {
+      marginTop: 12,
+      fontSize: 15,
+      color: '#706B79',
+    },
+  });
+
+
+const weatherCardStyles =
+  StyleSheet.create({
+    card: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: 22,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: '#ECE8F3',
+    },
+
+    topRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+    },
+
+    cityContainer: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    cityLabelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+
+    cityName: {
+      flexShrink: 1,
+      color: '#302B3B',
+      fontSize: 19,
+      fontWeight: '700',
+    },
+
+    changeButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      backgroundColor: '#8C73D6',
+      borderRadius: 10,
+      paddingHorizontal: 11,
+      paddingVertical: 9,
+    },
+
+    changeButtonText: {
+      color: '#FFFFFF',
+      fontSize: 12,
+      fontWeight: '700',
+    },
+
+    weatherMain: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 20,
+      minHeight: 90,
+    },
+
+    iconContainer: {
+      width: 85,
+      height: 85,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    weatherIcon: {
+      width: 85,
+      height: 85,
+    },
+
+    temperatureContainer: {
+      flex: 1,
+      minWidth: 0,
+      marginLeft: 8,
+    },
+
+    temperature: {
+      color: '#302B3B',
+      fontSize: 42,
+      lineHeight: 48,
+      fontWeight: '800',
+    },
+
+    condition: {
+      color: '#77727F',
+      fontSize: 15,
+      marginTop: 2,
+    },
+
+    divider: {
+      height: 1,
+      backgroundColor: '#F0EDF4',
+      marginTop: 20,
+      marginBottom: 15,
+    },
+
+    bottomInfo: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 14,
+      rowGap: 12,
+    },
+
+    infoItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+    },
+
+    infoLabel: {
+      color: '#77727F',
+      fontSize: 12,
+    },
+
+    infoValue: {
+      color: '#302B3B',
+      fontSize: 12,
+      fontWeight: '700',
+    },
+  });
+
+
+const recommendationStyles =
+  StyleSheet.create({
+    card: {
+      width: '100%',
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#FFFFFF',
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: '#F0EDF4',
+      padding: 13,
+      marginBottom: 11,
+      gap: 13,
+    },
+
+    imageContainer: {
+      width: 70,
+      height: 70,
+      borderRadius: 12,
+      overflow: 'hidden',
+      backgroundColor: '#F2EFF7',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    image: {
+      width: '100%',
+      height: '100%',
+    },
+
+    placeholder: {
+      width: '100%',
+      height: '100%',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    content: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    slotLabel: {
+      color: '#8C73D6',
+      fontSize: 11,
+      fontWeight: '700',
+      marginBottom: 2,
+    },
+
+    title: {
+      color: '#302B3B',
+      fontSize: 15,
+      lineHeight: 19,
+      fontWeight: '700',
+    },
+
+    category: {
+      color: '#77727F',
+      fontSize: 12,
+      marginTop: 4,
+    },
+
+    colorRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 7,
+      marginTop: 6,
+    },
+
+    colorDot: {
+      width: 13,
+      height: 13,
+      borderRadius: 7,
+      borderWidth: 1,
+      borderColor: '#E2E2E2',
+    },
+
+    colorText: {
+      flexShrink: 1,
+      color: '#4E4A55',
+      fontSize: 12,
+    },
+
+    reason: {
+      color: '#77727F',
+      fontSize: 12,
+      fontStyle: 'italic',
+      marginTop: 5,
+    },
+  });
+
+
+const emptyStateStyles =
+  StyleSheet.create({
+    container: {
+      backgroundColor: '#FFFFFF',
+      borderWidth: 1,
+      borderColor: '#ECE8F3',
+      borderRadius: 18,
+      paddingHorizontal: 24,
+      paddingVertical: 32,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    iconContainer: {
+      width: 76,
+      height: 76,
+      borderRadius: 38,
+      backgroundColor: '#F0EBFA',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 13,
+    },
+
+    title: {
+      textAlign: 'center',
+      fontSize: 18,
+      lineHeight: 24,
+      fontWeight: '800',
+      color: '#302B3B',
+    },
+
+    description: {
+      marginTop: 7,
+      maxWidth: 560,
+      textAlign: 'center',
+      fontSize: 14,
+      lineHeight: 21,
+      color: '#77727F',
+    },
+  });
+
+
+const cityModalStyles =
+  StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor:
+        'rgba(0,0,0,0.42)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 18,
+    },
+
+    modal: {
+      width: '100%',
+      maxWidth: 500,
+      backgroundColor: '#FFFFFF',
+      borderRadius: 20,
+      padding: 20,
+    },
+
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+
+    titleContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flex: 1,
+    },
+
+    title: {
+      fontSize: 19,
+      fontWeight: '800',
+      color: '#302B3B',
+    },
+
+    description: {
+      marginTop: 12,
+      color: '#77727F',
+      fontSize: 14,
+      lineHeight: 20,
+    },
+
+    input: {
+      marginTop: 17,
+      height: 48,
+      borderWidth: 1,
+      borderColor: '#DCD6E8',
+      borderRadius: 11,
+      paddingHorizontal: 13,
+      color: '#302B3B',
+      fontSize: 15,
+      backgroundColor: '#FAF9FC',
+    },
+
+    buttons: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: 9,
+      marginTop: 18,
+    },
+
+    cancelButton: {
+      borderRadius: 10,
+      paddingHorizontal: 15,
+      paddingVertical: 11,
+      backgroundColor: '#F0EDF4',
+    },
+
+    cancelText: {
+      color: '#66616E',
+      fontSize: 14,
+      fontWeight: '700',
+    },
+
+    confirmButton: {
+      minWidth: 105,
+      borderRadius: 10,
+      paddingHorizontal: 16,
+      paddingVertical: 11,
+      backgroundColor: '#8C73D6',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    confirmText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '700',
+    },
+
+    disabledButton: {
+      opacity: 0.65,
+    },
+  });
+
+
+const bottomNavigationStyles =
+  StyleSheet.create({
+    container: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height:
+        MOBILE_BOTTOM_NAV_HEIGHT,
+      backgroundColor: '#FFFFFF',
+      borderTopWidth: 1,
+      borderTopColor: '#EAE6F0',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-around',
+      paddingHorizontal: 4,
+      zIndex: 30,
+    },
+
+    item: {
+      flex: 1,
+      height: '100%',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 3,
+    },
+
+    label: {
+      fontSize: 10,
+      color: '#6F6F6F',
+      fontWeight: '600',
+    },
+  });
+
+
+export default WeatherRecScreen;
