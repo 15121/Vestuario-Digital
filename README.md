@@ -1,172 +1,139 @@
 # Vestuario Digital
+*Organizá tu ropa, creá tu estilo.*
 
-Organizá tu ropa, creá tu estilo.
+---
 
 ## Descripción del proyecto
+Vestuario Digital es una aplicación con diseño responsivo, desarrollada como Producto Mínimo Viable (MVP), que facilita la organización del guardarropa personal mediante un armario digital.
 
-Vestuario Digital es una aplicación móvil con diseño responsivo desarrollada como Producto Mínimo Viable (MVP), orientada a facilitar la organización y gestión del guardarropa personal mediante un armario digital.
+Permite registrar y administrar prendas, visualizar y filtrar el armario, crear outfits, consultar el historial de uso, recibir recomendaciones básicas según el clima, organizar prendas para viajes con el Modo Maleta y editar el perfil. La cuenta de administración (Root) gestiona las cuentas de usuario desde un panel propio.
 
-La aplicación permite registrar y administrar prendas, visualizar y filtrar el armario, crear outfits, consultar el historial de uso, recibir recomendaciones básicas según el clima y organizar prendas para viajes mediante el modo maleta.
+El proyecto se desarrolla con un alcance adecuado al contexto académico: una solución simple, organizada y funcional.
 
-El proyecto se desarrolla considerando un alcance adecuado para el contexto académico y priorizando una solución simple, organizada y funcional.
+---
 
 ## Objetivo
+Facilitar la organización del guardarropa personal y ayudar al usuario a elegir sus prendas y outfits de manera práctica, reduciendo el tiempo que lleva decidir qué vestir.
 
-El objetivo de Vestuario Digital es facilitar la organización del guardarropa personal y ayudar al usuario a seleccionar sus prendas y outfits de manera práctica, reduciendo el tiempo destinado a elegir qué vestir y favoreciendo una mejor organización de la ropa.
+---
 
 ## Integrantes y roles
 
 | Integrante | Rol |
-|---|---|
+| :--- | :--- |
 | Iara Cazón | Project Manager |
 | Sabrina Arévalo | Analista Funcional |
 | Kiara Soto | Analista Funcional |
-| Priscila Martínez | Analista de Negocios |
+| Priscila Martínez | Analista de Negocio |
 | Agustina Martínez | Programadora |
 | Celeste Milton | Programadora |
 
-Los roles se rotarán periódicamente durante el desarrollo del proyecto, permitiendo que los integrantes adquieran conocimientos y experiencia en las distintas áreas involucradas.
+> Los roles se rotaron periódicamente durante el desarrollo, para que todos los integrantes adquirieran experiencia en las distintas áreas.
+
+---
 
 ## Tecnologías utilizadas
+El proyecto **no utiliza Flutter ni Dart**.
 
-- **Flutter:** framework principal para el desarrollo de la aplicación.
-- **Dart:** lenguaje de programación utilizado junto con Flutter.
-- **SQLite:** sistema de gestión de base de datos local.
-- **API externa de clima:** utilizada para obtener información meteorológica necesaria para las recomendaciones básicas.
-- **GitHub:** plataforma utilizada para el control de versiones y el trabajo colaborativo.
+| Componente | Tecnología |
+| :--- | :--- |
+| Aplicación móvil | React Native con Expo SDK 57 (Expo Go) y JavaScript. Datos locales en SQLite (`expo-sqlite`). |
+| Versión web | Cliente web de Expo + servidor Node.js con Express (carpeta `vestuario-server`). Base de datos MySQL. |
+| Servicios externos | OpenWeatherMap (clima), remove.bg (quitar fondo de fotos) y EmailJS (correos de recuperación). |
+| Control de versiones | Git y GitHub. |
 
-## Funcionalidades principales del MVP
+> La versión móvil y la versión web son independientes: no comparten datos ni se sincronizan.
 
-- Registro e inicio de sesión de usuarios.
-- Registro y administración de prendas.
-- Visualización del armario digital.
-- Filtrado de prendas.
-- Creación manual de outfits.
-- Consulta del historial de outfits utilizados.
-- Recomendación climática básica.
-- Modo maleta para la organización de prendas para viajes.
-- Edición del perfil de usuario.
-- Administración del sistema.
+---
 
-Las funcionalidades avanzadas, como inteligencia artificial, reconocimiento automático de prendas, colorimetría automatizada y asesoramiento avanzado de imagen, quedan fuera del alcance de esta primera versión.
+## Funcionalidades del MVP
+* Registro e inicio de sesión de usuarios, y recuperación de contraseña.
+* Registro, visualización, filtrado, modificación y eliminación de prendas.
+* Creación manual de outfits, con detalle y eliminación.
+* Historial de outfits usados.
+* Recomendación climática básica.
+* Modo Maleta.
+* Edición del perfil.
+* Administración de usuarios por la cuenta Root: listado, búsqueda, edición, suspensión, reactivación y eliminación, con registro de actividad.
 
-## Requisitos para ejecutar el proyecto
+> Quedan fuera del MVP: inteligencia artificial, reconocimiento automático de prendas, colorimetría automatizada, cambio de roles, solicitudes pendientes de usuarios y sincronización entre la versión web y la móvil.
 
-Para ejecutar el proyecto será necesario contar con un entorno de desarrollo compatible con Flutter y Dart, además de las herramientas necesarias para ejecutar una aplicación Flutter en un dispositivo o emulador compatible.
+---
+
+## Requisitos
+* Node.js 20.6 o superior.
+* Aplicación **Expo Go** en el celular (Android/iOS), para la versión móvil.
+* MySQL (por ejemplo XAMPP), solo para la versión web con servidor.
+* Editor de código (se recomienda Visual Studio Code).
+
+---
 
 ## Instalación y ejecución
-Ingresar a la carpeta del proyecto:
 
-cd vestuario-digital
+### Aplicación (móvil y cliente web)
+1. Clonar el repositorio y entrar a la carpeta:
+   ```
+   git clone https://github.com/15121/Vestuario-Digital.git
+   cd Vestuario-Digital
+   git checkout develop
+   ```
+2. Instalar las dependencias:
+   ```
+   npm install
+   ```
+3. Crear el archivo `.env` en la raíz con las variables que se listan abajo.
+4. Ejecutar:
+   ```
+   npx expo start -c
+   ```
+5. En el celular, escanear el código QR con **Expo Go**. Para la versión web, abrir la dirección que indica Expo.
 
-Instalar las dependencias:
+### Servidor (versión web)
+Las instrucciones completas están en `vestuario-server/README_EQUIPO.md`. En resumen: crear la base de datos `vestuario` en MySQL, copiar `vestuario-server/.env.example` a `vestuario-server/.env`, completarlo y ejecutar `npm install` y `npm start` dentro de `vestuario-server`.
 
-flutter pub get
+### Variables de entorno
+Cada integrante crea su propio archivo `.env`. **No se suben al repositorio ni se comparten sus valores.**
 
-Ejecutar la aplicación:
+* Aplicación (`.env` en la raíz): `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_OPENWEATHER_API_KEY`, `EXPO_PUBLIC_REMOVE_BG_API_KEY`, `EXPO_PUBLIC_EMAILJS_SERVICE_ID`, `EXPO_PUBLIC_EMAILJS_TEMPLATE_ID`, `EXPO_PUBLIC_EMAILJS_PUBLIC_KEY` y, solo si se quiere la cuenta Root en el celular, `EXPO_PUBLIC_ROOT_PASSWORD`.
+* Servidor (`vestuario-server/.env`): `PORT`, `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `JWT_SECRET`, `WEB_ORIGIN`, `ROOT_EMAIL`, `ROOT_PASSWORD`, `EMAILJS_SERVICE_ID`, `EMAILJS_TEMPLATE_ID`, `EMAILJS_PUBLIC_KEY`, `EMAILJS_PRIVATE_KEY`.
 
-flutter run
+---
 
-«La URL del repositorio será incorporada una vez creado y configurado el repositorio oficial del proyecto.»
+## Estructura de carpetas
 
-## Estructura de carpetas  
-<pre>
-vestuario-digital/
-├── assets/
-├── lib/
-│   ├── config/
-│   ├── database/
-│   ├── models/
-│   ├── services/
-│   ├── screens/
-│   ├── widgets/
-│   └── utils/
-├── test/
-├── pubspec.yaml
-└── README.md
-</pre>
-### Descripción de las carpetas
+    Vestuario-Digital/
+    ├── assets/            Imágenes e íconos
+    ├── components/        Componentes reutilizables
+    ├── navigation/        Navegación por pestañas y menú lateral
+    ├── screens/           Pantallas de la aplicación
+    ├── services/          Base de datos, clima, correo y eliminación de fondo
+    ├── theme/             Colores y mensajes
+    ├── vestuario-server/  Servidor Node.js/Express para la versión web
+    ├── App.js
+    ├── app.json
+    ├── index.js
+    └── package.json
 
-- assets/: recursos estáticos, como imágenes, fuentes e íconos.
-- lib/: código fuente principal de la aplicación.
-- config/: configuraciones generales, rutas y constantes.
-- database/: conexión, tablas y consultas de SQLite.
-- models/: clases que representan las entidades del sistema.
-- services/: comunicación con servicios externos, como la API de clima.
-- screens/: pantallas principales de la aplicación.
-- widgets/: componentes reutilizables de la interfaz.
-- utils/: funciones auxiliares, validaciones y formatos de datos.
-- test/: pruebas unitarias y funcionales.
-- pubspec.yaml: configuración de dependencias y recursos del proyecto.
+---
 
 ## Control de versiones
 
-El proyecto utilizará GitHub para organizar el desarrollo colaborativo y controlar las diferentes versiones del código.
-
-Se utilizarán las siguientes ramas:
-
-- main
-- develop
-- feature/nombre-funcionalidad
-
-### Ramas principales
-
-- main: contiene las versiones estables del proyecto.
-- develop: rama destinada a integrar los desarrollos realizados.
-- feature/nombre-funcionalidad: ramas destinadas al desarrollo de funcionalidades específicas.
-
-Ejemplos:
-- feature/us01-registro
-- feature/us02-login
-- feature/us03-registrar-prenda
+### Ramas
+* **main:** versión estable anterior del proyecto.
+* **develop:** rama de integración; contiene el MVP y es la que se ejecuta y presenta.
+* **feature/USxx-nombre:** una rama por historia de usuario (por ejemplo `feature/US03-registrar-prenda`).
 
 ### Convención de commits
+* **feat:** nueva funcionalidad.
+* **fix:** corrección de errores.
+* **docs:** documentación.
+* **refactor:** reorganización del código sin cambiar su comportamiento.
+* **style:** cambios de formato o estilos.
+* **test:** pruebas.
 
-Los commits seguirán una nomenclatura clara para identificar el tipo de modificación realizada.
+Ejemplo: `feat: registrar prenda con foto, color y validaciones (US03)`
 
-- feat: nueva funcionalidad
-- fix: corrección de errores
-- docs: modificación de documentación
-- refactor: reorganización del código
-- style: cambios de formato o estilos
-- test: incorporación o modificación de pruebas
+---
 
-Ejemplos:
-- feat: add login screen
-- fix: correct form validation
-- docs: update README
-- test: add login validation tests
-
-## Issues
-
-Los Issues se utilizarán para registrar y realizar el seguimiento de las tareas del proyecto.
-
-Cada Issue podrá relacionarse con:
-
-- Historia de Usuario.
-- Requerimiento Funcional.
-- Sprint correspondiente.
-- Tarea del Product Backlog.
-
-Ejemplo:
-- Issue: US03 - Registrar prenda
-- Requerimiento: RF03
-- Sprint: Sprint 2
-- Prioridad: Alta
-
-## Organización por Sprints
-
-El desarrollo se organizará de acuerdo con el Plan Scrum definido para el proyecto.
-
-| Sprint | Historias de Usuario |
-| --- | --- |
-| Sprint 1 | US01, US02 |
-| Sprint 2 | US03, US04, US05, US12, US13 |
-| Sprint 3 | US06, US07, US11 |
-| Sprint 4 | US08, US09, US10 |
-
-## Estado del proyecto
-
-Estado actual: En planificación y preparación para el desarrollo del MVP.
-
-El repositorio se actualizará progresivamente durante el desarrollo, incorporando el código fuente, documentación, Issues, ramas, commits y demás elementos correspondientes al avance del proyecto.
+## Documentación
+La documentación del proyecto (Etapas 1 a 20) se entregó en archivos aparte: alcance y MVP, requerimientos, historias de usuario, product backlog, modelo de datos, arquitectura, testing y manual de usuario.

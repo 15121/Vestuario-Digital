@@ -21,7 +21,9 @@ let db = null;
 // ============================================================
 
 const ROOT_EMAIL = 'cazoncontreras.iara@tecnica7.edu.ar';
-const ROOT_INITIAL_PASSWORD = 'Milena15';
+// La clave inicial del Root del celular NO está en el código: se toma del .env local
+// (EXPO_PUBLIC_ROOT_PASSWORD). Sin ella, el Root no se crea en SQLite.
+const ROOT_INITIAL_PASSWORD = process.env.EXPO_PUBLIC_ROOT_PASSWORD || '';
 const ROOT_NAME = 'Iara';
 const ROOT_LASTNAME = 'Cazón';
 
@@ -359,6 +361,11 @@ export const ensureRootUser = () => {
     );
 
     let rootId;
+
+    if (!root && !ROOT_INITIAL_PASSWORD) {
+      console.log('Root no creado en SQLite: falta EXPO_PUBLIC_ROOT_PASSWORD en el .env.');
+      return;
+    }
 
     if (!root) {
       const result = run(
