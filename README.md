@@ -33,7 +33,7 @@ Facilitar la organización del guardarropa personal y ayudar al usuario a elegir
 ---
 
 ## Tecnologías utilizadas
-El proyecto **no utiliza Flutter ni Dart**.
+El proyecto está escrito íntegramente en JavaScript (React Native con Expo para la aplicación y Node.js para el servidor).
 
 | Componente | Tecnología |
 | :--- | :--- |
