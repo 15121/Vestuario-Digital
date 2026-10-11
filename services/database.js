@@ -10,6 +10,7 @@
 // ============================================================
 
 import { Platform } from 'react-native';
+import { hashPassword, verifyPassword, isHashed } from './passwordHash';
 import { api, setAuthToken, isSessionExpiredError } from './api';
 
 const IS_WEB = Platform.OS === 'web';
@@ -376,7 +377,7 @@ export const ensureRootUser = () => {
           ROOT_NAME,
           ROOT_LASTNAME,
           ROOT_EMAIL,
-          ROOT_INITIAL_PASSWORD,
+          hashPassword(ROOT_INITIAL_PASSWORD),
           'root',
           'active',
           now,
@@ -433,7 +434,7 @@ export const registerUser = async (name, lastname, email, password) => {
       `INSERT INTO users
        (name, lastname, email, password, role, status, createdAt, lastAccess)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name, lastname, cleanEmail, password, 'user', 'active', now, null]
+      [name, lastname, cleanEmail, hashPassword(password), 'user', 'active', now, null]
     );
 
     logAdminRequest(result.lastInsertRowId, 'Registro de usuario', {
@@ -484,12 +485,20 @@ export const loginUser = (email, password) => {
   const now = new Date().toISOString();
 
   const user = getFirst(
-    'SELECT * FROM users WHERE LOWER(email) = ? AND password = ?',
-    [cleanEmail, password]
+    'SELECT * FROM users WHERE LOWER(email) = ?',
+    [cleanEmail]
   );
 
-  if (!user) {
+  if (!user || !verifyPassword(password, user.password)) {
     throw new Error('USER_NOT_FOUND');
+  }
+
+  // Cuentas creadas antes del hash (texto plano): se re-guardan con hash en el primer ingreso.
+  if (!isHashed(user.password)) {
+    run('UPDATE users SET password = ? WHERE id = ?', [
+      hashPassword(password),
+      user.id,
+    ]);
   }
 
   const { password: _password, ...userWithoutPassword } = user;
@@ -559,7 +568,7 @@ export const resetUserPassword = async (email, newPassword, currentPassword) => 
     }
 
     run('UPDATE users SET password = ? WHERE LOWER(email) = ?', [
-      newPassword,
+      hashPassword(newPassword),
       cleanEmail,
     ]);
 
