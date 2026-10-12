@@ -1,26 +1,23 @@
 # Vestuario Digital
-*Organizá tu ropa, creá tu estilo.*
 
----
+Organizá tu ropa, creá tu estilo.
 
 ## Descripción del proyecto
-Vestuario Digital es una aplicación móvil con diseño responsivo desarrollada como Producto Mínimo Viable (MVP), orientada a facilitar la organización y gestión del guardarropa personal mediante un armario digital.
 
-La aplicación permite registrar y administrar prendas, visualizar y filtrar el armario, crear outfits, consultar el historial de uso, recibir recomendaciones básicas según el clima y organizar prendas para viajes mediante el modo maleta.
+Vestuario Digital es una aplicación con diseño responsivo, desarrollada como Producto Mínimo Viable (MVP), que ayuda a organizar y gestionar el guardarropa personal mediante un armario digital.
 
-El proyecto se desarrolla considerando un alcance adecuado para el contexto académico y priorizando una solución simple, organizada y funcional.
+Permite registrar y administrar prendas, ver y filtrar el armario, crear outfits, consultar el historial de uso, recibir recomendaciones según el clima y organizar prendas para viajes con el modo maleta.
 
----
+Es un proyecto académico desarrollado durante 2026.
 
 ## Objetivo
-El objetivo de Vestuario Digital es facilitar la organización del guardarropa personal y ayudar al usuario a seleccionar sus prendas y outfits de manera práctica, reduciendo el tiempo destinado a elegir qué vestir y favoreciendo una mejor organización de la ropa.
 
----
+Facilitar la organización del guardarropa personal y ayudar a elegir prendas y outfits de forma práctica, reduciendo el tiempo dedicado a decidir qué vestir.
 
 ## Integrantes y roles
 
 | Integrante | Rol |
-| :--- | :--- |
+|---|---|
 | Iara Cazón | Project Manager |
 | Sabrina Arévalo | Analista Funcional |
 | Kiara Soto | Analista Funcional |
@@ -28,130 +25,130 @@ El objetivo de Vestuario Digital es facilitar la organización del guardarropa p
 | Agustina Martínez | Programadora |
 | Celeste Milton | Programadora |
 
-> Los roles se rotarán periódicamente durante el desarrollo del proyecto, permitiendo que los integrantes adquieran conocimientos y experiencia en las distintas áreas involucradas.
-
----
+Los roles se rotaron periódicamente durante el desarrollo.
 
 ## Tecnologías utilizadas
-* **React Native (con Expo SDK 54):** Framework principal para el desarrollo de la aplicación móvil.
-* **JavaScript / Node.js:** Lenguaje de programación y entorno de ejecución.
-* **API externa de clima:** Utilizada para obtener información meteorológica necesaria para las recomendaciones básicas.
-* **GitHub:** Plataforma utilizada para el control de versiones y el trabajo colaborativo.
 
----
+**Aplicación (carpeta raíz)**
+- **React Native + Expo** (JavaScript): una sola base de código para celular (Android/iOS) y web.
+- **React Navigation**: navegación por pilas y pestañas.
+- **expo-sqlite**: base de datos local en el celular.
+- **expo-image-picker / expo-image-manipulator / expo-file-system**: fotos de las prendas.
+- **AsyncStorage**: datos locales (ciudad del clima).
 
-## Funcionalidades principales del MVP
-* Registro e inicio de sesión de usuarios.
-* Registro y administración de prendas.
-* Visualización del armario digital.
-* Filtrado de prendas.
-* Creación manual de outfits.
-* Consulta del historial de outfits utilizados.
-* Recomendación climática básica.
-* Modo maleta para la organización de prendas para viajes.
-* Edición del perfil de usuario.
-* Administración del sistema.
+**Servidor (carpeta `vestuario-server`)**
+- **Node.js + Express**: API usada por la versión web.
+- **MySQL** (mysql2): base de datos del servidor.
+- **bcrypt** (contraseñas), **JWT** (sesiones), **helmet**, **cors** y **express-rate-limit** (seguridad).
 
-> Las funcionalidades avanzadas, como inteligencia artificial, reconocimiento automático de prendas, colorimetría automatizada y asesoramiento avanzado de imagen, quedan fuera del alcance de esta primera versión.
+**Servicios externos**
+- **OpenWeatherMap**: clima actual para las recomendaciones.
+- **remove.bg**: quitar el fondo de las fotos.
+- **EmailJS**: envío del código de recuperación de contraseña.
+- **GitHub**: control de versiones.
 
----
+## Arquitectura
 
-## Requisitos para ejecutar el proyecto
-* Node.js instalado en la computadora.
-* Aplicación **Expo Go** instalada en el dispositivo móvil (Android/iOS).
-* Editor de código (Visual Studio Code recomendado).
+- **Web (PC):** la app se comunica con el servidor (`services/api.js`), que guarda los datos en MySQL.
+- **Celular:** la app guarda los datos en SQLite local, sin servidor.
+- `services/database.js` ofrece las mismas funciones en ambas plataformas y decide a qué base ir.
+- Los datos de la web y los del celular no se sincronizan.
 
----
+## Funcionalidades del MVP
 
-## Instalación y ejecución
+- Registro e inicio de sesión de usuarios.
+- Registro, edición y eliminación de prendas (con foto, quitar fondo y selector de color).
+- Visualización, búsqueda y filtrado del armario.
+- Creación manual de outfits.
+- Historial de outfits utilizados.
+- Recomendación según el clima.
+- Modo maleta para organizar prendas de viaje.
+- Edición del perfil de usuario.
+- Administración del sistema (cuenta Root): panel, gestión de usuarios y registro de actividad.
 
-1. **Clonar el repositorio:**
-   git clone https://github.com/15121/Vestuario-Digital.git
-
-2. **Ingresar a la carpeta del proyecto:**
-   cd Vestuario-Digital
-
-3. **Instalar las dependencias:**
-   npm install
-
-4. **Ejecutar la aplicación:**
-   npx expo start -c
-
-5. **Visualizar en el celular:** Escanear el código QR resultante desde la aplicación **Expo Go**.
-
----
+Las funcionalidades avanzadas, como inteligencia artificial, reconocimiento automático de prendas, colorimetría automatizada y asesoramiento avanzado de imagen, quedan fuera de esta versión.
 
 ## Estructura de carpetas
 
-    Vestuario-Digital/
-    ├── assets/
-    ├── App.js
-    ├── app.json
-    ├── package.json
-    └── README.md
+```
+Vestuario-Digital/
+├── App.js              # Arranque y navegación principal
+├── index.js
+├── app.json            # Configuración de Expo
+├── assets/             # Imágenes e íconos
+├── components/         # Componentes reutilizables (diálogos, menús, modales)
+├── navigation/         # Navegadores de usuario (Main) y administrador (Root)
+├── screens/            # Pantallas de la aplicación
+├── services/           # Datos, API, clima, imágenes, sesión
+├── theme/              # Colores y mensajes
+├── utils/              # Recomendador de outfits, colores, fechas
+└── vestuario-server/   # API Node + Express + MySQL
+    └── server.js
+```
 
----
+## Requisitos
+
+- Node.js 20.6 o superior.
+- MySQL (por ejemplo, XAMPP).
+- Expo Go en el celular, o un navegador para la versión web.
+
+## Instalación y ejecución
+
+### 1. Base de datos
+Iniciar MySQL y crear una base llamada `vestuario` (cotejamiento `utf8mb4_general_ci`). Las tablas las crea el servidor al arrancar.
+
+### 2. Servidor
+```
+cd vestuario-server
+copy .env.example .env      (en Mac/Linux: cp .env.example .env)
+npm install
+npm start
+```
+Completar en `.env`: `JWT_SECRET` (mínimo 32 caracteres), `ROOT_PASSWORD` y los datos de MySQL si no son los predeterminados.
+Debe mostrar: `API lista en http://localhost:3000`.
+
+### 3. Aplicación
+```
+npm install
+npx expo start          (o: npx expo start --web)
+```
+Variables del `.env` de la app:
+- `EXPO_PUBLIC_API_URL`: dirección del servidor (por defecto `http://localhost:3000`).
+- `EXPO_PUBLIC_OPENWEATHER_API_KEY`: clave de OpenWeather (opcional).
+- `EXPO_PUBLIC_REMOVE_BG_API_KEY`: clave de remove.bg (opcional).
+- `EXPO_PUBLIC_EMAILJS_SERVICE_ID`, `EXPO_PUBLIC_EMAILJS_TEMPLATE_ID`, `EXPO_PUBLIC_EMAILJS_PUBLIC_KEY`: recuperación de contraseña en el celular (opcional).
+
+Sin las claves opcionales, el resto de la aplicación funciona igual.
+
+## Cuenta Root (administrador)
+
+Se crea automáticamente la primera vez que arranca el servidor, con el email y la contraseña definidos en `ROOT_EMAIL` y `ROOT_PASSWORD` del `.env` del servidor. Solo existe una cuenta Root.
 
 ## Control de versiones
-El proyecto utilizará GitHub para organizar el desarrollo colaborativo y controlar las diferentes versiones del código.
 
-### Ramas principales
-* **main:** Contiene las versiones estables del proyecto.
-* **develop:** Rama destinada a integrar los desarrollos realizados.
-* **feature/nombre-funcionalidad:** Ramas destinadas al desarrollo de funcionalidades específicas.
+Repositorio: https://github.com/15121/Vestuario-Digital
 
-**Ejemplos de ramas:**
-* feature/us01-registro
-* feature/us02-login
-* feature/us03-registrar-prenda
+Ramas:
+- `main`: versiones estables.
+- `develop`: integración del desarrollo.
+- `feature/USxx-nombre`: una rama por historia de usuario (por ejemplo, `feature/US01-registro`, `feature/US13-eliminar-prenda`).
 
----
-
-## Convención de commits
-Los commits seguirán una nomenclatura clara para identificar el tipo de modificación realizada:
-
-* **feat:** Nueva funcionalidad.
-* **fix:** Corrección de errores.
-* **docs:** Modificación de documentación.
-* **refactor:** Reorganización del código sin alterar su comportamiento.
-* **style:** Cambios de formato o estilos.
-* **test:** Incorporación o modificación de pruebas.
-
-**Ejemplos:**
-* feat: add login screen
-* fix: correct form validation
-* docs: update README
-* test: add login validation tests
-
----
-
-## Issues
-Los Issues se utilizarán para registrar y realizar el seguimiento de las tareas del proyecto. Cada Issue podrá relacionarse con:
-* Historia de Usuario.
-* Requerimiento Funcional.
-* Sprint correspondiente.
-* Tarea del Product Backlog.
-
-**Ejemplo de Issue:**
-Issue: US03 - Registrar prenda
-Requerimiento: RF03
-Sprint: Sprint 2
-Prioridad: Alta
-
----
+Convención de commits: `feat`, `fix`, `docs`, `refactor`, `style`, `test`.
 
 ## Organización por Sprints
 
 | Sprint | Historias de Usuario |
-| :--- | :--- |
-| **Sprint 1** | US01, US02 |
-| **Sprint 2** | US03, US04, US05, US12, US13 |
-| **Sprint 3** | US06, US07, US11 |
-| **Sprint 4** | US08, US09, US10 |
-
----
+| --- | --- |
+| Sprint 1 | US01, US02 |
+| Sprint 2 | US03, US04, US05, US12, US13 |
+| Sprint 3 | US06, US07, US11 |
+| Sprint 4 | US08, US09, US10 |
 
 ## Estado del proyecto
-**Estado actual:** En planificación y preparación para el desarrollo del MVP.
 
-El repositorio se actualizará progresivamente durante el desarrollo, incorporando el código fuente, documentación, Issues, ramas, commits y demás elementos correspondientes al avance del proyecto.
+MVP desarrollado: todas las funcionalidades listadas están implementadas.
+
+Limitaciones conocidas:
+- Los datos de la web y del celular no se sincronizan.
+- En la web, la sesión se cierra al recargar la página.
+- No hay pruebas automatizadas.
