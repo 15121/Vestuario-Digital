@@ -154,17 +154,18 @@ export default function OutfitOfTheDayCard({
 
 
 const styles = StyleSheet.create({
+  // Mismo estilo que la tarjeta del clima del inicio.
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E6DDF8',
-    padding: 16,
-    marginBottom: 16,
+    borderColor: '#F0EAF8',
+    padding: 18,
+    marginBottom: 24,
   },
 
   cardDesktop: {
-    padding: 20,
+    padding: 18,
   },
 
   header: {
@@ -189,7 +190,7 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Poppins_600SemiBold',
     color: '#302B3B',
     fontSize: 17,
   },
@@ -228,7 +229,7 @@ const styles = StyleSheet.create({
   },
 
   itemSlot: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Poppins_600SemiBold',
     color: PURPLE,
     fontSize: 10,
     marginTop: 6,
@@ -252,7 +253,7 @@ const styles = StyleSheet.create({
   },
 
   buttonText: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Poppins_600SemiBold',
     color: PURPLE,
     fontSize: 14,
   },

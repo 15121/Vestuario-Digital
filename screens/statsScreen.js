@@ -39,8 +39,8 @@ import {
 } from '../services/database';
 
 import { getColorHex } from '../utils/colorutils';
+import { AppHeader } from '../navigation/MainTabNavigator';
 import { buildWardrobeStats } from '../utils/wardrobeStats';
-
 
 const PURPLE = '#8C73D6';
 const DARK = '#302B3B';
@@ -55,7 +55,6 @@ const getTitle = (item) =>
 
 const getImage = (item) =>
   item?.imageUri || item?.image || item?.foto || item?.photo || null;
-
 
 // ============================================================
 // PIEZAS
@@ -125,7 +124,6 @@ const GrowBar = ({ ratio, color }) => {
   );
 };
 
-
 // ============================================================
 // PANTALLA
 // ============================================================
@@ -185,17 +183,13 @@ export default function StatsScreen({ navigation, route }) {
 
   return (
     <View style={styles.container}>
-      {/* HEADER */}
+      {/* HEADER (el mismo que usa el resto de la app) */}
 
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-
-        <Text style={styles.headerTitle}>Mis estadísticas</Text>
-
-        <View style={styles.backButton} />
-      </View>
+      <AppHeader
+        title="Mis estadísticas"
+        onBack={handleBack}
+        onOpenProfile={() => navigation?.navigate?.('Profile', { user })}
+      />
 
       {loading ? (
         <View style={styles.center}>
@@ -344,7 +338,6 @@ export default function StatsScreen({ navigation, route }) {
   );
 }
 
-
 // ============================================================
 // ESTILOS
 // ============================================================
@@ -353,29 +346,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-  },
-
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 16,
-  },
-
-  backButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  headerTitle: {
-    fontFamily: 'Poppins_700Bold',
-    color: '#FFFFFF',
-    fontSize: 20,
   },
 
   center: {
@@ -393,7 +363,7 @@ const styles = StyleSheet.create({
   },
 
   emptyTitle: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Poppins_600SemiBold',
     color: DARK,
     fontSize: 18,
     textAlign: 'center',
@@ -471,7 +441,7 @@ const styles = StyleSheet.create({
   },
 
   highlightBold: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Poppins_600SemiBold',
   },
 
   columns: {
@@ -524,7 +494,7 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Poppins_600SemiBold',
     color: DARK,
     fontSize: 16,
   },
@@ -585,14 +555,14 @@ const styles = StyleSheet.create({
   },
 
   rankName: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Poppins_600SemiBold',
     flex: 1,
     color: DARK,
     fontSize: 14,
   },
 
   rankUses: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Poppins_600SemiBold',
     color: GREY,
     fontSize: 12,
   },
@@ -640,7 +610,7 @@ const styles = StyleSheet.create({
   },
 
   barValue: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Poppins_600SemiBold',
     width: 38,
     textAlign: 'right',
     color: GREY,

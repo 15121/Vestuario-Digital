@@ -661,6 +661,16 @@ export default function HomeScreen({
 
               </TouchableOpacity>
 
+
+              {/* OUTFIT DE HOY (debajo del clima, columna izquierda) */}
+
+              <OutfitOfTheDayCard
+                weather={weatherFull}
+                clothes={homeClothes}
+                onPress={openWeatherScreen}
+                isDesktop={isDesktop}
+              />
+
             </View>
 
 
@@ -788,16 +798,6 @@ export default function HomeScreen({
 </TouchableOpacity>
 
               </View>
-
-
-              {/* OUTFIT DE HOY */}
-
-              <OutfitOfTheDayCard
-                weather={weatherFull}
-                clothes={homeClothes}
-                onPress={openWeatherScreen}
-                isDesktop={isDesktop}
-              />
 
 
               {/* ESTADÍSTICAS */}
@@ -1293,9 +1293,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E6DDF8',
+    borderColor: '#F0EAF8',
     padding: 14,
     marginBottom: 16,
   },
@@ -1315,7 +1315,7 @@ const styles = StyleSheet.create({
   },
 
   statsBannerTitle: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Poppins_600SemiBold',
     color: '#302B3B',
     fontSize: 15,
   },

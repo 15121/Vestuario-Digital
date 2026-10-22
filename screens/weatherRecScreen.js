@@ -2428,7 +2428,7 @@ const screenStyles =
     },
 
     noWeatherTitle: {
-      fontFamily: 'Poppins_700Bold',
+      fontFamily: 'Poppins_600SemiBold',
       marginTop: 10,
       fontSize: 20,
       color: '#302B3B',
@@ -2456,7 +2456,7 @@ const screenStyles =
     },
 
     primaryButtonText: {
-      fontFamily: 'Poppins_700Bold',
+      fontFamily: 'Poppins_600SemiBold',
       color: '#FFFFFF',
       fontSize: 14,
     },
@@ -2486,7 +2486,7 @@ const screenStyles =
     },
 
     sectionTitle: {
-      fontFamily: 'Poppins_700Bold',
+      fontFamily: 'Poppins_600SemiBold',
       flex: 1,
       color: '#302B3B',
       fontSize: 17,
@@ -2542,7 +2542,7 @@ const screenStyles =
     },
 
     refreshButtonText: {
-      fontFamily: 'Poppins_700Bold',
+      fontFamily: 'Poppins_600SemiBold',
       color: '#FFFFFF',
       fontSize: 14,
     },
@@ -2592,7 +2592,7 @@ const weatherCardStyles =
     },
 
     cityName: {
-      fontFamily: 'Poppins_700Bold',
+      fontFamily: 'Poppins_600SemiBold',
       flexShrink: 1,
       color: '#302B3B',
       fontSize: 19,
@@ -2609,7 +2609,7 @@ const weatherCardStyles =
     },
 
     changeButtonText: {
-      fontFamily: 'Poppins_700Bold',
+      fontFamily: 'Poppins_600SemiBold',
       color: '#FFFFFF',
       fontSize: 12,
     },
@@ -2680,7 +2680,7 @@ const weatherCardStyles =
     },
 
     infoValue: {
-      fontFamily: 'Poppins_700Bold',
+      fontFamily: 'Poppins_600SemiBold',
       color: '#302B3B',
       fontSize: 12,
     },
@@ -2730,14 +2730,14 @@ const recommendationStyles =
     },
 
     slotLabel: {
-      fontFamily: 'Poppins_700Bold',
+      fontFamily: 'Poppins_600SemiBold',
       color: '#8C73D6',
       fontSize: 11,
       marginBottom: 2,
     },
 
     title: {
-      fontFamily: 'Poppins_700Bold',
+      fontFamily: 'Poppins_600SemiBold',
       color: '#302B3B',
       fontSize: 15,
       lineHeight: 19,
@@ -2809,7 +2809,7 @@ const optionStyles =
     },
 
     chipText: {
-      fontFamily: 'Poppins_700Bold',
+      fontFamily: 'Poppins_600SemiBold',
       color: '#8C73D6',
       fontSize: 13,
     },
@@ -2825,7 +2825,7 @@ const optionStyles =
     },
 
     altTitle: {
-      fontFamily: 'Poppins_700Bold',
+      fontFamily: 'Poppins_600SemiBold',
       color: '#77727F',
       fontSize: 11,
       marginBottom: 6,
@@ -2873,7 +2873,7 @@ const optionStyles =
     },
 
     layersTitle: {
-      fontFamily: 'Poppins_700Bold',
+      fontFamily: 'Poppins_600SemiBold',
       color: '#302B3B',
       fontSize: 15,
       marginBottom: 10,
@@ -2906,13 +2906,13 @@ const optionStyles =
     },
 
     layerLabel: {
-      fontFamily: 'Poppins_700Bold',
+      fontFamily: 'Poppins_600SemiBold',
       color: '#8C73D6',
       fontSize: 11,
     },
 
     layerTitle: {
-      fontFamily: 'Poppins_700Bold',
+      fontFamily: 'Poppins_600SemiBold',
       color: '#302B3B',
       fontSize: 14,
       marginTop: 2,
@@ -2957,7 +2957,7 @@ const emptyStateStyles =
     },
 
     title: {
-      fontFamily: 'Poppins_700Bold',
+      fontFamily: 'Poppins_600SemiBold',
       textAlign: 'center',
       fontSize: 18,
       lineHeight: 24,
@@ -3009,7 +3009,7 @@ const cityModalStyles =
     },
 
     title: {
-      fontFamily: 'Poppins_700Bold',
+      fontFamily: 'Poppins_600SemiBold',
       fontSize: 19,
       color: '#302B3B',
     },
@@ -3050,7 +3050,7 @@ const cityModalStyles =
     },
 
     cancelText: {
-      fontFamily: 'Poppins_700Bold',
+      fontFamily: 'Poppins_600SemiBold',
       color: '#66616E',
       fontSize: 14,
     },
@@ -3066,7 +3066,7 @@ const cityModalStyles =
     },
 
     confirmText: {
-      fontFamily: 'Poppins_700Bold',
+      fontFamily: 'Poppins_600SemiBold',
       color: '#FFFFFF',
       fontSize: 14,
     },

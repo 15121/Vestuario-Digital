@@ -263,6 +263,13 @@ export const TripWeatherCard = ({
             })}
           </ScrollView>
 
+          {data.partial ? (
+            <Text style={styles.note}>
+              * Por ahora hay pronóstico solo para algunos días del viaje.
+              El resto va a aparecer a medida que se acerquen las fechas.
+            </Text>
+          ) : null}
+
           {data.summary.estimated ? (
             <Text style={styles.note}>
               * Para las fechas a más de 16 días mostramos el clima que hubo
@@ -557,7 +564,7 @@ const styles = StyleSheet.create({
   },
 
   cardTitle: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Poppins_600SemiBold',
     color: DARK,
     fontSize: 16,
   },
@@ -606,7 +613,7 @@ const styles = StyleSheet.create({
   },
 
   summaryText: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Poppins_600SemiBold',
     color: DARK,
     fontSize: 13,
   },
@@ -627,7 +634,7 @@ const styles = StyleSheet.create({
   },
 
   dayWeekday: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Poppins_600SemiBold',
     color: DARK,
     fontSize: 12,
   },
@@ -674,13 +681,13 @@ const styles = StyleSheet.create({
   },
 
   progressText: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Poppins_600SemiBold',
     color: DARK,
     fontSize: 14,
   },
 
   progressPercent: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Poppins_600SemiBold',
     color: PURPLE,
     fontSize: 13,
   },
@@ -714,7 +721,7 @@ const styles = StyleSheet.create({
   },
 
   totalNumber: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Poppins_600SemiBold',
     color: DARK,
   },
 
@@ -757,7 +764,7 @@ const styles = StyleSheet.create({
   },
 
   slotLabel: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Poppins_600SemiBold',
     color: DARK,
     fontSize: 12,
   },
@@ -780,7 +787,7 @@ const styles = StyleSheet.create({
   },
 
   suggestButtonText: {
-    fontFamily: 'Poppins_700Bold',
+    fontFamily: 'Poppins_600SemiBold',
     color: '#FFFFFF',
     fontSize: 14,
   },
