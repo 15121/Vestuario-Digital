@@ -871,13 +871,15 @@ const total = async (sql, p = []) => (await one(sql, p)).total;
 // Las 4 cuentas del resumen se ejecutan en paralelo (antes eran una tras otra)
 app.get('/summary/:userId', auth, ownerOrAdmin((r) => r.params.userId), h(async (req, res) => {
   const id = req.params.userId;
-  const [clothesCount, outfitsCount, usedThisWeekCount, activeSuitcasesCount] = await Promise.all([
+  const [clothesCount, outfitsCount, usedThisWeekCount, activeSuitcasesCount, suitcasesCount] = await Promise.all([
     total('SELECT COUNT(*) total FROM clothes WHERE userId=?', [id]),
     total('SELECT COUNT(*) total FROM outfits WHERE userId=?', [id]),
     total('SELECT COUNT(*) total FROM history WHERE userId=? AND date>=?', [id, weekAgo()]),
     total(`SELECT COUNT(*) total FROM suitcases WHERE userId=? AND ${ACTIVE_SUITCASE_SQL}`, [id, todayStr()]),
+    // Todas las maletas del usuario (planificadas, en curso y finalizadas)
+    total('SELECT COUNT(*) total FROM suitcases WHERE userId=?', [id]),
   ]);
-  res.json({ clothesCount, outfitsCount, usedThisWeekCount, activeSuitcasesCount });
+  res.json({ clothesCount, outfitsCount, usedThisWeekCount, activeSuitcasesCount, suitcasesCount });
 }));
 
 app.get('/admin/summary', auth, adminOnly, h(async (req, res) => {

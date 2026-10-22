@@ -350,6 +350,7 @@ export default function HomeScreen({
     outfitsCount: 0,
     usedThisWeekCount: 0,
     activeSuitcasesCount: 0,
+    suitcasesCount: 0,
   });
 
 
@@ -755,7 +756,7 @@ export default function HomeScreen({
   </View>
 
   <Text style={styles.summaryCount}>
-    {summary.activeSuitcasesCount}
+    {summary.suitcasesCount ?? summary.activeSuitcasesCount ?? 0}
   </Text>
 
   <Text style={styles.summaryLabel}>

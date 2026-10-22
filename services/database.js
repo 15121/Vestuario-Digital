@@ -963,6 +963,7 @@ const EMPTY_SUMMARY = {
   outfitsCount: 0,
   usedThisWeekCount: 0,
   activeSuitcasesCount: 0,
+  suitcasesCount: 0,
 };
 
 export const getArmarioSummary = (userId) => {
@@ -978,6 +979,7 @@ export const getArmarioSummary = (userId) => {
 
     let usedCount = 0;
     let suitcasesCount = 0;
+    let allSuitcasesCount = 0;
 
     try {
       usedCount = count(`
@@ -995,6 +997,10 @@ export const getArmarioSummary = (userId) => {
            WHERE userId = ? AND ${ACTIVE_SUITCASE_SQL}`,
           [userId, todayString()]
         )?.total || 0;
+      // Todas las maletas del usuario (planificadas, en curso y finalizadas)
+      allSuitcasesCount = count(
+        'SELECT COUNT(*) AS total FROM suitcases WHERE userId = ?'
+      );
     } catch (error) {
       console.log('Error obteniendo maletas del resumen:', error);
     }
@@ -1008,6 +1014,7 @@ export const getArmarioSummary = (userId) => {
       ),
       usedThisWeekCount: usedCount,
       activeSuitcasesCount: suitcasesCount,
+      suitcasesCount: allSuitcasesCount,
     };
   } catch (error) {
     console.log('Error al obtener resumen del armario:', error);
