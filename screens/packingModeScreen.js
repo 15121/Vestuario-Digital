@@ -37,6 +37,13 @@ import {
   updateSuitcase,
 } from '../services/database';
 
+import {
+  PackingPlanCard,
+  TripWeatherCard,
+  getTripDays,
+  useTripForecast,
+} from '../components/PackingPlanner';
+
 
 // ============================================================
 // COLORES DE APOYO
@@ -884,13 +891,39 @@ const handleCalendarSelect =
     );
 
 
-  // ESTE ES EL ÚNICO CONTADOR
-  // No hay límite de prendas.
-  const packedCount =
-    visibleClothes.filter(
-      (item) =>
-        packedItems[item.id]?.packed
-    ).length;
+  // ==========================================================
+  // CLIMA DEL DESTINO Y CANTIDADES RECOMENDADAS
+  // ==========================================================
+
+  const tripDays =
+    getTripDays(startDate, endDate);
+
+  const tripForecast =
+    useTripForecast(
+      destination,
+      startDate,
+      endDate
+    );
+
+  // "Sugerir prendas": marca como llevadas las prendas elegidas.
+  const handleAutoPack =
+    useCallback((clothingIds) => {
+      setSuccessMessageVisible(false);
+
+      setPackedItems((previous) => {
+        const next = { ...previous };
+
+        clothingIds.forEach((id) => {
+          next[id] = {
+            note: '',
+            ...next[id],
+            packed: true,
+          };
+        });
+
+        return next;
+      });
+    }, []);
 
 
   // ==========================================================
@@ -1748,6 +1781,16 @@ setSuccessMessageVisible(true);
         </View>
 
 
+        {/* CLIMA DEL DESTINO */}
+
+        <TripWeatherCard
+          destination={destination}
+          hasDates={tripDays > 0}
+          forecast={tripForecast}
+          isDesktop={isDesktop}
+        />
+
+
         {/* PRENDAS */}
 
         <View
@@ -1765,43 +1808,16 @@ setSuccessMessageVisible(true);
         </View>
 
 
-        {/* CONTADOR */}
+        {/* QUÉ LLEVAR + BARRA DE PROGRESO */}
 
-        <View
-          style={[
-            styles.packedCountCard,
-
-            isDesktop &&
-              styles.packedCountCardDesktop,
-          ]}
-        >
-          <View
-            style={
-              styles.packedCountIcon
-            }
-          >
-            <Ionicons
-              name="briefcase-outline"
-              size={20}
-              color={COLORS.icon}
-            />
-          </View>
-
-          <Text
-            style={
-              styles.packedCountText
-            }
-          >
-            Prendas cargadas:{' '}
-            <Text
-              style={
-                styles.packedCountNumber
-              }
-            >
-              {packedCount}
-            </Text>
-          </Text>
-        </View>
+        <PackingPlanCard
+          clothes={visibleClothes}
+          packedItems={packedItems}
+          tripDays={tripDays}
+          forecast={tripForecast}
+          onAutoPack={handleAutoPack}
+          isDesktop={isDesktop}
+        />
 
 
         {/* LISTADO */}
