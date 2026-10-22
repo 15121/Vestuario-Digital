@@ -51,7 +51,11 @@ import AddMenuModal from '../components/AddMenuModal';
 import SideMenu from '../components/sideMenu';
 import { confirmLogout } from '../services/session';
 import { getColorHex } from '../utils/colorutils';
-import { buildOutfitRecommendation } from '../utils/outfitrecommender';
+import {
+  buildOutfitOptions,
+  buildLayerSuggestions,
+} from '../utils/outfitrecommender';
+import { getRestOfDayForecast } from '../services/forecastService';
 
 
 // ============================================================
@@ -602,6 +606,178 @@ const ClothingRecommendationCard = ({
 
 
 // ============================================================
+// SELECTOR DE OUTFITS (Opción 1 / 2 / 3)
+// ============================================================
+
+const OutfitSelector = ({
+  outfits,
+  selected,
+  onSelect,
+}) => {
+  if (!Array.isArray(outfits) || outfits.length < 2) {
+    return null;
+  }
+
+  return (
+    <View style={optionStyles.selectorRow}>
+      {outfits.map((outfit, index) => {
+        const active = index === selected;
+
+        return (
+          <TouchableOpacity
+            key={outfit.id}
+            activeOpacity={0.85}
+            onPress={() => onSelect(index)}
+            style={[
+              optionStyles.chip,
+              active && optionStyles.chipActive,
+            ]}
+          >
+            <Ionicons
+              name={active ? 'sparkles' : 'sparkles-outline'}
+              size={14}
+              color={active ? '#FFFFFF' : '#8C73D6'}
+            />
+
+            <Text
+              style={[
+                optionStyles.chipText,
+                active && optionStyles.chipTextActive,
+              ]}
+            >
+              {outfit.name}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+};
+
+
+// ============================================================
+// OTRAS OPCIONES PARA UNA PARTE DEL OUTFIT
+// ============================================================
+
+const AlternativesRow = ({
+  slot,
+  currentId,
+  options,
+  onPick,
+}) => {
+  const others = (options || []).filter(
+    (entry) => String(entry.id) !== String(currentId)
+  );
+
+  if (others.length === 0) {
+    return null;
+  }
+
+  return (
+    <View style={optionStyles.altContainer}>
+      <Text style={optionStyles.altTitle}>
+        Otras opciones
+      </Text>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={optionStyles.altList}
+      >
+        {others.map((entry) => {
+          const image = getClothingImage(entry.item);
+
+          return (
+            <TouchableOpacity
+              key={`${slot}-${entry.id}`}
+              activeOpacity={0.8}
+              onPress={() => onPick(slot, entry)}
+              style={optionStyles.altItem}
+            >
+              <View style={optionStyles.altImageBox}>
+                {image ? (
+                  <Image
+                    source={{ uri: image }}
+                    style={optionStyles.altImage}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <Ionicons
+                    name="shirt-outline"
+                    size={20}
+                    color="#A8A8A8"
+                  />
+                )}
+              </View>
+
+              <Text
+                style={optionStyles.altName}
+                numberOfLines={1}
+              >
+                {getClothingTitle(entry.item)}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+};
+
+
+// ============================================================
+// SUGERENCIA PARA MÁS TARDE (capas)
+// ============================================================
+
+const LayerSuggestionCard = ({
+  suggestion,
+}) => {
+  const image = suggestion.item
+    ? getClothingImage(suggestion.item)
+    : null;
+
+  return (
+    <View style={optionStyles.layerCard}>
+      <View style={optionStyles.layerIcon}>
+        <Ionicons
+          name={suggestion.icon || 'time-outline'}
+          size={20}
+          color="#8C73D6"
+        />
+      </View>
+
+      <View style={optionStyles.layerContent}>
+        <Text style={optionStyles.layerLabel}>
+          {suggestion.label}
+        </Text>
+
+        {suggestion.item ? (
+          <Text
+            style={optionStyles.layerTitle}
+            numberOfLines={1}
+          >
+            Sumá: {getClothingTitle(suggestion.item)}
+          </Text>
+        ) : null}
+
+        <Text style={optionStyles.layerReason}>
+          {suggestion.reason}
+        </Text>
+      </View>
+
+      {image ? (
+        <Image
+          source={{ uri: image }}
+          style={optionStyles.layerImage}
+          resizeMode="contain"
+        />
+      ) : null}
+    </View>
+  );
+};
+
+
+// ============================================================
 // ESTADO VACÍO
 // ============================================================
 
@@ -842,8 +1018,25 @@ const WeatherRecScreen = ({
   const [clothes, setClothes] =
     useState([]);
 
-  // Cada elemento: { item, id, slot, label, reason }
-  const [recommendations, setRecommendations] =
+  // Outfits completos para el clima de hoy (hasta 3).
+  // Cada uno: { id, name, items: [{ item, id, slot, label, reason }] }
+  const [outfitOptions, setOutfitOptions] =
+    useState([]);
+
+  // Otras prendas posibles para cada parte del outfit.
+  const [alternatives, setAlternatives] =
+    useState({});
+
+  // Outfit elegido (0, 1 o 2).
+  const [selectedOutfit, setSelectedOutfit] =
+    useState(0);
+
+  // Prendas que el usuario cambió a mano: { slot: recomendación }
+  const [swaps, setSwaps] =
+    useState({});
+
+  // Pronóstico por hora del resto del día (para las capas).
+  const [dayHours, setDayHours] =
     useState([]);
 
   // Qué le falta al usuario para completar el outfit.
@@ -899,6 +1092,60 @@ const WeatherRecScreen = ({
       isWindy: weather.isWindy,
     });
   }, [weather]);
+
+
+  // ----------------------------------------------------------
+  // OUTFIT QUE SE MUESTRA (con los cambios del usuario)
+  // ----------------------------------------------------------
+
+  const recommendations = useMemo(() => {
+    const outfit =
+      outfitOptions[selectedOutfit] ||
+      outfitOptions[0];
+
+    if (!outfit) {
+      return [];
+    }
+
+    return outfit.items.map((entry) =>
+      swaps[entry.slot] &&
+      entry.slot !== 'accessory'
+        ? swaps[entry.slot]
+        : entry
+    );
+  }, [outfitOptions, selectedOutfit, swaps]);
+
+
+  // ----------------------------------------------------------
+  // CAPAS PARA MÁS TARDE
+  // ----------------------------------------------------------
+
+  const layerSuggestions = useMemo(() => {
+    if (!weather || dayHours.length === 0) {
+      return [];
+    }
+
+    return buildLayerSuggestions(
+      clothes,
+      weather,
+      dayHours,
+      recommendations
+    );
+  }, [weather, clothes, dayHours, recommendations]);
+
+
+  const handleSelectOutfit = useCallback((index) => {
+    setSelectedOutfit(index);
+    setSwaps({});
+  }, []);
+
+
+  const handleSwap = useCallback((slot, entry) => {
+    setSwaps((current) => ({
+      ...current,
+      [slot]: entry,
+    }));
+  }, []);
 
 
   // ----------------------------------------------------------
@@ -962,24 +1209,47 @@ const WeatherRecScreen = ({
             clothingList
           )
         ) {
-          setRecommendations([]);
+          setOutfitOptions([]);
           setMissingItems([]);
           return;
         }
 
         const result =
-          buildOutfitRecommendation(
+          buildOutfitOptions(
             clothingList,
             weatherResult
           );
 
-        setRecommendations(
-          result.items
+        setOutfitOptions(
+          result.outfits
         );
+
+        setAlternatives(
+          result.alternatives
+        );
+
+        setSelectedOutfit(0);
+        setSwaps({});
 
         setMissingItems(
           result.missing
         );
+
+        // El pronóstico por hora llega aparte: si falla,
+        // simplemente no mostramos las capas.
+        setDayHours([]);
+
+        getRestOfDayForecast(
+          weatherResult.latitude,
+          weatherResult.longitude
+        )
+          .then(setDayHours)
+          .catch((error) => {
+            console.log(
+              'No se pudo obtener el pronóstico por hora:',
+              error
+            );
+          });
       },
       []
     );
@@ -1050,7 +1320,7 @@ const WeatherRecScreen = ({
           );
 
           setWeather(null);
-          setRecommendations([]);
+          setOutfitOptions([]);
           setMissingItems([]);
 
           setErrorMessage(
@@ -1092,7 +1362,7 @@ const WeatherRecScreen = ({
             if (mounted) {
               setClothes([]);
               setWeather(null);
-              setRecommendations([]);
+              setOutfitOptions([]);
               setMissingItems([]);
               setLoading(false);
             }
@@ -1128,7 +1398,7 @@ const WeatherRecScreen = ({
             );
           } else {
             setWeather(null);
-            setRecommendations([]);
+            setOutfitOptions([]);
             setMissingItems([]);
             setCity('');
             setCityInput('');
@@ -1142,7 +1412,7 @@ const WeatherRecScreen = ({
 
           if (mounted) {
             setWeather(null);
-            setRecommendations([]);
+            setOutfitOptions([]);
             setMissingItems([]);
             setLoading(false);
             setErrorMessage(
@@ -1658,7 +1928,7 @@ const WeatherRecScreen = ({
                             screenStyles.sectionTitle
                           }
                         >
-                          Prendas recomendadas para hoy
+                          Outfits recomendados para hoy
                         </Text>
                       </View>
 
@@ -1698,29 +1968,58 @@ const WeatherRecScreen = ({
                             screenStyles.recommendationsList
                           }
                         >
+                          <OutfitSelector
+                            outfits={
+                              outfitOptions
+                            }
+                            selected={
+                              selectedOutfit
+                            }
+                            onSelect={
+                              handleSelectOutfit
+                            }
+                          />
+
                           {recommendations.map(
                             (
                               entry,
                               index
                             ) => (
-                              <ClothingRecommendationCard
-                                key={`${entry.slot}-${String(
-                                  entry.id ??
-                                    getItemId(
-                                      entry.item,
-                                      index
-                                    )
-                                )}`}
-                                item={
-                                  entry.item
-                                }
-                                label={
-                                  entry.label
-                                }
-                                reason={
-                                  entry.reason
-                                }
-                              />
+                              <View
+                                key={`${entry.slot}-${index}`}
+                              >
+                                <ClothingRecommendationCard
+                                  item={
+                                    entry.item
+                                  }
+                                  label={
+                                    entry.label
+                                  }
+                                  reason={
+                                    entry.reason
+                                  }
+                                />
+
+                                {entry.slot !==
+                                  'accessory' && (
+                                  <AlternativesRow
+                                    slot={
+                                      entry.slot
+                                    }
+                                    currentId={
+                                      entry.id
+                                    }
+                                    options={
+                                      alternatives[
+                                        entry.slot
+                                      ]
+                                    }
+                                    onPick={
+                                      handleSwap
+                                    }
+                                  />
+                                )}
+                              </View>
                             )
                           )}
                         </View>
@@ -1751,6 +2050,36 @@ const WeatherRecScreen = ({
                               vendría bien sumar{' '}
                               {missingItems.join(', ')}.
                             </Text>
+                          </View>
+                        )}
+
+                      {recommendations.length >
+                        0 &&
+                        layerSuggestions.length >
+                          0 && (
+                          <View
+                            style={
+                              optionStyles.layersSection
+                            }
+                          >
+                            <Text
+                              style={
+                                optionStyles.layersTitle
+                              }
+                            >
+                              Durante el día
+                            </Text>
+
+                            {layerSuggestions.map(
+                              (suggestion) => (
+                                <LayerSuggestionCard
+                                  key={`${suggestion.label}-${suggestion.id}`}
+                                  suggestion={
+                                    suggestion
+                                  }
+                                />
+                              )
+                            )}
                           </View>
                         )}
 
@@ -2440,6 +2769,155 @@ const recommendationStyles =
       fontSize: 12,
       fontStyle: 'italic',
       marginTop: 5,
+    },
+  });
+
+
+const optionStyles =
+  StyleSheet.create({
+    selectorRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 14,
+    },
+
+    chip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: '#DCD2F2',
+      backgroundColor: '#FFFFFF',
+    },
+
+    chipActive: {
+      backgroundColor: '#8C73D6',
+      borderColor: '#8C73D6',
+    },
+
+    chipText: {
+      color: '#8C73D6',
+      fontSize: 13,
+      fontWeight: '700',
+    },
+
+    chipTextActive: {
+      color: '#FFFFFF',
+    },
+
+    altContainer: {
+      marginTop: -4,
+      marginBottom: 14,
+      paddingLeft: 6,
+    },
+
+    altTitle: {
+      color: '#77727F',
+      fontSize: 11,
+      fontWeight: '700',
+      marginBottom: 6,
+    },
+
+    altList: {
+      gap: 10,
+      paddingRight: 6,
+    },
+
+    altItem: {
+      width: 64,
+      alignItems: 'center',
+    },
+
+    altImageBox: {
+      width: 52,
+      height: 52,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: '#ECE8F3',
+      backgroundColor: '#F7F5FB',
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+    },
+
+    altImage: {
+      width: '100%',
+      height: '100%',
+    },
+
+    altName: {
+      marginTop: 4,
+      fontSize: 10,
+      color: '#4E4A55',
+      textAlign: 'center',
+      width: '100%',
+    },
+
+    layersSection: {
+      marginTop: 6,
+      marginBottom: 6,
+    },
+
+    layersTitle: {
+      color: '#302B3B',
+      fontSize: 15,
+      fontWeight: '800',
+      marginBottom: 10,
+    },
+
+    layerCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      padding: 12,
+      marginBottom: 10,
+      borderRadius: 14,
+      backgroundColor: '#F7F3FF',
+      borderWidth: 1,
+      borderColor: '#E6DDF8',
+    },
+
+    layerIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      backgroundColor: '#FFFFFF',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    layerContent: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    layerLabel: {
+      color: '#8C73D6',
+      fontSize: 11,
+      fontWeight: '700',
+    },
+
+    layerTitle: {
+      color: '#302B3B',
+      fontSize: 14,
+      fontWeight: '700',
+      marginTop: 2,
+    },
+
+    layerReason: {
+      color: '#4E4A55',
+      fontSize: 12,
+      marginTop: 2,
+    },
+
+    layerImage: {
+      width: 48,
+      height: 48,
+      borderRadius: 10,
     },
   });
 

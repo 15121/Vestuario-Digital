@@ -568,28 +568,11 @@ const pickAccessories = (classified, p) => {
 
 
 // ============================================================
-// FUNCIÓN PRINCIPAL
+// RANKING DE PRENDAS POR SLOT
 // ============================================================
 
-/**
- * @param {Array} clothes - Prendas del usuario.
- * @param {Object} weather - Resultado de getWeatherByCity.
- * @returns {{
- *   items: Array<{item: Object, id: string, slot: string, label: string, reason: string}>,
- *   missing: string[],
- *   profile: Object|null
- * }}
- */
-export const buildOutfitRecommendation = (clothes, weather) => {
-  const profile = buildWeatherProfile(weather);
-
-  const empty = { items: [], missing: [], profile };
-
-  if (!profile || !Array.isArray(clothes) || clothes.length === 0) {
-    return empty;
-  }
-
-  const classified = clothes
+const classifyAll = (clothes) =>
+  (Array.isArray(clothes) ? clothes : [])
     .map((item, index) => ({
       item,
       id: getItemId(item, index),
@@ -597,93 +580,241 @@ export const buildOutfitRecommendation = (clothes, weather) => {
     }))
     .filter((entry) => entry.info !== null);
 
+// Prendas de un slot ordenadas de mejor a peor (solo las adecuadas).
+const rankSlot = (classified, slot, profile) =>
+  classified
+    .filter((entry) => entry.info.slot === slot)
+    .map((entry) => ({
+      ...entry,
+      score: scoreCandidate(entry, slot, profile),
+    }))
+    .filter((entry) => entry.score >= MIN_SCORE)
+    .sort((a, b) => b.score - a.score);
+
+const toRecommendation = (entry, slot, profile, reason) => ({
+  item: entry.item,
+  id: entry.id,
+  slot,
+  label: SLOT_LABELS[slot],
+  reason: reason || getReason(entry.info, slot, profile),
+});
+
+
+// ============================================================
+// COMBINACIÓN DE COLORES (bonus chico, no decide solo)
+// ============================================================
+
+const NEUTRAL_COLORS = [
+  'negro', 'blanco', 'gris', 'beige', 'crema', 'marron', 'camel',
+  'azul marino', 'celeste', 'jean', 'denim', 'nude', 'hueso',
+];
+
+const isNeutralColor = (color) => {
+  const c = normalizeText(color);
+  return !c || NEUTRAL_COLORS.some((n) => c.includes(n));
+};
+
+const colorBonus = (a, b) => {
+  const ca = normalizeText(a?.item?.color);
+  const cb = normalizeText(b?.item?.color);
+
+  if (!ca || !cb) return 0;
+  if (isNeutralColor(ca) || isNeutralColor(cb)) return 6;
+  if (ca === cb) return 2;
+
+  // Dos colores fuertes distintos: puede funcionar, pero
+  // preferimos combinaciones más fáciles.
+  return -4;
+};
+
+
+// ============================================================
+// FUNCIÓN PRINCIPAL: VARIOS OUTFITS + ALTERNATIVAS
+// ============================================================
+
+const MAIN_SLOTS = ['top', 'bottom', 'onepiece', 'outer', 'footwear'];
+
+/**
+ * Arma hasta `maxOutfits` outfits completos y distintos para el
+ * mismo clima, más una lista de alternativas por cada parte.
+ *
+ * @returns {{
+ *   outfits: Array<{ id: string, name: string, items: Array }>,
+ *   alternatives: Object<string, Array>,
+ *   missing: string[],
+ *   profile: Object|null
+ * }}
+ */
+export const buildOutfitOptions = (
+  clothes,
+  weather,
+  { maxOutfits = 3, maxAlternatives = 4 } = {}
+) => {
+  const profile = buildWeatherProfile(weather);
+
+  const empty = {
+    outfits: [],
+    alternatives: {},
+    missing: [],
+    profile,
+  };
+
+  if (!profile) {
+    return empty;
+  }
+
+  const classified = classifyAll(clothes);
+
   if (classified.length === 0) {
     return empty;
   }
 
-  const pickBest = (slot) => {
-    let best = null;
+  const ranked = {};
 
-    classified.forEach((entry) => {
-      if (entry.info.slot !== slot) {
-        return;
-      }
+  MAIN_SLOTS.forEach((slot) => {
+    ranked[slot] =
+      slot === 'outer' && !profile.needsOuter
+        ? []
+        : rankSlot(classified, slot, profile);
+  });
 
-      const score = scoreCandidate(entry, slot, profile);
+  // ----------------------------------------------------------
+  // BASES POSIBLES: arriba + abajo, o prenda completa
+  // ----------------------------------------------------------
 
-      if (score < MIN_SCORE) {
-        return;
-      }
+  const bases = [];
 
-      if (!best || score > best.score) {
-        best = { ...entry, score };
-      }
+  ranked.top.slice(0, 5).forEach((top) => {
+    ranked.bottom.slice(0, 5).forEach((bottom) => {
+      bases.push({
+        parts: [
+          { entry: top, slot: 'top' },
+          { entry: bottom, slot: 'bottom' },
+        ],
+        score: (top.score + bottom.score) / 2 + colorBonus(top, bottom),
+      });
     });
+  });
 
-    return best;
-  };
+  ranked.onepiece.slice(0, 3).forEach((onepiece) => {
+    bases.push({
+      parts: [{ entry: onepiece, slot: 'onepiece' }],
+      score: onepiece.score,
+    });
+  });
 
-  const top = pickBest('top');
-  const bottom = pickBest('bottom');
-  const onepiece = pickBest('onepiece');
-  const outer = profile.needsOuter ? pickBest('outer') : null;
-  const footwear = pickBest('footwear');
+  bases.sort((a, b) => b.score - a.score);
 
-  // Prenda completa vs. combinación arriba + abajo.
-  const useOnePiece =
-    onepiece &&
-    (!top ||
-      !bottom ||
-      onepiece.score >= (top.score + bottom.score) / 2);
+  // ----------------------------------------------------------
+  // ELEGIR BASES DISTINTAS ENTRE SÍ
+  // ----------------------------------------------------------
+  // 1ª pasada: que no repitan ninguna prenda.
+  // 2ª pasada: se permite repetir una, pero no la combinación.
 
-  const items = [];
+  const chosen = [];
+  const usedIds = new Set();
+  const usedKeys = new Set();
 
-  const push = (entry, slot) => {
-    if (!entry) {
+  const keyOf = (base) =>
+    base.parts.map((part) => part.entry.id).sort().join('+');
+
+  const tryAdd = (base, allowRepeat) => {
+    if (chosen.length >= maxOutfits || usedKeys.has(keyOf(base))) {
       return;
     }
 
-    items.push({
-      item: entry.item,
-      id: entry.id,
-      slot,
-      label: SLOT_LABELS[slot],
-      reason: getReason(entry.info, slot, profile),
-    });
+    const repeats = base.parts.filter((part) => usedIds.has(part.entry.id)).length;
+
+    if (!allowRepeat && repeats > 0) return;
+    if (allowRepeat && repeats >= base.parts.length) return;
+
+    chosen.push(base);
+    usedKeys.add(keyOf(base));
+    base.parts.forEach((part) => usedIds.add(part.entry.id));
   };
 
-  if (useOnePiece) {
-    push(onepiece, 'onepiece');
-  } else {
-    push(top, 'top');
-    push(bottom, 'bottom');
+  bases.forEach((base) => tryAdd(base, false));
+  bases.forEach((base) => tryAdd(base, true));
+
+  // ----------------------------------------------------------
+  // COMPLETAR CADA OUTFIT (abrigo, calzado, accesorios)
+  // ----------------------------------------------------------
+
+  const accessories = pickAccessories(classified, profile);
+
+  const pickRotating = (list, index) =>
+    list.length > 0 ? list[index % list.length] : null;
+
+  const outfits = chosen.map((base, index) => {
+    const items = base.parts.map((part) =>
+      toRecommendation(part.entry, part.slot, profile)
+    );
+
+    const outer = pickRotating(ranked.outer, index);
+    const footwear = pickRotating(ranked.footwear, index);
+
+    if (outer) items.push(toRecommendation(outer, 'outer', profile));
+    if (footwear) items.push(toRecommendation(footwear, 'footwear', profile));
+
+    accessories.forEach((entry) =>
+      items.push(toRecommendation(entry, 'accessory', profile))
+    );
+
+    return {
+      id: `opcion-${index + 1}`,
+      name: `Opción ${index + 1}`,
+      items,
+    };
+  });
+
+  // Si no hubo base (ej. solo calzado y abrigos), igual mostramos
+  // lo que haya en una única opción.
+  if (outfits.length === 0) {
+    const items = [];
+    const outer = ranked.outer[0];
+    const footwear = ranked.footwear[0];
+
+    if (outer) items.push(toRecommendation(outer, 'outer', profile));
+    if (footwear) items.push(toRecommendation(footwear, 'footwear', profile));
+    accessories.forEach((entry) =>
+      items.push(toRecommendation(entry, 'accessory', profile))
+    );
+
+    if (items.length > 0) {
+      outfits.push({ id: 'opcion-1', name: 'Opción 1', items });
+    }
   }
 
-  push(outer, 'outer');
-  push(footwear, 'footwear');
+  // ----------------------------------------------------------
+  // ALTERNATIVAS POR PARTE
+  // ----------------------------------------------------------
 
-  pickAccessories(classified, profile).forEach((entry) =>
-    push(entry, 'accessory')
-  );
+  const alternatives = {};
 
+  MAIN_SLOTS.forEach((slot) => {
+    alternatives[slot] = ranked[slot]
+      .slice(0, maxAlternatives)
+      .map((entry) => toRecommendation(entry, slot, profile));
+  });
 
   // ----------------------------------------------------------
   // QUÉ FALTA PARA COMPLETAR EL OUTFIT
   // ----------------------------------------------------------
 
   const missing = [];
+  const hasOnePiece = ranked.onepiece.length > 0;
 
-  if (!useOnePiece) {
-    if (!top) {
+  if (!hasOnePiece || (ranked.top.length > 0 && ranked.bottom.length > 0)) {
+    if (ranked.top.length === 0 && !hasOnePiece) {
       missing.push('una prenda adecuada para la parte de arriba');
     }
 
-    if (!bottom) {
+    if (ranked.bottom.length === 0 && !hasOnePiece) {
       missing.push('una prenda adecuada para la parte de abajo');
     }
   }
 
-  if (profile.needsOuter && !outer) {
+  if (profile.needsOuter && ranked.outer.length === 0) {
     if (profile.rain) {
       missing.push('un piloto o campera impermeable');
     } else if (profile.snow) {
@@ -693,11 +824,319 @@ export const buildOutfitRecommendation = (clothes, weather) => {
     }
   }
 
-  if (!footwear) {
+  if (ranked.footwear.length === 0) {
     missing.push(
       profile.rain || profile.snow ? 'calzado cerrado' : 'calzado'
     );
   }
 
-  return { items, missing, profile };
+  return { outfits, alternatives, missing, profile };
+};
+
+
+/**
+ * Versión simple (una sola recomendación). Se mantiene para
+ * no romper código que ya la usaba.
+ */
+export const buildOutfitRecommendation = (clothes, weather) => {
+  const { outfits, missing, profile } = buildOutfitOptions(clothes, weather, {
+    maxOutfits: 1,
+  });
+
+  return {
+    items: outfits[0]?.items || [],
+    missing,
+    profile,
+  };
+};
+
+
+// ============================================================
+// CAPAS PARA MÁS TARDE (días que cambian mucho)
+// ============================================================
+//
+// `hours` sale de getRestOfDayForecast (services/forecastService):
+//   [{ hour, temp, feelsLike, rainProb }]
+//
+// Devuelve sugerencias del estilo:
+//   { item, id, slot, label, reason, icon }
+// `item` puede ser null cuando es solo un consejo.
+
+const formatHour = (hour) => `${pad2Hour(hour)} h`;
+const pad2Hour = (h) => String(h).padStart(2, '0');
+
+export const buildLayerSuggestions = (
+  clothes,
+  weather,
+  hours,
+  outfitItems = []
+) => {
+  const profile = buildWeatherProfile(weather);
+
+  if (!profile || !Array.isArray(hours) || hours.length < 2) {
+    return [];
+  }
+
+  // Desde la próxima hora en adelante.
+  const later = hours.slice(1);
+  const classified = classifyAll(clothes);
+  const usedIds = new Set(outfitItems.map((entry) => String(entry.id)));
+  const notUsed = (entry) => !usedIds.has(String(entry.id));
+
+  const coldest = later.reduce((a, b) => (b.feelsLike < a.feelsLike ? b : a));
+  const warmest = later.reduce((a, b) => (b.feelsLike > a.feelsLike ? b : a));
+  const wettest = later.reduce((a, b) =>
+    (b.rainProb || 0) > (a.rainProb || 0) ? b : a
+  );
+
+  const suggestions = [];
+
+  // ----------------------------------------------------------
+  // 1) MÁS TARDE REFRESCA
+  // ----------------------------------------------------------
+
+  const drop = profile.effective - coldest.feelsLike;
+
+  if (drop >= 4 && coldest.feelsLike <= 18) {
+    const colder = {
+      ...profile,
+      effective: coldest.feelsLike,
+      band: getBand(coldest.feelsLike),
+      needsOuter: true,
+    };
+
+    const temp = `${Math.round(coldest.feelsLike)}°C`;
+    const reason = `A las ${formatHour(coldest.hour)} baja a ${temp}`;
+
+    // Preferimos un abrigo; si el outfit ya tiene uno, un buzo
+    // o cárdigan para sumar debajo.
+    const hasOuter = outfitItems.some((entry) => entry.slot === 'outer');
+
+    const pick =
+      (!hasOuter && rankSlot(classified, 'outer', colder).find(notUsed)) ||
+      rankSlot(classified, 'top', colder).find(
+        (entry) => notUsed(entry) && entry.info.warmth >= 2
+      );
+
+    suggestions.push(
+      pick
+        ? {
+            ...toRecommendation(pick, pick.info.slot, colder, reason),
+            label: 'Para más tarde',
+            icon: 'thermometer-outline',
+          }
+        : {
+            item: null,
+            id: 'tip-cold',
+            slot: 'tip',
+            label: 'Para más tarde',
+            reason: `${reason}: llevá algo de abrigo.`,
+            icon: 'thermometer-outline',
+          }
+    );
+  }
+
+  // ----------------------------------------------------------
+  // 2) MÁS TARDE PUEDE LLOVER
+  // ----------------------------------------------------------
+
+  if (!profile.rain && (wettest.rainProb || 0) >= 50) {
+    const reason =
+      `${Math.round(wettest.rainProb)}% de probabilidad de lluvia ` +
+      `a las ${formatHour(wettest.hour)}`;
+
+    const pick =
+      classified.find(
+        (entry) =>
+          entry.info.slot === 'accessory' &&
+          entry.info.kind === 'rain' &&
+          notUsed(entry)
+      ) ||
+      classified.find(
+        (entry) =>
+          entry.info.slot === 'outer' &&
+          entry.info.rainProtected &&
+          notUsed(entry)
+      );
+
+    suggestions.push(
+      pick
+        ? {
+            ...toRecommendation(pick, pick.info.slot, profile, reason),
+            label: 'Por si llueve',
+            icon: 'umbrella-outline',
+          }
+        : {
+            item: null,
+            id: 'tip-rain',
+            slot: 'tip',
+            label: 'Por si llueve',
+            reason: `${reason}: conviene llevar paraguas o algo impermeable.`,
+            icon: 'umbrella-outline',
+          }
+    );
+  }
+
+  // ----------------------------------------------------------
+  // 3) MÁS TARDE SUBE MUCHO LA TEMPERATURA
+  // ----------------------------------------------------------
+
+  const rise = warmest.feelsLike - profile.effective;
+
+  if (rise >= 5 && warmest.feelsLike >= 22) {
+    const temp = `${Math.round(warmest.feelsLike)}°C`;
+
+    suggestions.push({
+      item: null,
+      id: 'tip-warm',
+      slot: 'tip',
+      label: 'Más tarde sube',
+      reason:
+        `A las ${formatHour(warmest.hour)} llega a ${temp}: ` +
+        'vestite en capas que te puedas sacar.',
+      icon: 'sunny-outline',
+    });
+  }
+
+  return suggestions;
+};
+
+
+// ============================================================
+// MODO MALETA: CANTIDADES RECOMENDADAS Y SUGERENCIAS
+// ============================================================
+//
+// Reglas fijas acordadas para un viaje de N días:
+//   - Parte de arriba: 1 por día (máximo 7, después se repite)
+//   - Parte de abajo: 1 cada 2 días (mínimo 1)
+//   - Calzado: 2 (3 si el viaje dura más de 7 días)
+//   - Abrigo: 0 con calor, 1 con frío o fresco, 2 con mucho frío
+//   - Accesorios: 1 o 2 según el clima
+//
+// `tripSummary` sale de summarizeDays (services/forecastService).
+
+export const PACKING_SLOTS = ['top', 'bottom', 'outer', 'footwear', 'accessory'];
+
+export const getSlotLabel = (slot) => SLOT_LABELS[slot] || 'Prenda';
+
+// Slot de una prenda (o null si no la reconocemos).
+export const getClothingSlot = (item) => classifyClothing(item)?.slot || null;
+
+export const getPackingQuantities = (tripDays, tripSummary = null) => {
+  const days = Math.max(1, Math.round(Number(tripDays) || 1));
+
+  const coldest = tripSummary ? tripSummary.feelsMin : null;
+  const warmest = tripSummary ? tripSummary.feelsMax : null;
+  const rainy = tripSummary ? tripSummary.rainyDays > 0 : false;
+
+  let outer = 1;
+
+  if (coldest !== null) {
+    if (coldest <= 5) outer = 2;
+    else if (coldest <= 18) outer = 1;
+    else outer = rainy ? 1 : 0;
+  }
+
+  let accessory = 1;
+
+  if (coldest !== null && warmest !== null) {
+    const needsCold = coldest <= 10;
+    const needsSun = warmest >= 24;
+    accessory = Math.min(2, Number(needsCold) + Number(needsSun) + Number(rainy)) || 1;
+  }
+
+  return {
+    top: Math.min(days, 7),
+    bottom: Math.max(1, Math.ceil(days / 2)),
+    outer,
+    footwear: days > 7 ? 3 : 2,
+    accessory,
+  };
+};
+
+/**
+ * Elige del armario qué llevar, respetando las cantidades.
+ *
+ * @returns {{ quantities, picks: Object<slot, Array<{item,id,reason}>>, missing: string[] }}
+ */
+export const buildPackingSuggestion = (clothes, tripDays, tripSummary = null) => {
+  const quantities = getPackingQuantities(tripDays, tripSummary);
+  const classified = classifyAll(clothes);
+
+  // Usamos la temperatura promedio del viaje para elegir
+  // prendas; si hay días fríos, el abrigo se elige pensando
+  // en el día más frío.
+  const avgProfile = buildWeatherProfile({
+    temp: tripSummary ? tripSummary.feelsAvg : 18,
+    feelsLike: tripSummary ? tripSummary.feelsAvg : 18,
+    conditionGroup: tripSummary && tripSummary.rainyDays > 0 ? 'Rain' : 'Clouds',
+  });
+
+  const coldProfile = buildWeatherProfile({
+    temp: tripSummary ? tripSummary.feelsMin : 12,
+    feelsLike: tripSummary ? tripSummary.feelsMin : 12,
+    conditionGroup: tripSummary && tripSummary.rainyDays > 0 ? 'Rain' : 'Clouds',
+  });
+
+  const picks = {};
+  const missing = [];
+
+  PACKING_SLOTS.forEach((slot) => {
+    const wanted = quantities[slot];
+
+    if (!wanted) {
+      picks[slot] = [];
+      return;
+    }
+
+    let ranked;
+
+    if (slot === 'accessory') {
+      const kinds = [];
+      if (tripSummary && tripSummary.feelsMin <= 10) kinds.push('cold');
+      if (tripSummary && tripSummary.feelsMax >= 24) kinds.push('sun');
+      if (tripSummary && tripSummary.rainyDays > 0) kinds.push('rain');
+
+      // Solo accesorios útiles para el clima del viaje
+      // (sin pronóstico, cualquiera sirve).
+      ranked = classified.filter(
+        (entry) =>
+          entry.info.slot === 'accessory' &&
+          (kinds.length === 0 || kinds.includes(entry.info.kind))
+      );
+    } else {
+      const profile = slot === 'outer' ? coldProfile : avgProfile;
+      ranked = rankSlot(classified, slot, profile);
+    }
+
+    // Variedad: evitamos repetir el mismo tipo de prenda
+    // (ej. 3 jeans) mientras haya otras opciones.
+    const chosen = [];
+    const words = new Set();
+
+    ranked.forEach((entry) => {
+      if (chosen.length < wanted && !words.has(entry.info.word)) {
+        chosen.push(entry);
+        words.add(entry.info.word);
+      }
+    });
+
+    ranked.forEach((entry) => {
+      if (chosen.length < wanted && !chosen.includes(entry)) {
+        chosen.push(entry);
+      }
+    });
+
+    picks[slot] = chosen.map((entry) => ({
+      item: entry.item,
+      id: entry.id,
+      reason: getReason(entry.info, slot, slot === 'outer' ? coldProfile : avgProfile),
+    }));
+
+    if (chosen.length < wanted) {
+      missing.push(`${wanted - chosen.length} ${getSlotLabel(slot).toLowerCase()}`);
+    }
+  });
+
+  return { quantities, picks, missing };
 };

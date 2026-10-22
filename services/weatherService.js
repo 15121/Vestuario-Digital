@@ -399,6 +399,17 @@ export const getWeatherByCity = async (city) => {
 
     city:
       `${data.name}, ${data.sys?.country ?? ''}`,
+
+
+    // ------------------------------------------------------
+    // COORDENADAS (para el pronóstico del resto del día)
+    // ------------------------------------------------------
+
+    latitude:
+      data.coord?.lat ?? null,
+
+    longitude:
+      data.coord?.lon ?? null,
   };
 };
 
