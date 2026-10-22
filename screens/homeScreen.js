@@ -27,7 +27,12 @@ import { COLORS } from '../theme/colours';
 
 import ResponsiveContainer from '../components/ResponsiveContainer';
 
-import { getArmarioSummary } from '../services/database';
+import {
+  getArmarioSummary,
+  getUserClothes,
+} from '../services/database';
+
+import OutfitOfTheDayCard from '../components/OutfitOfTheDayCard';
 
 import { getWeatherByCity } from '../services/weatherService';
 
@@ -117,6 +122,12 @@ export default function HomeScreen({
     isWindy: false,
   });
 
+  // Clima completo (para el "outfit de hoy").
+  const [weatherFull, setWeatherFull] = useState(null);
+
+  // Prendas del usuario (para el "outfit de hoy").
+  const [homeClothes, setHomeClothes] = useState([]);
+
   const [cityInput, setCityInput] = useState('');
 
   const [cityModalVisible, setCityModalVisible] =
@@ -158,6 +169,8 @@ export default function HomeScreen({
 
         const result =
           await getWeatherByCity(cleanCity);
+
+        setWeatherFull(result || null);
 
                setWeatherData({
           temp: result?.temp ?? '--',
@@ -363,6 +376,16 @@ export default function HomeScreen({
       const data = await getArmarioSummary(currentUserId);
       setSummary(data);
     })();
+
+    getUserClothes(currentUserId)
+      .then((list) =>
+        setHomeClothes(
+          Array.isArray(list) ? list : Array.isArray(list?.data) ? list.data : []
+        )
+      )
+      .catch((error) =>
+        console.log('Error cargando prendas del inicio:', error)
+      );
   }, [user])
 );
 
@@ -765,6 +788,51 @@ export default function HomeScreen({
 </TouchableOpacity>
 
               </View>
+
+
+              {/* OUTFIT DE HOY */}
+
+              <OutfitOfTheDayCard
+                weather={weatherFull}
+                clothes={homeClothes}
+                onPress={openWeatherScreen}
+                isDesktop={isDesktop}
+              />
+
+
+              {/* ESTADÍSTICAS */}
+
+              <TouchableOpacity
+                style={styles.statsBanner}
+                activeOpacity={0.85}
+                onPress={() =>
+                  navigation?.navigate('StatsScreen', { user })
+                }
+              >
+                <View style={styles.statsBannerIcon}>
+                  <Ionicons
+                    name="stats-chart"
+                    size={20}
+                    color="#FFFFFF"
+                  />
+                </View>
+
+                <View style={styles.statsBannerText}>
+                  <Text style={styles.statsBannerTitle}>
+                    Mis estadísticas
+                  </Text>
+
+                  <Text style={styles.statsBannerSubtitle}>
+                    Tus prendas más usadas, las olvidadas y tus colores.
+                  </Text>
+                </View>
+
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={COLORS.primary}
+                />
+              </TouchableOpacity>
 
 
               {/* TARJETA PROMOCIONAL */}
@@ -1219,6 +1287,44 @@ const styles = StyleSheet.create({
     borderColor: '#F0EAF8',
   },
 
+
+  statsBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E6DDF8',
+    padding: 14,
+    marginBottom: 16,
+  },
+
+  statsBannerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  statsBannerText: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  statsBannerTitle: {
+    color: '#302B3B',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+
+  statsBannerSubtitle: {
+    color: '#77727F',
+    fontSize: 12,
+    marginTop: 1,
+  },
 
   summaryCount: {
     fontSize: 18,

@@ -41,6 +41,7 @@ import HistoryClothingScreen from './screens/historyClothingScreen';
 
 // Otras funciones
 import WeatherRecScreen from './screens/weatherRecScreen';
+import StatsScreen from './screens/statsScreen';
 import PackingModeScreen from './screens/packingModeScreen';
 
 // Perfil
@@ -226,6 +227,15 @@ export default function App() {
           <Stack.Screen
             name="WeatherRecScreen"
             component={WeatherRecScreen}
+          />
+
+          {/* =========================================
+              ESTADÍSTICAS DEL ARMARIO
+          ========================================= */}
+
+          <Stack.Screen
+            name="StatsScreen"
+            component={StatsScreen}
           />
 
           {/* =========================================
