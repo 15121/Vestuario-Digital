@@ -25,304 +25,14 @@ import { COLORS } from '../theme/colours';
 import { MESSAGES } from '../theme/messages';
 import { OutfitScreenLayout } from '../navigation/MainTabNavigator';
 
-// ============================================================
-// NORMALIZACIÓN DE CATEGORÍAS
-// Permite trabajar aunque en la base se haya guardado:
-// "Superior", "superior", "Camisa", etc.
-// ============================================================
-
-const normalizeCategory = (category = '') => {
-  return category
-    .toString()
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-};
-
-// ============================================================
-// CLASIFICACIÓN DE PRENDAS
-// ============================================================
-
-const isUpper = (category) => {
-  const value = normalizeCategory(category);
-
-  const exactCategories = [
-    'superior',
-    'superiores',
-
-    'camiseta',
-    'camisetas',
-    'top',
-    'tops',
-    'camisetas / tops',
-
-    'camisa',
-    'camisas',
-    'camisas / blusas',
-
-    'blusa',
-    'blusas',
-
-    'abrigo',
-    'abrigos',
-
-    'buzo',
-    'buzos / sweaters',
-
-    'sweater',
-    'sweaters',
-
-    'chaqueta',
-    'chaquetas',
-
-    'campera',
-    'camperas',
-
-    // Prendas de una sola pieza / conjuntos
-    'vestido',
-    'vestidos',
-    'traje',
-    'trajes',
-    'conjunto',
-    'conjuntos',
-    'trajes / conjuntos',
-
-    // Ropa interior superior
-    'ropa interior superior',
-    'lenceria superior',
-    'sosten',
-    'corpiño',
-  ];
-
-  if (exactCategories.includes(value)) {
-    return true;
-  }
-
-  // Categorías personalizadas.
-  // Se utilizan palabras clave para evitar que una categoría
-  // escrita de otra forma quede fuera del selector.
-  return [
-    'camis',
-    'remer',
-    'blus',
-    'top',
-    'camisa',
-    'chomb',
-    'polo',
-    'buz',
-    'sweater',
-    'sueter',
-    'pulover',
-    'cardigan',
-    'chaquet',
-    'camper',
-    'saco',
-    'abrigo',
-    'tapado',
-    'vestid',
-    'traje',
-    'conjunto',
-    'corpi',
-    'sosten',
-  ].some((keyword) => value.includes(keyword));
-};
-
-const isOnePiece = (category) => {
-  const value = normalizeCategory(category);
-
-  return [
-    'vestido',
-    'vestidos',
-    'traje',
-    'trajes',
-    'conjunto',
-    'conjuntos',
-    'trajes / conjuntos',
-    'mono',
-    'monos',
-  ].includes(value);
-};
-
-const isLower = (category) => {
-  const value = normalizeCategory(category);
-
-  const exactCategories = [
-    'inferior',
-    'inferiores',
-
-    'pantalon',
-    'pantalones',
-
-    'jean',
-    'jeans',
-
-    'short',
-    'shorts',
-
-    'falda',
-    'faldas',
-
-    'pollera',
-    'polleras',
-
-    'bermuda',
-    'bermudas',
-
-    'calza',
-    'calzas',
-
-    'legging',
-    'leggings',
-
-    'jogger',
-    'joggers',
-
-    // Ropa interior
-    'ropa interior',
-    'ropa interior inferior',
-  ];
-
-  if (exactCategories.includes(value)) {
-    return true;
-  }
-
-  return [
-    'pantal',
-    'jean',
-    'short',
-    'falda',
-    'poller',
-    'bermuda',
-    'calza',
-    'legging',
-    'jogger',
-    'boxer',
-    'bombacha',
-    'bombachas',
-  ].some((keyword) => value.includes(keyword));
-};
-
-const isShoes = (category) => {
-  const value = normalizeCategory(category);
-
-  const exactCategories = [
-    'calzado',
-    'calzados',
-    'zapato',
-    'zapatos',
-    'zapatilla',
-    'zapatillas',
-    'bota',
-    'botas',
-    'sandalia',
-    'sandalias',
-    'chancla',
-    'chanclas',
-    'ojota',
-    'ojotas',
-    'mocasín',
-    'mocasines',
-    'zueco',
-    'zuecos',
-  ];
-
-  if (exactCategories.includes(value)) {
-    return true;
-  }
-
-  return [
-    'calzad',
-    'zapat',
-    'zapato',
-    'bot',
-    'sandali',
-    'chancl',
-    'ojot',
-    'mocasin',
-    'zuec',
-  ].some((keyword) => value.includes(keyword));
-};
-
-const isAccessory = (category) => {
-  const value = normalizeCategory(category);
-
-  const exactCategories = [
-    'accesorio',
-    'accesorios',
-    'accesory',
-    'accesories',
-
-    'cartera',
-    'carteras',
-
-    'bolso',
-    'bolsos',
-
-    'mochila',
-    'mochilas',
-
-    'reloj',
-    'relojes',
-
-    'cinturon',
-    'cinturones',
-
-    'correa',
-    'correas',
-
-    'gorra',
-    'gorras',
-
-    'sombrero',
-    'sombreros',
-
-    'bufanda',
-    'bufandas',
-
-    'lentes',
-    'anteojos',
-
-    'collar',
-    'collares',
-
-    'pulsera',
-    'pulseras',
-
-    'anillo',
-    'anillos',
-
-    'corbata',
-    'corbatas',
-
-    'panuelo',
-    'panuelos',
-  ];
-
-  if (exactCategories.includes(value)) {
-    return true;
-  }
-
-  return [
-    'accesor',
-    'carter',
-    'bols',
-    'mochil',
-    'reloj',
-    'cinturon',
-    'correa',
-    'gorra',
-    'sombrer',
-    'bufand',
-    'lente',
-    'anteoj',
-    'collar',
-    'pulser',
-    'anill',
-    'corbat',
-    'panuelo',
-  ].some((keyword) => value.includes(keyword));
-};
+import {
+  isAccessory,
+  isLower,
+  isOnePiece,
+  isShoes,
+  isUpper,
+} from '../utils/clothingCategories';
+import { buildSurpriseOutfit } from '../utils/outfitMatcher';
 
 // ============================================================
 // COMPONENTE PRINCIPAL
@@ -360,6 +70,10 @@ export default function CreateOutfitScreen({ navigation, route }) {
   // Modal para seleccionar/cambiar prendas
   const [selectorVisible, setSelectorVisible] = useState(false);
   const [selectorType, setSelectorType] = useState(null);
+
+  // Botón "Sorprendeme": última combinación y por qué combina
+  const [surpriseKey, setSurpriseKey] = useState('');
+  const [surpriseReason, setSurpriseReason] = useState('');
 
   // ----------------------------------------------------------
   // CARGAR PRENDAS DEL USUARIO
@@ -509,6 +223,33 @@ export default function CreateOutfitScreen({ navigation, route }) {
     }
 
     closeSelector();
+  };
+
+  // ==========================================================
+  // SORPRENDEME: arma un outfit que combine
+  // ==========================================================
+
+  const handleSurprise = () => {
+    const result = buildSurpriseOutfit({
+      uppers: upperClothes,
+      lowers: lowerClothes,
+      shoes: shoesClothes,
+      previousKey: surpriseKey,
+    });
+
+    if (!result) {
+      Alert.alert(
+        'Faltan prendas',
+        'Para usar "Sorprendeme" necesitás tener en tu armario al menos una prenda superior, una inferior (o un vestido) y un calzado.'
+      );
+      return;
+    }
+
+    setSelectedUpper(result.upper);
+    setSelectedLower(result.lower);
+    setSelectedShoes(result.shoes);
+    setSurpriseKey(result.key);
+    setSurpriseReason(result.reason);
   };
 
   // ==========================================================
@@ -1253,6 +994,34 @@ export default function CreateOutfitScreen({ navigation, route }) {
                 </View>
               </View>
 
+              {/* SORPRENDEME */}
+
+              <TouchableOpacity
+                style={styles.surpriseButton}
+                onPress={handleSurprise}
+                activeOpacity={0.85}
+              >
+                <Ionicons
+                  name="sparkles"
+                  size={18}
+                  color="#FFFFFF"
+                />
+
+                <Text style={styles.surpriseButtonText}>
+                  {surpriseKey ? 'Sorprendeme otra vez' : 'Sorprendeme'}
+                </Text>
+              </TouchableOpacity>
+
+              {surpriseReason ? (
+                <Text style={styles.surpriseHint}>
+                  {surpriseReason}. Podés cambiar cualquier prenda antes de guardar.
+                </Text>
+              ) : (
+                <Text style={styles.surpriseHint}>
+                  Armamos un outfit con prendas de tu armario que combinen.
+                </Text>
+              )}
+
               {/* SUPERIOR */}
 
               {renderRequiredCard({
@@ -1809,6 +1578,30 @@ const styles = StyleSheet.create({
 
   previewSection: {
     width: '100%',
+  },
+
+  surpriseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: COLORS.primary,
+    marginBottom: 8,
+  },
+
+  surpriseButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
+  },
+
+  surpriseHint: {
+    color: COLORS.textLight,
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+    marginBottom: 18,
   },
 
   sectionTitle: {

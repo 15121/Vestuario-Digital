@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,9 @@ import {
   deleteClothingItem,
   getClothingItemById,
   getClothingUsage,
+  getUserClothes,
 } from '../services/database';
+import { findMatchingClothes } from '../utils/outfitMatcher';
 import { OutfitScreenLayout } from '../navigation/MainTabNavigator';
 
 // ============================================================
@@ -52,6 +54,9 @@ export default function ClothingDetailScreen({ navigation, route }) {
 
   const [prenda, setPrenda] = useState(route?.params?.prenda || null);
   const [deleting, setDeleting] = useState(false);
+
+  // Todas las prendas del usuario, para "Combina con…"
+  const [wardrobe, setWardrobe] = useState([]);
 
   // Si llegan parámetros nuevos (por ejemplo, después de editar),
   // actualizamos la prenda que se muestra.
@@ -94,6 +99,51 @@ export default function ClothingDetailScreen({ navigation, route }) {
       };
     }, [prenda?.id, clothingId])
   );
+
+  // ----------------------------------------------------------
+  // COMBINA CON… (solo lee el armario, no guarda nada)
+  // ----------------------------------------------------------
+
+  const userId = user?.id ?? user?.id_usuario;
+
+  useEffect(() => {
+    if (userId === null || userId === undefined) {
+      return undefined;
+    }
+
+    let active = true;
+
+    getUserClothes(userId)
+      .then((list) => {
+        if (active) {
+          setWardrobe(
+            Array.isArray(list) ? list : Array.isArray(list?.data) ? list.data : []
+          );
+        }
+      })
+      .catch((error) =>
+        console.log('Error cargando el armario para Combina con:', error)
+      );
+
+    return () => {
+      active = false;
+    };
+  }, [userId]);
+
+  const matchGroups = useMemo(
+    () => (prenda ? findMatchingClothes(prenda, wardrobe) : []),
+    [prenda, wardrobe]
+  );
+
+  const openMatch = (item) => {
+    const params = { prenda: item, clothingId: item.id, user };
+
+    if (navigation?.push) {
+      navigation.push('ClothingDetail', params);
+    } else {
+      navigation?.navigate('ClothingDetail', params);
+    }
+  };
 
   const handleGoBack = () => {
     navigation?.goBack();
@@ -377,6 +427,73 @@ export default function ClothingDetailScreen({ navigation, route }) {
 
           </View>
 
+          {/* COMBINA CON… */}
+          {matchGroups.length > 0 && (
+            <View style={styles.matchCard}>
+              <View style={styles.matchHeader}>
+                <View style={styles.matchIconCircle}>
+                  <Ionicons name="sparkles-outline" size={17} color={COLORS.icon} />
+                </View>
+
+                <View style={styles.matchHeaderText}>
+                  <Text style={styles.matchTitle}>Combina con…</Text>
+                  <Text style={styles.matchSubtitle}>
+                    Prendas de tu armario que quedan bien con esta
+                  </Text>
+                </View>
+              </View>
+
+              {matchGroups.map((group) => (
+                <View key={group.part} style={styles.matchGroup}>
+                  <Text style={styles.matchGroupLabel}>{group.label}</Text>
+
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.matchList}
+                  >
+                    {group.items.map(({ item, reason }) => {
+                      const uri = getImageUri(item);
+
+                      return (
+                        <TouchableOpacity
+                          key={String(item.id)}
+                          style={styles.matchItem}
+                          onPress={() => openMatch(item)}
+                          activeOpacity={0.8}
+                        >
+                          <View style={styles.matchImageBox}>
+                            {uri ? (
+                              <Image
+                                source={{ uri }}
+                                style={styles.matchImage}
+                                resizeMode="contain"
+                              />
+                            ) : (
+                              <Ionicons
+                                name="shirt-outline"
+                                size={28}
+                                color={COLORS.icon}
+                              />
+                            )}
+                          </View>
+
+                          <Text style={styles.matchName} numberOfLines={1}>
+                            {item.title}
+                          </Text>
+
+                          <Text style={styles.matchReason} numberOfLines={2}>
+                            {reason}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              ))}
+            </View>
+          )}
+
           <TouchableOpacity
             style={styles.backLinkButton}
             onPress={handleGoBack}
@@ -569,6 +686,89 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontFamily: 'Poppins_600SemiBold',
+  },
+  matchCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 18,
+    marginHorizontal: '5%',
+    marginTop: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  matchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 14,
+  },
+  matchIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F3EEFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  matchHeaderText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  matchTitle: {
+    fontSize: 16,
+    fontFamily: 'Poppins_600SemiBold',
+    color: COLORS.textDark,
+  },
+  matchSubtitle: {
+    fontSize: 12,
+    fontFamily: 'Poppins_400Regular',
+    color: COLORS.textLight,
+  },
+  matchGroup: {
+    marginTop: 6,
+    marginBottom: 8,
+  },
+  matchGroupLabel: {
+    fontSize: 13,
+    fontFamily: 'Poppins_500Medium',
+    color: COLORS.textDark,
+    marginBottom: 8,
+  },
+  matchList: {
+    gap: 12,
+    paddingBottom: 2,
+  },
+  matchItem: {
+    width: 104,
+  },
+  matchImageBox: {
+    width: 104,
+    height: 104,
+    borderRadius: 12,
+    backgroundColor: '#F8F5FA',
+    borderWidth: 1,
+    borderColor: '#EFE8F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  matchImage: {
+    width: '100%',
+    height: '100%',
+  },
+  matchName: {
+    fontSize: 12,
+    fontFamily: 'Poppins_500Medium',
+    color: COLORS.textDark,
+    marginTop: 6,
+  },
+  matchReason: {
+    fontSize: 11,
+    fontFamily: 'Poppins_400Regular',
+    color: COLORS.textLight,
   },
   backLinkButton: {
     flexDirection: 'row',
