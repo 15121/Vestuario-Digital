@@ -33,7 +33,10 @@ import {
 } from '../services/weatherService';
 
 import {
+  addHistoryEntry,
+  addOutfit,
   getUserClothes,
+  getUserHistory,
 } from '../services/database';
 
 import {
@@ -830,6 +833,94 @@ const EmptyRecommendationState = ({
 // MODAL CIUDAD
 // ============================================================
 
+// ============================================================
+// MODAL: GUARDAR OUTFIT RECOMENDADO
+// ============================================================
+
+const SaveOutfitModal = ({
+  visible,
+  mode,
+  name,
+  setName,
+  saving,
+  onConfirm,
+  onClose,
+}) => {
+  const useToday = mode === 'today';
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={saveStyles.overlay} onPress={onClose}>
+        <Pressable
+          style={saveStyles.modal}
+          onPress={(event) => event.stopPropagation()}
+        >
+          <View style={saveStyles.header}>
+            <Text style={saveStyles.title}>
+              {useToday ? 'Me lo pongo hoy' : 'Guardar outfit'}
+            </Text>
+
+            <TouchableOpacity onPress={onClose} disabled={saving}>
+              <Ionicons name="close" size={24} color="#302B3B" />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={saveStyles.description}>
+            {useToday
+              ? 'Lo guardamos en tus outfits y lo registramos como usado hoy.'
+              : 'Se va a guardar en tus outfits con este nombre.'}
+          </Text>
+
+          <Text style={saveStyles.label}>Nombre del outfit</Text>
+
+          <TextInput
+            value={name}
+            onChangeText={(text) => setName(text.slice(0, 60))}
+            style={saveStyles.input}
+            placeholder="Ej. Look casual"
+            placeholderTextColor="#A99AAF"
+            maxLength={60}
+            editable={!saving}
+          />
+
+          <View style={saveStyles.buttons}>
+            <TouchableOpacity
+              style={saveStyles.cancelButton}
+              onPress={onClose}
+              disabled={saving}
+            >
+              <Text style={saveStyles.cancelText}>Cancelar</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                saveStyles.confirmButton,
+                (saving || !name.trim()) && saveStyles.disabled,
+              ]}
+              onPress={onConfirm}
+              disabled={saving || !name.trim()}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={saveStyles.confirmText}>
+                  {useToday ? 'Guardar y usar hoy' : 'Guardar'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+};
+
+
 const CityModal = ({
   visible,
   cityInput,
@@ -1146,6 +1237,178 @@ const WeatherRecScreen = ({
       [slot]: entry,
     }));
   }, []);
+
+
+  // ----------------------------------------------------------
+  // GUARDAR OUTFIT RECOMENDADO / ME LO PONGO HOY
+  // ----------------------------------------------------------
+  //
+  // Usa las mismas funciones que "Crear outfit" (addOutfit y
+  // addHistoryEntry). No cambia la estructura de la base.
+
+  // Outfits ya guardados en esta sesión: { combinación: id }
+  const [savedOutfits, setSavedOutfits] = useState({});
+  const [saveModal, setSaveModal] = useState(null); // 'save' | 'today' | null
+  const [saveName, setSaveName] = useState('');
+  const [savingOutfit, setSavingOutfit] = useState(false);
+  const [saveMessage, setSaveMessage] = useState(null);
+
+  // Arma la estructura { superior, inferior, calzado, accesorios }
+  const outfitToSave = useMemo(() => {
+    const bySlot = (slot) =>
+      recommendations.find((entry) => entry.slot === slot)?.item;
+
+    const onepiece = bySlot('onepiece');
+    const upper = onepiece || bySlot('top');
+    const lower = onepiece ? null : bySlot('bottom');
+    const shoes = bySlot('footwear');
+
+    // El abrigo no tiene lugar propio en un outfit:
+    // se guarda junto con los accesorios.
+    const extras = recommendations
+      .filter((entry) => entry.slot === 'outer' || entry.slot === 'accessory')
+      .map((entry) => entry.item?.id)
+      .filter((id) => id !== null && id !== undefined);
+
+    const complete = Boolean(upper && shoes && (onepiece || lower));
+
+    const items = {
+      superior: upper?.id ?? null,
+      inferior: lower?.id ?? null,
+      calzado: shoes?.id ?? null,
+      accesorios: extras,
+    };
+
+    return {
+      complete,
+      items,
+      key: [items.superior, items.inferior, items.calzado, ...extras].join('-'),
+    };
+  }, [recommendations]);
+
+  const savedId = savedOutfits[outfitToSave.key];
+
+  // Si cambia el outfit que se ve, el mensaje anterior ya no aplica.
+  useEffect(() => {
+    setSaveMessage(null);
+  }, [outfitToSave.key]);
+
+  const openSaveModal = useCallback(
+    (mode) => {
+      const temp = weather ? Math.round(Number(weather.feelsLike ?? weather.temp)) : null;
+      const now = new Date();
+      const date = `${now.getDate()}/${now.getMonth() + 1}`;
+
+      setSaveName(
+        Number.isFinite(temp) ? `Look ${temp}°C · ${date}` : `Look del ${date}`
+      );
+      setSaveModal(mode);
+    },
+    [weather]
+  );
+
+  const markAsUsedToday = useCallback(
+    async (outfitId, outfitName) => {
+      const history = await getUserHistory(userId);
+      const today = new Date().toDateString();
+
+      const alreadyUsed = (Array.isArray(history) ? history : []).some(
+        (entry) =>
+          String(entry.outfitId) === String(outfitId) &&
+          new Date(entry.date).toDateString() === today
+      );
+
+      if (alreadyUsed) {
+        return 'already';
+      }
+
+      const result = await addHistoryEntry({
+        userId,
+        outfitId,
+        outfitName,
+        imageUri: '',
+        note: '',
+      });
+
+      return result?.success ? 'ok' : 'error';
+    },
+    [userId]
+  );
+
+  // "Me lo pongo hoy" sobre un outfit que ya se guardó: no
+  // hace falta pedir el nombre otra vez.
+  const handleUseSavedToday = useCallback(async () => {
+    if (!savedId) return;
+
+    setSavingOutfit(true);
+
+    try {
+      const status = await markAsUsedToday(savedId.id, savedId.name);
+
+      setSaveMessage(
+        status === 'already'
+          ? { type: 'info', text: 'Este outfit ya está registrado como usado hoy.' }
+          : status === 'ok'
+            ? { type: 'ok', text: '¡Listo! Lo registramos en tu historial de hoy.' }
+            : { type: 'error', text: 'No se pudo registrar el uso. Probá de nuevo.' }
+      );
+    } catch (error) {
+      console.log('Error registrando uso:', error);
+      setSaveMessage({ type: 'error', text: 'No se pudo registrar el uso. Probá de nuevo.' });
+    } finally {
+      setSavingOutfit(false);
+    }
+  }, [savedId, markAsUsedToday]);
+
+  const handleConfirmSave = useCallback(async () => {
+    const name = saveName.trim();
+
+    if (!name || !outfitToSave.complete || userId === null || userId === undefined) {
+      return;
+    }
+
+    setSavingOutfit(true);
+
+    try {
+      const result = await addOutfit({
+        userId,
+        name,
+        description: 'Creado desde la recomendación climática',
+        items: outfitToSave.items,
+      });
+
+      if (!result?.success) {
+        throw new Error(result?.message || 'OUTFIT_ERROR');
+      }
+
+      const newId = result.outfit?.id ?? result.id;
+
+      setSavedOutfits((current) => ({
+        ...current,
+        [outfitToSave.key]: { id: newId, name },
+      }));
+
+      let message = { type: 'ok', text: 'Outfit guardado en Mis outfits.' };
+
+      if (saveModal === 'today') {
+        const status = await markAsUsedToday(newId, name);
+
+        message =
+          status === 'error'
+            ? { type: 'error', text: 'Se guardó el outfit, pero no se pudo registrar como usado.' }
+            : { type: 'ok', text: '¡Listo! Lo guardamos y lo registramos en tu historial de hoy.' };
+      }
+
+      setSaveMessage(message);
+      setSaveModal(null);
+    } catch (error) {
+      console.log('Error guardando outfit recomendado:', error);
+      setSaveMessage({ type: 'error', text: 'No se pudo guardar el outfit. Probá de nuevo.' });
+      setSaveModal(null);
+    } finally {
+      setSavingOutfit(false);
+    }
+  }, [saveName, outfitToSave, userId, saveModal, markAsUsedToday]);
 
 
   // ----------------------------------------------------------
@@ -2053,6 +2316,75 @@ const WeatherRecScreen = ({
                           </View>
                         )}
 
+                      {recommendations.length > 0 && (
+                        <View style={saveStyles.actionsBlock}>
+                          <View style={saveStyles.actionsRow}>
+                            <TouchableOpacity
+                              style={[
+                                saveStyles.secondaryAction,
+                                (!outfitToSave.complete || savedId || savingOutfit) &&
+                                  saveStyles.disabled,
+                              ]}
+                              onPress={() => openSaveModal('save')}
+                              disabled={!outfitToSave.complete || Boolean(savedId) || savingOutfit}
+                              activeOpacity={0.85}
+                            >
+                              <Ionicons
+                                name={savedId ? 'checkmark-circle' : 'bookmark-outline'}
+                                size={18}
+                                color="#8C73D6"
+                              />
+                              <Text style={saveStyles.secondaryActionText}>
+                                {savedId ? 'Guardado' : 'Guardar outfit'}
+                              </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                              style={[
+                                saveStyles.primaryAction,
+                                (!outfitToSave.complete || savingOutfit) && saveStyles.disabled,
+                              ]}
+                              onPress={() =>
+                                savedId ? handleUseSavedToday() : openSaveModal('today')
+                              }
+                              disabled={!outfitToSave.complete || savingOutfit}
+                              activeOpacity={0.85}
+                            >
+                              <Ionicons name="calendar-outline" size={18} color="#FFFFFF" />
+                              <Text style={saveStyles.primaryActionText}>
+                                Me lo pongo hoy
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+
+                          {!outfitToSave.complete ? (
+                            <Text style={saveStyles.hint}>
+                              Para guardarlo, el outfit necesita una parte de arriba, una de abajo (o un vestido) y un calzado.
+                            </Text>
+                          ) : null}
+
+                          {saveMessage ? (
+                            <View
+                              style={[
+                                saveStyles.message,
+                                saveMessage.type === 'error' && saveStyles.messageError,
+                              ]}
+                            >
+                              <Ionicons
+                                name={
+                                  saveMessage.type === 'error'
+                                    ? 'alert-circle-outline'
+                                    : 'checkmark-circle-outline'
+                                }
+                                size={18}
+                                color={saveMessage.type === 'error' ? '#B42318' : '#2E9D57'}
+                              />
+                              <Text style={saveStyles.messageText}>{saveMessage.text}</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      )}
+
                       {recommendations.length >
                         0 &&
                         layerSuggestions.length >
@@ -2261,6 +2593,18 @@ const WeatherRecScreen = ({
           </TouchableOpacity>
         </View>
       )}
+
+      <SaveOutfitModal
+        visible={saveModal !== null}
+        mode={saveModal}
+        name={saveName}
+        setName={setSaveName}
+        saving={savingOutfit}
+        onConfirm={handleConfirmSave}
+        onClose={() => {
+          if (!savingOutfit) setSaveModal(null);
+        }}
+      />
 
       <CityModal
         visible={
@@ -2781,6 +3125,179 @@ const recommendationStyles =
     },
   });
 
+
+const saveStyles =
+  StyleSheet.create({
+    actionsBlock: {
+      marginTop: 4,
+      marginBottom: 14,
+    },
+
+    actionsRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+
+    secondaryAction: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      height: 46,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: '#DCD2F2',
+      backgroundColor: '#FFFFFF',
+    },
+
+    secondaryActionText: {
+      fontFamily: 'Poppins_600SemiBold',
+      color: '#8C73D6',
+      fontSize: 14,
+    },
+
+    primaryAction: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      height: 46,
+      borderRadius: 12,
+      backgroundColor: '#8C73D6',
+    },
+
+    primaryActionText: {
+      fontFamily: 'Poppins_600SemiBold',
+      color: '#FFFFFF',
+      fontSize: 14,
+    },
+
+    disabled: {
+      opacity: 0.5,
+    },
+
+    hint: {
+      fontFamily: 'Poppins_400Regular',
+      color: '#77727F',
+      fontSize: 12,
+      marginTop: 8,
+    },
+
+    message: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 10,
+      padding: 12,
+      borderRadius: 12,
+      backgroundColor: '#EAF8EE',
+    },
+
+    messageError: {
+      backgroundColor: '#FDECEC',
+    },
+
+    messageText: {
+      flex: 1,
+      fontFamily: 'Poppins_400Regular',
+      color: '#302B3B',
+      fontSize: 13,
+    },
+
+    overlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.35)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 20,
+    },
+
+    modal: {
+      width: '100%',
+      maxWidth: 420,
+      backgroundColor: '#FFFFFF',
+      borderRadius: 18,
+      padding: 20,
+    },
+
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 6,
+    },
+
+    title: {
+      fontFamily: 'Poppins_600SemiBold',
+      color: '#302B3B',
+      fontSize: 18,
+    },
+
+    description: {
+      fontFamily: 'Poppins_400Regular',
+      color: '#77727F',
+      fontSize: 13,
+      marginBottom: 14,
+    },
+
+    label: {
+      fontFamily: 'Poppins_500Medium',
+      color: '#302B3B',
+      fontSize: 13,
+      marginBottom: 6,
+    },
+
+    input: {
+      fontFamily: 'Poppins_400Regular',
+      fontSize: 14,
+      color: '#302B3B',
+      borderWidth: 1,
+      borderColor: '#E4D9F5',
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      height: 46,
+      backgroundColor: '#FCFBFE',
+    },
+
+    buttons: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 18,
+    },
+
+    cancelButton: {
+      flex: 1,
+      height: 46,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: '#E4D9F5',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    cancelText: {
+      fontFamily: 'Poppins_500Medium',
+      color: '#77727F',
+      fontSize: 14,
+    },
+
+    confirmButton: {
+      flex: 1,
+      height: 46,
+      borderRadius: 10,
+      backgroundColor: '#764DC6',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    confirmText: {
+      fontFamily: 'Poppins_600SemiBold',
+      color: '#FFFFFF',
+      fontSize: 14,
+    },
+  });
 
 const optionStyles =
   StyleSheet.create({
