@@ -1315,12 +1315,13 @@ const styles = StyleSheet.create({
   },
 
   statsBannerTitle: {
+    fontFamily: 'Poppins_700Bold',
     color: '#302B3B',
     fontSize: 15,
-    fontWeight: '800',
   },
 
   statsBannerSubtitle: {
+    fontFamily: 'Poppins_400Regular',
     color: '#77727F',
     fontSize: 12,
     marginTop: 1,

@@ -557,24 +557,27 @@ const styles = StyleSheet.create({
   },
 
   cardTitle: {
+    fontFamily: 'Poppins_700Bold',
     color: DARK,
     fontSize: 16,
-    fontWeight: '800',
   },
 
   cardSubtitle: {
+    fontFamily: 'Poppins_400Regular',
     color: GREY,
     fontSize: 12,
     marginTop: 1,
   },
 
   hint: {
+    fontFamily: 'Poppins_400Regular',
     color: GREY,
     fontSize: 13,
     lineHeight: 18,
   },
 
   errorText: {
+    fontFamily: 'Poppins_400Regular',
     color: '#D64545',
     fontSize: 13,
   },
@@ -603,9 +606,9 @@ const styles = StyleSheet.create({
   },
 
   summaryText: {
+    fontFamily: 'Poppins_700Bold',
     color: DARK,
     fontSize: 13,
-    fontWeight: '700',
   },
 
   daysList: {
@@ -624,12 +627,13 @@ const styles = StyleSheet.create({
   },
 
   dayWeekday: {
+    fontFamily: 'Poppins_700Bold',
     color: DARK,
     fontSize: 12,
-    fontWeight: '700',
   },
 
   dayDate: {
+    fontFamily: 'Poppins_400Regular',
     color: GREY,
     fontSize: 11,
   },
@@ -639,17 +643,19 @@ const styles = StyleSheet.create({
   },
 
   dayMax: {
+    fontFamily: 'Poppins_700Bold',
     color: DARK,
     fontSize: 14,
-    fontWeight: '800',
   },
 
   dayMin: {
+    fontFamily: 'Poppins_400Regular',
     color: GREY,
     fontSize: 12,
   },
 
   note: {
+    fontFamily: 'Poppins_400Regular',
     color: GREY,
     fontSize: 11,
     marginTop: 10,
@@ -668,15 +674,15 @@ const styles = StyleSheet.create({
   },
 
   progressText: {
+    fontFamily: 'Poppins_700Bold',
     color: DARK,
     fontSize: 14,
-    fontWeight: '700',
   },
 
   progressPercent: {
+    fontFamily: 'Poppins_700Bold',
     color: PURPLE,
     fontSize: 13,
-    fontWeight: '800',
   },
 
   progressTextDone: {
@@ -701,14 +707,15 @@ const styles = StyleSheet.create({
   },
 
   totalText: {
+    fontFamily: 'Poppins_400Regular',
     color: GREY,
     fontSize: 12,
     marginTop: 8,
   },
 
   totalNumber: {
+    fontFamily: 'Poppins_700Bold',
     color: DARK,
-    fontWeight: '800',
   },
 
   slotGrid: {
@@ -750,12 +757,13 @@ const styles = StyleSheet.create({
   },
 
   slotLabel: {
+    fontFamily: 'Poppins_700Bold',
     color: DARK,
     fontSize: 12,
-    fontWeight: '700',
   },
 
   slotCount: {
+    fontFamily: 'Poppins_400Regular',
     color: GREY,
     fontSize: 12,
   },
@@ -772,9 +780,9 @@ const styles = StyleSheet.create({
   },
 
   suggestButtonText: {
+    fontFamily: 'Poppins_700Bold',
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '700',
   },
 
   messageBox: {
@@ -787,6 +795,7 @@ const styles = StyleSheet.create({
   },
 
   messageText: {
+    fontFamily: 'Poppins_400Regular',
     flex: 1,
     color: DARK,
     fontSize: 13,

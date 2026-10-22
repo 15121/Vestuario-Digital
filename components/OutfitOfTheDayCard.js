@@ -189,12 +189,13 @@ const styles = StyleSheet.create({
   },
 
   title: {
+    fontFamily: 'Poppins_700Bold',
     color: '#302B3B',
     fontSize: 17,
-    fontWeight: '800',
   },
 
   subtitle: {
+    fontFamily: 'Poppins_400Regular',
     color: '#77727F',
     fontSize: 12,
     marginTop: 1,
@@ -227,16 +228,16 @@ const styles = StyleSheet.create({
   },
 
   itemSlot: {
+    fontFamily: 'Poppins_700Bold',
     color: PURPLE,
     fontSize: 10,
-    fontWeight: '700',
     marginTop: 6,
   },
 
   itemName: {
+    fontFamily: 'Poppins_600SemiBold',
     color: '#302B3B',
     fontSize: 12,
-    fontWeight: '600',
   },
 
   button: {
@@ -251,8 +252,8 @@ const styles = StyleSheet.create({
   },
 
   buttonText: {
+    fontFamily: 'Poppins_700Bold',
     color: PURPLE,
     fontSize: 14,
-    fontWeight: '700',
   },
 });

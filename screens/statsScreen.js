@@ -373,9 +373,9 @@ const styles = StyleSheet.create({
   },
 
   headerTitle: {
+    fontFamily: 'Poppins_700Bold',
     color: '#FFFFFF',
     fontSize: 20,
-    fontWeight: '800',
   },
 
   center: {
@@ -387,18 +387,20 @@ const styles = StyleSheet.create({
   },
 
   loadingText: {
+    fontFamily: 'Poppins_400Regular',
     color: GREY,
     fontSize: 14,
   },
 
   emptyTitle: {
+    fontFamily: 'Poppins_700Bold',
     color: DARK,
     fontSize: 18,
-    fontWeight: '800',
     textAlign: 'center',
   },
 
   emptyText: {
+    fontFamily: 'Poppins_400Regular',
     color: GREY,
     fontSize: 14,
     textAlign: 'center',
@@ -439,13 +441,14 @@ const styles = StyleSheet.create({
   },
 
   tileValue: {
+    fontFamily: 'Poppins_700Bold',
     color: DARK,
     fontSize: 26,
-    fontWeight: '800',
     marginTop: 6,
   },
 
   tileLabel: {
+    fontFamily: 'Poppins_400Regular',
     color: GREY,
     fontSize: 12,
   },
@@ -461,13 +464,14 @@ const styles = StyleSheet.create({
   },
 
   highlightText: {
+    fontFamily: 'Poppins_400Regular',
     flex: 1,
     color: '#FFFFFF',
     fontSize: 14,
   },
 
   highlightBold: {
-    fontWeight: '800',
+    fontFamily: 'Poppins_700Bold',
   },
 
   columns: {
@@ -520,17 +524,19 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
+    fontFamily: 'Poppins_700Bold',
     color: DARK,
     fontSize: 16,
-    fontWeight: '800',
   },
 
   sectionSubtitle: {
+    fontFamily: 'Poppins_400Regular',
     color: GREY,
     fontSize: 12,
   },
 
   hint: {
+    fontFamily: 'Poppins_400Regular',
     color: GREY,
     fontSize: 13,
     lineHeight: 18,
@@ -559,10 +565,10 @@ const styles = StyleSheet.create({
   },
 
   rankNumber: {
+    fontFamily: 'Poppins_700Bold',
     width: 18,
     color: PURPLE,
     fontSize: 15,
-    fontWeight: '800',
     textAlign: 'center',
   },
 
@@ -579,16 +585,16 @@ const styles = StyleSheet.create({
   },
 
   rankName: {
+    fontFamily: 'Poppins_700Bold',
     flex: 1,
     color: DARK,
     fontSize: 14,
-    fontWeight: '700',
   },
 
   rankUses: {
+    fontFamily: 'Poppins_700Bold',
     color: GREY,
     fontSize: 12,
-    fontWeight: '700',
   },
 
   barTrack: {
@@ -619,10 +625,10 @@ const styles = StyleSheet.create({
   },
 
   barLabel: {
+    fontFamily: 'Poppins_600SemiBold',
     width: 80,
     color: DARK,
     fontSize: 13,
-    fontWeight: '600',
   },
 
   barLabelWide: {
@@ -634,11 +640,11 @@ const styles = StyleSheet.create({
   },
 
   barValue: {
+    fontFamily: 'Poppins_700Bold',
     width: 38,
     textAlign: 'right',
     color: GREY,
     fontSize: 12,
-    fontWeight: '700',
   },
 
   forgottenGrid: {
@@ -652,6 +658,7 @@ const styles = StyleSheet.create({
   },
 
   forgottenName: {
+    fontFamily: 'Poppins_400Regular',
     color: DARK,
     fontSize: 11,
     marginTop: 4,
