@@ -39,9 +39,7 @@ import {
 
 import {
   PackingPlanCard,
-  TripWeatherCard,
   getTripDays,
-  useTripForecast,
 } from '../components/PackingPlanner';
 
 
@@ -892,18 +890,11 @@ const handleCalendarSelect =
 
 
   // ==========================================================
-  // CLIMA DEL DESTINO Y CANTIDADES RECOMENDADAS
+  // CANTIDADES RECOMENDADAS
   // ==========================================================
 
   const tripDays =
     getTripDays(startDate, endDate);
-
-  const tripForecast =
-    useTripForecast(
-      destination,
-      startDate,
-      endDate
-    );
 
   // "Sugerir prendas": marca como llevadas las prendas elegidas.
   const handleAutoPack =
@@ -1781,16 +1772,6 @@ setSuccessMessageVisible(true);
         </View>
 
 
-        {/* CLIMA DEL DESTINO */}
-
-        <TripWeatherCard
-          destination={destination}
-          hasDates={tripDays > 0}
-          forecast={tripForecast}
-          isDesktop={isDesktop}
-        />
-
-
         {/* PRENDAS */}
 
         <View
@@ -1814,7 +1795,6 @@ setSuccessMessageVisible(true);
           clothes={visibleClothes}
           packedItems={packedItems}
           tripDays={tripDays}
-          forecast={tripForecast}
           onAutoPack={handleAutoPack}
           isDesktop={isDesktop}
         />

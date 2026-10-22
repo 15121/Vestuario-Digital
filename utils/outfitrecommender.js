@@ -607,6 +607,7 @@ const toRecommendation = (entry, slot, profile, reason) => ({
 const NEUTRAL_COLORS = [
   'negro', 'blanco', 'gris', 'beige', 'crema', 'marron', 'camel',
   'azul marino', 'celeste', 'jean', 'denim', 'nude', 'hueso',
+  'topo', 'caqui', 'chocolate',
 ];
 
 const isNeutralColor = (color) => {
@@ -1010,10 +1011,10 @@ export const buildLayerSuggestions = (
 //   - Parte de arriba: 1 por día (máximo 7, después se repite)
 //   - Parte de abajo: 1 cada 2 días (mínimo 1)
 //   - Calzado: 2 (3 si el viaje dura más de 7 días)
-//   - Abrigo: 0 con calor, 1 con frío o fresco, 2 con mucho frío
-//   - Accesorios: 1 o 2 según el clima
+//   - Abrigo: 1
+//   - Accesorios: 1
 //
-// `tripSummary` sale de summarizeDays (services/forecastService).
+// `tripSummary` es opcional (null): sin él, las cantidades salen solo de los días.
 
 export const PACKING_SLOTS = ['top', 'bottom', 'outer', 'footwear', 'accessory'];
 

@@ -11,35 +11,80 @@
 
 export const MULTICOLOR_NAME = 'Multicolor';
 
+// Los nombres ya existentes NO se cambian: en la base de datos se
+// guarda el nombre, y las prendas viejas tienen que seguir viéndose.
+//
+// `detect: false` = se puede elegir a mano, pero el detector de
+// color de la foto no lo sugiere (por ejemplo "Plateado", que se
+// confundiría con cualquier gris claro).
+
 export const COLOR_OPTIONS = [
+  // Neutros
   { name: 'Negro', rgb: [0, 0, 0] },
   { name: 'Blanco', rgb: [255, 255, 255] },
+  { name: 'Hueso', rgb: [241, 236, 224] },
   { name: 'Gris oscuro', rgb: [75, 85, 99] },
   { name: 'Gris', rgb: [128, 128, 128] },
   { name: 'Gris claro', rgb: [209, 213, 219] },
+  { name: 'Gris topo', rgb: [120, 108, 96] },
 
+  // Rojos
   { name: 'Rojo', rgb: [220, 38, 38] },
   { name: 'Rojo oscuro', rgb: [153, 27, 27] },
+  { name: 'Bordó', rgb: [110, 22, 40] },
+  { name: 'Coral', rgb: [255, 111, 97] },
+  { name: 'Terracota', rgb: [196, 90, 61] },
+
+  // Rosas
+  { name: 'Fucsia', rgb: [217, 30, 140] },
   { name: 'Rosa', rgb: [236, 72, 153] },
   { name: 'Rosa claro', rgb: [249, 168, 212] },
+  { name: 'Rosa viejo', rgb: [196, 138, 145] },
+  { name: 'Salmón', rgb: [250, 160, 130] },
+  { name: 'Nude', rgb: [227, 188, 163] },
 
+  // Naranjas y amarillos
   { name: 'Naranja', rgb: [249, 115, 22] },
+  { name: 'Durazno', rgb: [255, 190, 152] },
+  { name: 'Mostaza', rgb: [200, 150, 30] },
   { name: 'Amarillo', rgb: [234, 179, 8] },
+  { name: 'Amarillo claro', rgb: [253, 230, 138] },
   { name: 'Crema', rgb: [255, 247, 214] },
 
+  // Verdes
   { name: 'Verde', rgb: [22, 163, 74] },
   { name: 'Verde oscuro', rgb: [22, 101, 52] },
   { name: 'Verde claro', rgb: [134, 239, 172] },
+  { name: 'Verde manzana', rgb: [141, 198, 63] },
+  { name: 'Verde oliva', rgb: [107, 112, 48] },
+  { name: 'Verde militar', rgb: [75, 83, 32] },
+  { name: 'Verde agua', rgb: [125, 212, 190] },
 
+  // Azules
+  { name: 'Turquesa', rgb: [20, 184, 166] },
   { name: 'Celeste', rgb: [56, 189, 248] },
+  { name: 'Celeste claro', rgb: [186, 230, 253] },
+  { name: 'Azul jean', rgb: [74, 104, 145] },
+  { name: 'Azul francia', rgb: [49, 100, 230] },
   { name: 'Azul', rgb: [30, 64, 175] },
   { name: 'Azul oscuro', rgb: [30, 58, 138] },
+  { name: 'Azul marino', rgb: [20, 33, 61] },
 
+  // Violetas
   { name: 'Violeta', rgb: [156, 78, 221] },
   { name: 'Lila', rgb: [196, 181, 253] },
+  { name: 'Púrpura', rgb: [102, 30, 120] },
 
+  // Marrones
   { name: 'Marrón', rgb: [146, 64, 14] },
+  { name: 'Chocolate', rgb: [92, 51, 23] },
+  { name: 'Camel', rgb: [193, 140, 80] },
   { name: 'Beige', rgb: [212, 185, 150] },
+  { name: 'Caqui', rgb: [176, 160, 110] },
+
+  // Metalizados (solo a mano)
+  { name: 'Dorado', rgb: [212, 175, 55], detect: false },
+  { name: 'Plateado', rgb: [192, 192, 192], detect: false },
 
   { name: MULTICOLOR_NAME, rgb: null },
 ];
@@ -93,35 +138,37 @@ const COLOR_ALIASES = {
   plomo: 'gris',
   grisclaro: 'gris claro',
   grisoscuro: 'gris oscuro',
+  topo: 'gris topo',
   red: 'rojo',
-  bordo: 'rojo oscuro',
-  bordeaux: 'rojo oscuro',
+  bordeaux: 'bordo',
+  vino: 'bordo',
   rosado: 'rosa',
-  fucsia: 'rosa',
   pink: 'rosa',
   blue: 'azul',
+  navy: 'azul marino',
+  marino: 'azul marino',
+  jean: 'azul jean',
+  denim: 'azul jean',
   cyan: 'celeste',
-  turquesa: 'celeste',
   green: 'verde',
-  oliva: 'verde oscuro',
+  oliva: 'verde oliva',
+  militar: 'verde militar',
   yellow: 'amarillo',
   orange: 'naranja',
   purple: 'violeta',
   morado: 'violeta',
   brown: 'marron',
   cafe: 'marron',
-  crema: 'crema',
+  kaki: 'caqui',
+  khaki: 'caqui',
+  gold: 'dorado',
+  silver: 'plateado',
   multi: 'multicolor',
   'multi color': 'multicolor',
 };
 
 // Colores que no están en la lista fija pero conviene dibujar
-const EXTRA_HEX = {
-  dorado: '#D4AF37',
-  gold: '#D4AF37',
-  plateado: '#C0C0C0',
-  silver: '#C0C0C0',
-};
+const EXTRA_HEX = {};
 
 const HEX_RE = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
@@ -161,11 +208,11 @@ const colorDistance = (a, b) =>
 export const findClosestColor = (r, g, b) => {
   const sample = [r, g, b];
 
-  let closest = COLOR_OPTIONS.find((option) => option.rgb);
+  let closest = COLOR_OPTIONS.find((option) => option.rgb && option.detect !== false);
   let best = Infinity;
 
   COLOR_OPTIONS.forEach((option) => {
-    if (!option.rgb) {
+    if (!option.rgb || option.detect === false) {
       return;
     }
 

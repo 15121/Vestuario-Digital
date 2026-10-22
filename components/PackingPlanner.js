@@ -4,12 +4,9 @@
 //
 // Ubicación: components/PackingPlanner.js
 //
-// Tres piezas que usa screens/packingModeScreen.js:
-//
-//   useTripForecast  → trae el clima del destino para las fechas.
-//   TripWeatherCard  → muestra ese clima, día por día.
-//   PackingPlanCard  → cantidades recomendadas por tipo de prenda,
-//                      botón "Sugerir prendas" y barra de progreso.
+// PackingPlanCard (usada por screens/packingModeScreen.js):
+//   cantidades recomendadas por tipo de prenda según los días
+//   del viaje, botón "Sugerir prendas" y barra de progreso.
 //
 // No guarda nada nuevo en la base de datos: las cantidades y las
 // sugerencias se calculan en el momento, y la barra usa el tilde
@@ -24,9 +21,7 @@ import React, {
 } from 'react';
 
 import {
-  ActivityIndicator,
   Animated,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -34,8 +29,6 @@ import {
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
-
-import { getTripForecast } from '../services/forecastService';
 
 import {
   PACKING_SLOTS,
@@ -52,8 +45,6 @@ const GREY = '#77727F';
 const BORDER = '#ECE8F3';
 const SOFT = '#F7F3FF';
 const GREEN = '#2E9D57';
-
-const WEEK_DAYS_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
 const SLOT_ICONS = {
   top: 'shirt-outline',
@@ -98,191 +89,6 @@ export const getTripDays = (startDate, endDate) => {
   return Math.round((b - a) / 86400000) + 1;
 };
 
-const formatShortDay = (dateString) => {
-  const [y, m, d] = dateString.split('-').map(Number);
-  const date = new Date(y, m - 1, d);
-  return {
-    weekday: WEEK_DAYS_SHORT[date.getDay()],
-    day: `${d}/${m}`,
-  };
-};
-
-
-// ============================================================
-// HOOK: CLIMA DEL VIAJE
-// ============================================================
-
-export const useTripForecast = (destination, startDate, endDate) => {
-  const [state, setState] = useState({
-    loading: false,
-    error: '',
-    data: null,
-  });
-
-  const start = toDateString(startDate);
-  const end = toDateString(endDate);
-  const place = String(destination || '').trim();
-
-  useEffect(() => {
-    if (place.length < 3 || !start || !end || end < start) {
-      setState({ loading: false, error: '', data: null });
-      return undefined;
-    }
-
-    let cancelled = false;
-
-    setState((current) => ({ ...current, loading: true, error: '' }));
-
-    // Esperamos a que el usuario termine de escribir el destino.
-    const timer = setTimeout(() => {
-      getTripForecast(place, start, end)
-        .then((data) => {
-          if (!cancelled) setState({ loading: false, error: '', data });
-        })
-        .catch((error) => {
-          if (!cancelled) {
-            setState({
-              loading: false,
-              error: error?.message || 'No se pudo obtener el clima del destino.',
-              data: null,
-            });
-          }
-        });
-    }, 700);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [place, start, end]);
-
-  return state;
-};
-
-
-// ============================================================
-// TARJETA: CLIMA DEL DESTINO
-// ============================================================
-
-export const TripWeatherCard = ({
-  destination,
-  hasDates,
-  forecast,
-  isDesktop,
-}) => {
-  const { loading, error, data } = forecast;
-
-  if (!String(destination || '').trim() || !hasDates) {
-    return (
-      <View style={[styles.card, isDesktop && styles.cardDesktop]}>
-        <View style={styles.headerRow}>
-          <View style={styles.headerIcon}>
-            <Ionicons name="partly-sunny-outline" size={18} color={PURPLE} />
-          </View>
-          <Text style={styles.cardTitle}>Clima del destino</Text>
-        </View>
-
-        <Text style={styles.hint}>
-          Completá el destino y las fechas para ver el clima de tu viaje.
-        </Text>
-      </View>
-    );
-  }
-
-  return (
-    <View style={[styles.card, isDesktop && styles.cardDesktop]}>
-      <View style={styles.headerRow}>
-        <View style={styles.headerIcon}>
-          <Ionicons name="partly-sunny-outline" size={18} color={PURPLE} />
-        </View>
-
-        <View style={styles.headerText}>
-          <Text style={styles.cardTitle}>
-            Clima en {data?.place?.name || destination}
-          </Text>
-
-          {data?.place?.country ? (
-            <Text style={styles.cardSubtitle}>
-              {[data.place.region, data.place.country].filter(Boolean).join(', ')}
-            </Text>
-          ) : null}
-        </View>
-      </View>
-
-      {loading ? (
-        <View style={styles.loadingRow}>
-          <ActivityIndicator size="small" color={PURPLE} />
-          <Text style={styles.hint}>Buscando el pronóstico…</Text>
-        </View>
-      ) : error ? (
-        <Text style={styles.errorText}>{error}</Text>
-      ) : data ? (
-        <>
-          <View style={styles.summaryRow}>
-            <View style={styles.summaryPill}>
-              <Ionicons name="thermometer-outline" size={15} color={PURPLE} />
-              <Text style={styles.summaryText}>
-                {data.summary.min}° a {data.summary.max}°
-              </Text>
-            </View>
-
-            <View style={styles.summaryPill}>
-              <Ionicons name="rainy-outline" size={15} color={PURPLE} />
-              <Text style={styles.summaryText}>
-                {data.summary.rainyDays === 0
-                  ? 'Sin lluvia'
-                  : `${data.summary.rainyDays} ${
-                      data.summary.rainyDays === 1 ? 'día' : 'días'
-                    } con lluvia`}
-              </Text>
-            </View>
-          </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.daysList}
-          >
-            {data.days.map((day) => {
-              const label = formatShortDay(day.date);
-
-              return (
-                <View key={day.date} style={styles.dayItem}>
-                  <Text style={styles.dayWeekday}>{label.weekday}</Text>
-                  <Text style={styles.dayDate}>{label.day}</Text>
-                  <Ionicons
-                    name={day.icon}
-                    size={24}
-                    color={PURPLE}
-                    style={styles.dayIcon}
-                  />
-                  <Text style={styles.dayMax}>{Math.round(day.max)}°</Text>
-                  <Text style={styles.dayMin}>{Math.round(day.min)}°</Text>
-                </View>
-              );
-            })}
-          </ScrollView>
-
-          {data.partial ? (
-            <Text style={styles.note}>
-              * Por ahora hay pronóstico solo para algunos días del viaje.
-              El resto va a aparecer a medida que se acerquen las fechas.
-            </Text>
-          ) : null}
-
-          {data.summary.estimated ? (
-            <Text style={styles.note}>
-              * Para las fechas a más de 16 días mostramos el clima que hubo
-              en esos mismos días el año pasado, como referencia.
-            </Text>
-          ) : null}
-        </>
-      ) : null}
-    </View>
-  );
-};
-
-
 // ============================================================
 // TARJETA: QUÉ LLEVAR + BARRA DE PROGRESO
 // ============================================================
@@ -312,14 +118,14 @@ export const PackingPlanCard = ({
   clothes,
   packedItems,
   tripDays,
-  forecast,
   onAutoPack,
   isDesktop,
 }) => {
   const [message, setMessage] = useState(null);
   const progressAnim = useRef(new Animated.Value(0)).current;
 
-  const summary = forecast?.data?.summary || null;
+  // Sin pronóstico del destino: las cantidades salen de los días.
+  const summary = null;
 
   const quantities = useMemo(
     () => (tripDays > 0 ? getPackingQuantities(tripDays, summary) : null),
@@ -417,8 +223,7 @@ export const PackingPlanCard = ({
         <View style={styles.headerText}>
           <Text style={styles.cardTitle}>Qué llevar</Text>
           <Text style={styles.cardSubtitle}>
-            Para {tripDays} {tripDays === 1 ? 'día' : 'días'}
-            {summary ? ' según el clima del destino' : ''}
+            Para {tripDays} {tripDays === 1 ? 'día' : 'días'} de viaje
           </Text>
         </View>
       </View>
@@ -581,92 +386,6 @@ const styles = StyleSheet.create({
     color: GREY,
     fontSize: 13,
     lineHeight: 18,
-  },
-
-  errorText: {
-    fontFamily: 'Poppins_400Regular',
-    color: '#D64545',
-    fontSize: 13,
-  },
-
-  loadingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-
-  summaryRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
-  },
-
-  summaryPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: SOFT,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-
-  summaryText: {
-    fontFamily: 'Poppins_600SemiBold',
-    color: DARK,
-    fontSize: 13,
-  },
-
-  daysList: {
-    gap: 8,
-    paddingBottom: 2,
-  },
-
-  dayItem: {
-    width: 62,
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: BORDER,
-    backgroundColor: '#FCFBFE',
-  },
-
-  dayWeekday: {
-    fontFamily: 'Poppins_600SemiBold',
-    color: DARK,
-    fontSize: 12,
-  },
-
-  dayDate: {
-    fontFamily: 'Poppins_400Regular',
-    color: GREY,
-    fontSize: 11,
-  },
-
-  dayIcon: {
-    marginVertical: 6,
-  },
-
-  dayMax: {
-    fontFamily: 'Poppins_700Bold',
-    color: DARK,
-    fontSize: 14,
-  },
-
-  dayMin: {
-    fontFamily: 'Poppins_400Regular',
-    color: GREY,
-    fontSize: 12,
-  },
-
-  note: {
-    fontFamily: 'Poppins_400Regular',
-    color: GREY,
-    fontSize: 11,
-    marginTop: 10,
-    fontStyle: 'italic',
   },
 
   progressBlock: {
