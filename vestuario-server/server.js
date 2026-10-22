@@ -311,18 +311,33 @@ async function init() {
 // ============================================================
 const auth = async (req, res, next) => {
   if (req.user) return next();
+
+  // 1) Token: si es inválido o venció, la sesión terminó (401).
+  let payload;
   try {
     const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-    const payload = jwt.verify(token, JWT_SECRET);
-    const u = await getAuthUser(payload.id);
-    if (!u || (u.status || 'active') !== 'active') {
-      return res.status(401).json({ error: 'UNAUTHORIZED' });
-    }
-    req.user = { id: u.id, role: u.role, mc: !!payload.mc };
-    next();
+    payload = jwt.verify(token, JWT_SECRET);
   } catch {
-    res.status(401).json({ error: 'UNAUTHORIZED' });
+    return res.status(401).json({ error: 'UNAUTHORIZED' });
   }
+
+  // 2) Usuario: si falla la BASE DE DATOS, NO es sesión vencida.
+  //    Antes respondía 401 y la app cerraba la sesión por un error
+  //    momentáneo de MySQL; ahora responde 503 y la sesión sigue.
+  let u;
+  try {
+    u = await getAuthUser(payload.id);
+  } catch (e) {
+    console.error('Error de base de datos al verificar la sesión:', e?.code || '', e?.message || e);
+    return res.status(503).json({ error: 'SERVER_ERROR' });
+  }
+
+  if (!u || (u.status || 'active') !== 'active') {
+    return res.status(401).json({ error: 'UNAUTHORIZED' });
+  }
+
+  req.user = { id: u.id, role: u.role, mc: !!payload.mc };
+  next();
 };
 
 const adminOnly = (req, res, next) =>

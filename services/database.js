@@ -1228,10 +1228,24 @@ export const deleteClothingItem = async (clothingId) => {
   }
 };
 
+// Pedidos de prendas en curso (web). Si varias pantallas piden las
+// prendas a la vez (inicio, armario, etc.), comparten UN solo pedido:
+// cada respuesta trae todas las fotos y repetirla sobrecarga MySQL.
+const clothesInFlight = new Map();
+
 export const getUserClothes = async (userId) => {
   if (IS_WEB) {
+    const key = String(userId);
+
+    if (!clothesInFlight.has(key)) {
+      const request = api(`/clothes?userId=${userId}`).finally(() =>
+        clothesInFlight.delete(key)
+      );
+      clothesInFlight.set(key, request);
+    }
+
     try {
-      return await api(`/clothes?userId=${userId}`);
+      return await clothesInFlight.get(key);
     } catch (error) {
       console.log('Error al obtener prendas (Web):', error);
       rethrowIfSessionExpired(error);
