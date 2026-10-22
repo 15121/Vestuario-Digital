@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 
 import {
   getOutfitById,
@@ -501,9 +502,13 @@ export default function OutfitDetailScreen({
     ]
   );
 
-  useEffect(() => {
-    loadOutfit();
-  }, [loadOutfit]);
+  // Se recarga cada vez que la pantalla vuelve a verse
+  // (por ejemplo, después de editar el outfit).
+  useFocusEffect(
+    useCallback(() => {
+      loadOutfit();
+    }, [loadOutfit])
+  );
 
   useEffect(() => {
     return () => {
@@ -990,6 +995,28 @@ export default function OutfitDetailScreen({
                     Marcar como usado
                   </Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.editOutfitButton}
+                  onPress={() =>
+                    navigation.navigate('CreateOutfit', {
+                      user,
+                      outfit,
+                    })
+                  }
+                  activeOpacity={0.85}
+                >
+                  <Ionicons
+                    name="pencil-outline"
+                    size={20}
+                    color={COLORS.buttonDark}
+                  />
+
+                  <Text style={styles.editOutfitButtonText}>
+                    Editar outfit
+                  </Text>
+                </TouchableOpacity>
+
                 <TouchableOpacity
                   style={[
                     styles.deleteButton,
@@ -1463,6 +1490,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginTop: 16,
     marginBottom: 12,
+  },
+
+  editOutfitButton: {
+    minHeight: 50,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: COLORS.buttonDark,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    gap: 8,
+    marginBottom: 12,
+  },
+
+  editOutfitButtonText: {
+    color: COLORS.buttonDark,
+    fontSize: 14,
+    fontFamily: 'Poppins_600SemiBold',
   },
 
   useButtonText: {

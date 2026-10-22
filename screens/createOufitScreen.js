@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import {
   getUserClothes,
   addOutfit,
   addHistoryEntry,
+  updateOutfit,
 } from '../services/database';
 import { COLORS } from '../theme/colours';
 import { MESSAGES } from '../theme/messages';
@@ -49,6 +50,11 @@ export default function CreateOutfitScreen({ navigation, route }) {
 
   const user = route?.params?.user;
 
+  // Modo edición: llega el outfit desde el detalle de outfit.
+  const editingOutfit = route?.params?.outfit || null;
+  const isEditing = Boolean(editingOutfit?.id);
+  const screenTitle = isEditing ? 'Editar Outfit' : 'Crear Outfit';
+
   // ----------------------------------------------------------
   // ESTADOS
   // ----------------------------------------------------------
@@ -70,6 +76,9 @@ export default function CreateOutfitScreen({ navigation, route }) {
   // Modal para seleccionar/cambiar prendas
   const [selectorVisible, setSelectorVisible] = useState(false);
   const [selectorType, setSelectorType] = useState(null);
+
+  // Para cargar los datos del outfit a editar una sola vez
+  const prefilledRef = useRef(false);
 
   // Botón "Sorprendeme": última combinación y por qué combina
   const [surpriseKey, setSurpriseKey] = useState('');
@@ -108,6 +117,39 @@ export default function CreateOutfitScreen({ navigation, route }) {
       setLoading(false);
     }
   };
+
+  // ==========================================================
+  // MODO EDICIÓN: completar con el outfit existente
+  // ==========================================================
+
+  useEffect(() => {
+    if (!isEditing || prefilledRef.current || clothes.length === 0) {
+      return;
+    }
+
+    prefilledRef.current = true;
+
+    const items =
+      editingOutfit.items && typeof editingOutfit.items === 'object'
+        ? editingOutfit.items
+        : {};
+
+    const findById = (id) =>
+      id === null || id === undefined
+        ? null
+        : clothes.find((item) => String(item.id) === String(id)) || null;
+
+    setOutfitName(String(editingOutfit.name || '').slice(0, 60));
+    setDescription(String(editingOutfit.description || '').slice(0, 150));
+    setSelectedUpper(findById(items.superior));
+    setSelectedLower(findById(items.inferior));
+    setSelectedShoes(findById(items.calzado));
+    setSelectedAccessories(
+      (Array.isArray(items.accesorios) ? items.accesorios : [])
+        .map(findById)
+        .filter(Boolean)
+    );
+  }, [isEditing, editingOutfit, clothes]);
 
   // ==========================================================
   // PRENDAS DISPONIBLES SEGÚN CATEGORÍA
@@ -357,12 +399,18 @@ export default function CreateOutfitScreen({ navigation, route }) {
         ),
       };
 
-      const result = await addOutfit({
-        userId: user.id,
-        name: outfitName.trim(),
-        description: description.trim(),
-        items,
-      });
+      const result = isEditing
+        ? await updateOutfit(editingOutfit.id, {
+            name: outfitName.trim(),
+            description: description.trim(),
+            items,
+          })
+        : await addOutfit({
+            userId: user.id,
+            name: outfitName.trim(),
+            description: description.trim(),
+            items,
+          });
 
       if (!result?.success) {
         throw new Error(
@@ -373,7 +421,9 @@ export default function CreateOutfitScreen({ navigation, route }) {
       if (markAsUsed) {
         const historyResult = await addHistoryEntry({
           userId: user.id,
-          outfitId: result.outfit?.id ?? result.id,
+          outfitId: isEditing
+            ? editingOutfit.id
+            : result.outfit?.id ?? result.id,
           outfitName: outfitName.trim(),
           imageUri: '',
           note: '',
@@ -388,8 +438,10 @@ export default function CreateOutfitScreen({ navigation, route }) {
       }
 
       Alert.alert(
-        'Outfit creado',
-        MESSAGES.OUTFIT_CREATED,
+        isEditing ? 'Outfit actualizado' : 'Outfit creado',
+        isEditing
+          ? 'Los cambios del outfit se guardaron correctamente.'
+          : MESSAGES.OUTFIT_CREATED,
         [
           {
             text: 'Aceptar',
@@ -406,8 +458,10 @@ export default function CreateOutfitScreen({ navigation, route }) {
 
       Alert.alert(
         'Error',
-        MESSAGES.OUTFIT_ERROR ||
-          'No se pudo crear el outfit.'
+        isEditing
+          ? 'No se pudieron guardar los cambios del outfit.'
+          : MESSAGES.OUTFIT_ERROR ||
+              'No se pudo crear el outfit.'
       );
     } finally {
       setSaving(false);
@@ -871,7 +925,7 @@ export default function CreateOutfitScreen({ navigation, route }) {
   if (loading) {
     return (
       <OutfitScreenLayout
-        title="Crear Outfit"
+        title={screenTitle}
         navigation={navigation}
         user={user}
       >
@@ -895,7 +949,7 @@ export default function CreateOutfitScreen({ navigation, route }) {
 
   return (
     <OutfitScreenLayout
-      title="Crear Outfit"
+      title={screenTitle}
       navigation={navigation}
       user={user}
     >
@@ -1154,7 +1208,7 @@ export default function CreateOutfitScreen({ navigation, route }) {
                     />
                   ) : (
                     <Text style={styles.saveButtonText}>
-                      Guardar outfit
+                      {isEditing ? 'Guardar cambios' : 'Guardar outfit'}
                     </Text>
                   )}
                 </TouchableOpacity>
