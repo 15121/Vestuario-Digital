@@ -60,7 +60,10 @@ import {
   buildOutfitOptions,
   buildLayerSuggestions,
 } from '../utils/outfitrecommender';
-import { getRestOfDayForecast } from '../services/forecastService';
+import {
+  getRestOfDayForecast,
+  getTomorrowForecast,
+} from '../services/forecastService';
 
 
 // ============================================================
@@ -1165,6 +1168,35 @@ const WeatherRecScreen = ({
 
 
   // ----------------------------------------------------------
+  // HOY / MAÑANA
+  // ----------------------------------------------------------
+  //
+  // "Mañana" usa el pronóstico de OpenWeather (la misma API y
+  // clave que el clima actual).
+
+  const [forecastDay, setForecastDay] =
+    useState('today');
+
+  const [tomorrowData, setTomorrowData] =
+    useState(null);
+
+  const [loadingTomorrow, setLoadingTomorrow] =
+    useState(false);
+
+  const [tomorrowError, setTomorrowError] =
+    useState('');
+
+  const isTomorrow =
+    forecastDay === 'tomorrow' &&
+    Boolean(tomorrowData);
+
+  // Clima con el que se arman las recomendaciones.
+  const activeWeather = isTomorrow
+    ? tomorrowData.weather
+    : weather;
+
+
+  // ----------------------------------------------------------
   // CONSEJO GENERAL DE VESTIMENTA
   // ----------------------------------------------------------
   //
@@ -1172,19 +1204,19 @@ const WeatherRecScreen = ({
   // condicional (como el de "loading" más abajo).
 
   const advice = useMemo(() => {
-    if (!weather) {
+    if (!activeWeather) {
       return null;
     }
 
     return getOutfitAdvice({
-      temp: weather.temp,
-      feelsLike: weather.feelsLike,
-      conditionGroup: weather.conditionGroup,
-      humidity: weather.humidity,
-      windSpeedMs: weather.windSpeedMs,
-      isWindy: weather.isWindy,
+      temp: activeWeather.temp,
+      feelsLike: activeWeather.feelsLike,
+      conditionGroup: activeWeather.conditionGroup,
+      humidity: activeWeather.humidity,
+      windSpeedMs: activeWeather.windSpeedMs,
+      isWindy: activeWeather.isWindy,
     });
-  }, [weather]);
+  }, [activeWeather]);
 
 
   // ----------------------------------------------------------
@@ -1214,17 +1246,17 @@ const WeatherRecScreen = ({
   // ----------------------------------------------------------
 
   const layerSuggestions = useMemo(() => {
-    if (!weather || dayHours.length === 0) {
+    if (!activeWeather || dayHours.length === 0) {
       return [];
     }
 
     return buildLayerSuggestions(
       clothes,
-      weather,
+      activeWeather,
       dayHours,
       recommendations
     );
-  }, [weather, clothes, dayHours, recommendations]);
+  }, [activeWeather, clothes, dayHours, recommendations]);
 
 
   const handleSelectOutfit = useCallback((index) => {
@@ -1297,16 +1329,23 @@ const WeatherRecScreen = ({
 
   const openNameModal = useCallback(
     (mode) => {
-      const temp = weather ? Math.round(Number(weather.feelsLike ?? weather.temp)) : null;
-      const now = new Date();
-      const date = `${now.getDate()}/${now.getMonth() + 1}`;
+      const temp = activeWeather
+        ? Math.round(Number(activeWeather.feelsLike ?? activeWeather.temp))
+        : null;
+      const day = new Date();
+
+      if (isTomorrow) {
+        day.setDate(day.getDate() + 1);
+      }
+
+      const date = `${day.getDate()}/${day.getMonth() + 1}`;
 
       setSaveName(
         Number.isFinite(temp) ? `Look ${temp}°C · ${date}` : `Look del ${date}`
       );
       setSaveModal(mode);
     },
-    [weather]
+    [activeWeather, isTomorrow]
   );
 
   const markAsUsedToday = useCallback(
@@ -1554,6 +1593,11 @@ const WeatherRecScreen = ({
         setSelectedOutfit(0);
         setSwaps({});
 
+        // Cada vez que se recalcula con el clima actual,
+        // volvemos a "Hoy".
+        setForecastDay('today');
+        setTomorrowError('');
+
         setMissingItems(
           result.missing
         );
@@ -1575,6 +1619,81 @@ const WeatherRecScreen = ({
           });
       },
       []
+    );
+
+
+  // ----------------------------------------------------------
+  // CAMBIAR ENTRE HOY Y MAÑANA
+  // ----------------------------------------------------------
+
+  const handleSelectDay =
+    useCallback(
+      async (day) => {
+        if (day === forecastDay || loadingTomorrow) {
+          return;
+        }
+
+        if (day === 'today') {
+          updateRecommendations(
+            weather,
+            clothes
+          );
+          return;
+        }
+
+        setTomorrowError('');
+        setLoadingTomorrow(true);
+
+        try {
+          const data =
+            tomorrowData ||
+            (await getTomorrowForecast(
+              weather?.latitude,
+              weather?.longitude
+            ));
+
+          if (!data) {
+            throw new Error(
+              'Todavía no hay pronóstico para mañana.'
+            );
+          }
+
+          const result =
+            buildOutfitOptions(
+              clothes,
+              data.weather
+            );
+
+          setTomorrowData(data);
+          setOutfitOptions(result.outfits);
+          setAlternatives(result.alternatives);
+          setMissingItems(result.missing);
+          setSelectedOutfit(0);
+          setSwaps({});
+          setDayHours(data.hours);
+          setForecastDay('tomorrow');
+        } catch (error) {
+          console.log(
+            'No se pudo obtener el pronóstico de mañana:',
+            error
+          );
+
+          setTomorrowError(
+            error?.message ||
+              'No se pudo obtener el pronóstico de mañana.'
+          );
+        } finally {
+          setLoadingTomorrow(false);
+        }
+      },
+      [
+        forecastDay,
+        loadingTomorrow,
+        tomorrowData,
+        weather,
+        clothes,
+        updateRecommendations,
+      ]
     );
 
 
@@ -1614,6 +1733,10 @@ const WeatherRecScreen = ({
           }
 
           setWeather(result);
+
+          // Otra ciudad o clima actualizado: el pronóstico de
+          // mañana guardado ya no sirve.
+          setTomorrowData(null);
 
           const resolvedCity =
             result.city ||
@@ -2251,9 +2374,82 @@ const WeatherRecScreen = ({
                             screenStyles.sectionTitle
                           }
                         >
-                          Outfits recomendados para hoy
+                          {isTomorrow
+                            ? 'Outfits recomendados para mañana'
+                            : 'Outfits recomendados para hoy'}
                         </Text>
                       </View>
+
+                      {/* HOY / MAÑANA */}
+
+                      <View style={dayStyles.row}>
+                        {[
+                          { key: 'today', label: 'Hoy' },
+                          { key: 'tomorrow', label: 'Mañana' },
+                        ].map((option) => {
+                          const active =
+                            option.key === 'today'
+                              ? !isTomorrow
+                              : isTomorrow;
+
+                          return (
+                            <TouchableOpacity
+                              key={option.key}
+                              style={[
+                                dayStyles.tab,
+                                active && dayStyles.tabActive,
+                              ]}
+                              onPress={() =>
+                                handleSelectDay(option.key)
+                              }
+                              disabled={loadingTomorrow}
+                              activeOpacity={0.85}
+                            >
+                              {option.key === 'tomorrow' &&
+                              loadingTomorrow ? (
+                                <ActivityIndicator
+                                  size="small"
+                                  color="#8C73D6"
+                                />
+                              ) : (
+                                <Text
+                                  style={[
+                                    dayStyles.tabText,
+                                    active && dayStyles.tabTextActive,
+                                  ]}
+                                >
+                                  {option.label}
+                                </Text>
+                              )}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+
+                      {isTomorrow ? (
+                        <View style={dayStyles.summary}>
+                          <Ionicons
+                            name="calendar-outline"
+                            size={18}
+                            color="#8C73D6"
+                          />
+
+                          <Text style={dayStyles.summaryText}>
+                            Mañana: {tomorrowData.weather.displayDescription || 'pronóstico'}
+                            {' · '}
+                            {tomorrowData.min}° a {tomorrowData.max}°
+                            {tomorrowData.maxRainProb >= 30
+                              ? ` · ${tomorrowData.maxRainProb}% de probabilidad de lluvia`
+                              : ''}
+                          </Text>
+                        </View>
+                      ) : null}
+
+                      {tomorrowError ? (
+                        <Text style={dayStyles.error}>
+                          {tomorrowError}
+                        </Text>
+                      ) : null}
 
                       {advice ? (
                         <View
@@ -2399,22 +2595,25 @@ const WeatherRecScreen = ({
                               </Text>
                             </TouchableOpacity>
 
-                            <TouchableOpacity
-                              style={[
-                                saveStyles.primaryAction,
-                                (!outfitToSave.complete || savingOutfit) && saveStyles.disabled,
-                              ]}
-                              onPress={() =>
-                                savedId ? handleUseSavedToday() : openSaveModal('today')
-                              }
-                              disabled={!outfitToSave.complete || savingOutfit}
-                              activeOpacity={0.85}
-                            >
-                              <Ionicons name="calendar-outline" size={18} color="#FFFFFF" />
-                              <Text style={saveStyles.primaryActionText}>
-                                Me lo pongo hoy
-                              </Text>
-                            </TouchableOpacity>
+                            {/* "Me lo pongo hoy" no aplica a mañana */}
+                            {!isTomorrow && (
+                              <TouchableOpacity
+                                style={[
+                                  saveStyles.primaryAction,
+                                  (!outfitToSave.complete || savingOutfit) && saveStyles.disabled,
+                                ]}
+                                onPress={() =>
+                                  savedId ? handleUseSavedToday() : openSaveModal('today')
+                                }
+                                disabled={!outfitToSave.complete || savingOutfit}
+                                activeOpacity={0.85}
+                              >
+                                <Ionicons name="calendar-outline" size={18} color="#FFFFFF" />
+                                <Text style={saveStyles.primaryActionText}>
+                                  Me lo pongo hoy
+                                </Text>
+                              </TouchableOpacity>
+                            )}
                           </View>
 
                           {!outfitToSave.complete ? (
@@ -3185,6 +3384,71 @@ const recommendationStyles =
     },
   });
 
+
+const dayStyles =
+  StyleSheet.create({
+    row: {
+      flexDirection: 'row',
+      backgroundColor: '#F3EEFC',
+      borderRadius: 12,
+      padding: 4,
+      marginBottom: 12,
+    },
+
+    tab: {
+      flex: 1,
+      height: 38,
+      borderRadius: 9,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    tabActive: {
+      backgroundColor: '#FFFFFF',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.06,
+      shadowRadius: 3,
+      elevation: 1,
+    },
+
+    tabText: {
+      fontFamily: 'Poppins_500Medium',
+      color: '#77727F',
+      fontSize: 14,
+    },
+
+    tabTextActive: {
+      fontFamily: 'Poppins_600SemiBold',
+      color: '#8C73D6',
+    },
+
+    summary: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      padding: 12,
+      borderRadius: 12,
+      backgroundColor: '#F7F3FF',
+      borderWidth: 1,
+      borderColor: '#E6DDF8',
+      marginBottom: 12,
+    },
+
+    summaryText: {
+      flex: 1,
+      fontFamily: 'Poppins_400Regular',
+      color: '#302B3B',
+      fontSize: 13,
+    },
+
+    error: {
+      fontFamily: 'Poppins_400Regular',
+      color: '#B42318',
+      fontSize: 12,
+      marginBottom: 12,
+    },
+  });
 
 const saveStyles =
   StyleSheet.create({
