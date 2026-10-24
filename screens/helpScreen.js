@@ -28,29 +28,71 @@ const HELP_ITEMS = [
     id: 1,
     title: '¿Cómo agrego una prenda?',
     description:
-      'Utilizá el botón + del menú inferior para registrar una nueva prenda en tu armario.',
+      'Utilizá el botón + del menú inferior para registrar una nueva prenda en tu armario. Podés elegir entre casi 50 colores o tomarlo directamente de la foto.',
     icon: 'tshirt-crew-outline',
   },
   {
     id: 2,
     title: '¿Cómo creo un outfit?',
     description:
-      'Ingresá a la sección Outfits y seleccioná Crear outfit para combinar tus prendas.',
+      'Ingresá a la sección Outfits y seleccioná Crear outfit para combinar tus prendas. Si ya tenés un outfit con las mismas prendas, la app te avisa para que no quede repetido.',
     icon: 'hanger',
   },
   {
     id: 3,
-    title: '¿Cómo funciona la recomendación climática?',
+    title: '¿Qué hace el botón "Sorprendeme"?',
     description:
-      'La aplicación consulta el clima de la ciudad registrada por el usuario y recomienda las prendas disponibles en su armario que mejor se adapten a esas condiciones.',
-    icon: 'weather-partly-cloudy',
+      'Al crear un outfit, "Sorprendeme" arma una combinación con prendas de tu armario que combinan por color. Cada vez que lo tocás sale una distinta, y podés cambiar cualquier prenda antes de guardar.',
+    icon: 'shuffle-variant',
   },
   {
     id: 4,
+    title: '¿Cómo edito un outfit?',
+    description:
+      'Abrí el outfit desde Mis outfits y tocá "Editar outfit". Podés cambiar el nombre, la descripción y las prendas.',
+    icon: 'pencil-outline',
+  },
+  {
+    id: 5,
+    title: '¿Qué es "Combina con…"?',
+    description:
+      'En el detalle de una prenda aparecen otras prendas de tu armario que quedan bien con ella. Tocá cualquiera para ver su detalle.',
+    icon: 'palette-outline',
+  },
+  {
+    id: 6,
+    title: '¿Cómo funciona la recomendación climática?',
+    description:
+      'La aplicación consulta el clima de tu ciudad y te propone hasta 3 outfits con prendas de tu armario. Debajo de cada prenda hay otras opciones para cambiarla, y en "Durante el día" te avisa si más tarde refresca o puede llover. También podés ver la recomendación para mañana.',
+    icon: 'weather-partly-cloudy',
+  },
+  {
+    id: 7,
+    title: '¿Puedo guardar un outfit recomendado?',
+    description:
+      'Sí. En la recomendación climática, "Guardar outfit" lo agrega a Mis outfits, y "Me lo pongo hoy" además lo registra en tu historial de hoy.',
+    icon: 'content-save-outline',
+  },
+  {
+    id: 8,
     title: '¿Cómo uso el modo maleta?',
     description:
-      'Creá una maleta, seleccioná las prendas que llevarás y marcá cuáles ya fueron empacadas.',
+      'Creá una maleta con el destino y las fechas. La app te dice cuántas prendas llevar de cada tipo según los días del viaje, y con "Sugerir prendas de mi armario" las elige por vos. Marcá las que ya guardaste y seguí el progreso con la barra.',
     icon: 'briefcase-outline',
+  },
+  {
+    id: 9,
+    title: '¿Dónde veo los outfits que usé?',
+    description:
+      'En el Historial. Podés verlo como lista o como calendario: los días con outfits usados aparecen marcados, y al tocar uno ves qué te pusiste.',
+    icon: 'calendar-month-outline',
+  },
+  {
+    id: 10,
+    title: '¿Qué muestran mis estadísticas?',
+    description:
+      'Desde el inicio, "Mis estadísticas" te muestra tus prendas más usadas, las que todavía no usaste, tu outfit favorito y los colores y categorías que más tenés.',
+    icon: 'chart-bar',
   },
 ];
 

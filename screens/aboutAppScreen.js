@@ -243,7 +243,7 @@ export default function AboutAppScreen({
 
       {/* VERSIÓN */}
       <Text style={styles.version}>
-        Versión 1.0 (MVP)
+        Versión 1.1
       </Text>
 
       {/* INFORMACIÓN */}
