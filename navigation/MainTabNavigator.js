@@ -39,6 +39,7 @@ import PackingModeScreen from '../screens/packingModeScreen';
 import AddMenuModal from '../components/AddMenuModal';
 import SideMenu from '../components/sideMenu';
 import ForceChangePasswordModal from '../components/ForceChangePasswordModal';
+import WelcomeModal from '../components/WelcomeModal';
 import { confirmLogout, logout } from '../services/session';
 import { setUnauthorizedHandler } from '../services/api';
 import { getUserById } from '../services/database';
@@ -1418,6 +1419,12 @@ export default function MainTabNavigator({
           }
         />
 
+        {/* Bienvenida (solo la primera vez, después del cambio de clave) */}
+        <WelcomeModal
+          user={user}
+          blocked={mustChangePassword}
+        />
+
 
         {/* HEADER */}
         <AppHeader
@@ -1539,6 +1546,12 @@ export default function MainTabNavigator({
         onDone={() =>
           setMustChangePassword(false)
         }
+      />
+
+      {/* Bienvenida (solo la primera vez, después del cambio de clave) */}
+      <WelcomeModal
+        user={user}
+        blocked={mustChangePassword}
       />
 
 
