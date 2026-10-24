@@ -37,7 +37,9 @@ import {
   addOutfit,
   getUserClothes,
   getUserHistory,
+  getUserOutfits,
 } from '../services/database';
+import { findDuplicateOutfit } from '../utils/outfitDuplicates';
 
 import {
   getUserCity,
@@ -1293,7 +1295,7 @@ const WeatherRecScreen = ({
     setSaveMessage(null);
   }, [outfitToSave.key]);
 
-  const openSaveModal = useCallback(
+  const openNameModal = useCallback(
     (mode) => {
       const temp = weather ? Math.round(Number(weather.feelsLike ?? weather.temp)) : null;
       const now = new Date();
@@ -1359,6 +1361,64 @@ const WeatherRecScreen = ({
       setSavingOutfit(false);
     }
   }, [savedId, markAsUsedToday]);
+
+  // Antes de pedir el nombre: si ya existe un outfit con las mismas
+  // prendas, se usa ese en vez de crear una copia.
+  const openSaveModal = useCallback(
+    async (mode) => {
+      let savedList = [];
+
+      try {
+        savedList = await getUserOutfits(userId);
+      } catch (error) {
+        savedList = [];
+      }
+
+      const duplicate = findDuplicateOutfit(outfitToSave.items, savedList);
+
+      if (!duplicate) {
+        openNameModal(mode);
+        return;
+      }
+
+      const existing = {
+        id: duplicate.id,
+        name: duplicate.name || 'Outfit sin nombre',
+      };
+
+      setSavedOutfits((current) => ({
+        ...current,
+        [outfitToSave.key]: existing,
+      }));
+
+      if (mode === 'save') {
+        setSaveMessage({
+          type: 'info',
+          text: `Ya tenés este outfit guardado como "${existing.name}".`,
+        });
+        return;
+      }
+
+      setSavingOutfit(true);
+
+      try {
+        const status = await markAsUsedToday(existing.id, existing.name);
+
+        setSaveMessage(
+          status === 'already'
+            ? { type: 'info', text: `"${existing.name}" ya está registrado como usado hoy.` }
+            : status === 'ok'
+              ? { type: 'ok', text: `Ya tenías este outfit como "${existing.name}": lo registramos en tu historial de hoy.` }
+              : { type: 'error', text: 'No se pudo registrar el uso. Probá de nuevo.' }
+        );
+      } catch (error) {
+        setSaveMessage({ type: 'error', text: 'No se pudo registrar el uso. Probá de nuevo.' });
+      } finally {
+        setSavingOutfit(false);
+      }
+    },
+    [userId, outfitToSave, openNameModal, markAsUsedToday]
+  );
 
   const handleConfirmSave = useCallback(async () => {
     const name = saveName.trim();

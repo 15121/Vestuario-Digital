@@ -14,6 +14,7 @@ import {
   Image,
   FlatList,
   Alert,
+  ActivityIndicator,
   useWindowDimensions,
   Modal,
   ScrollView,
@@ -664,7 +665,12 @@ export default function ClothingScreen({ navigation, route }) {
           LISTADO / GRILLA / ESTADO VACÍO
           ================================================== */}
 
-      {!loading && clothes.length === 0 ? (
+      {loading && clothes.length === 0 ? (
+        <View style={styles.loadingBox}>
+          <ActivityIndicator size="large" color={COLORS.buttonDark} />
+          <Text style={styles.loadingBoxText}>Cargando tus prendas…</Text>
+        </View>
+      ) : !loading && clothes.length === 0 ? (
         renderEmptyState()
       ) : (
         <FlatList
@@ -1178,6 +1184,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
+  },
+
+  loadingBox: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    gap: 12,
+  },
+
+  loadingBoxText: {
+    fontSize: 14,
+    fontFamily: 'Poppins_400Regular',
+    color: COLORS.textLight,
   },
 
   emptyTitle: {

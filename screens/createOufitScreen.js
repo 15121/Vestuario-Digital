@@ -21,7 +21,9 @@ import {
   addOutfit,
   addHistoryEntry,
   updateOutfit,
+  getUserOutfits,
 } from '../services/database';
+import { findDuplicateOutfit } from '../utils/outfitDuplicates';
 import { COLORS } from '../theme/colours';
 import { MESSAGES } from '../theme/messages';
 import { OutfitScreenLayout } from '../navigation/MainTabNavigator';
@@ -346,7 +348,8 @@ export default function CreateOutfitScreen({ navigation, route }) {
   // GUARDAR OUTFIT
   // ==========================================================
 
-  const handleSaveOutfit = async () => {
+  // skipDuplicateCheck: true cuando el usuario ya eligió "Guardar igual"
+  const handleSaveOutfit = async (skipDuplicateCheck = false) => {
     if (!outfitName.trim()) {
       Alert.alert(
         'Nombre requerido',
@@ -398,6 +401,45 @@ export default function CreateOutfitScreen({ navigation, route }) {
           (item) => item.id
         ),
       };
+
+      // ------------------------------------------------------
+      // ¿YA EXISTE UN OUTFIT CON LAS MISMAS PRENDAS?
+      // ------------------------------------------------------
+
+      if (skipDuplicateCheck !== true) {
+        let savedOutfits = [];
+
+        try {
+          savedOutfits = await getUserOutfits(user.id);
+        } catch (error) {
+          // Si no se pueden leer, se guarda sin el aviso.
+          savedOutfits = [];
+        }
+
+        const duplicate = findDuplicateOutfit(
+          items,
+          savedOutfits,
+          isEditing ? editingOutfit.id : null
+        );
+
+        if (duplicate) {
+          Alert.alert(
+            'Outfit repetido',
+            `Ya tenés este outfit guardado como "${
+              duplicate.name || 'Outfit sin nombre'
+            }". ¿Querés guardarlo igual?`,
+            [
+              { text: 'Cancelar', style: 'cancel' },
+              {
+                text: 'Guardar igual',
+                onPress: () => handleSaveOutfit(true),
+              },
+            ]
+          );
+
+          return;
+        }
+      }
 
       const result = isEditing
         ? await updateOutfit(editingOutfit.id, {
@@ -1194,7 +1236,7 @@ export default function CreateOutfitScreen({ navigation, route }) {
                       !outfitName.trim()) &&
                       styles.saveButtonDisabled,
                   ]}
-                  onPress={handleSaveOutfit}
+                  onPress={() => handleSaveOutfit()}
                   disabled={
                     saving ||
                     !isComplete ||
