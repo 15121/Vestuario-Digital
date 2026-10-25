@@ -591,6 +591,9 @@ export default function ClothingScreen({ navigation, route }) {
             ================================================ */}
 
         <View style={styles.chipsWrapper}>
+        {/* La caja recorta la barra de desplazamiento que el
+            navegador dibuja debajo de la fila. */}
+        <View style={styles.chipsClip}>
         <ScrollView
           ref={chipsRef}
           horizontal
@@ -650,6 +653,7 @@ export default function ClothingScreen({ navigation, route }) {
             );
           })}
         </ScrollView>
+        </View>
 
         {/* Flechas para mover las categorías con el mouse (PC) */}
         {isDesktop && canScrollLeft && (
@@ -1082,13 +1086,21 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
 
+  chipsClip: {
+    overflow: 'hidden',
+  },
+
+  // Se agranda hacia abajo (paddingBottom) y se compensa con un
+  // margen negativo: la barra queda fuera de la caja y no se ve.
   chipsScroll: {
     flexGrow: 0,
+    marginBottom: -20,
   },
 
   chipsRow: {
     flexDirection: 'row',
     gap: 8,
+    paddingBottom: 20,
   },
 
   // Flechas redondas sobre los extremos de la fila (solo PC)
