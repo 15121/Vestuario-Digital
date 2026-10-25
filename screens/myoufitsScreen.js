@@ -24,6 +24,7 @@ import {
 } from '../services/database';
 
 import { COLORS } from '../theme/colours';
+import HistoryCalendar from '../components/HistoryCalendar';
 
 
 // ============================================================
@@ -307,6 +308,9 @@ export default function MyOutfitsScreen({
   const [clothesById, setClothesById] = useState({});
 
   const [search, setSearch] = useState('');
+
+  // Vista del historial: 'list' (como siempre) o 'calendar'
+  const [historyView, setHistoryView] = useState('list');
 
   const [activeView, setActiveView] =
     useState('outfits');
@@ -614,6 +618,84 @@ export default function MyOutfitsScreen({
   // ==========================================================
   // PANTALLA
   // ==========================================================
+
+  // ----------------------------------------------------------
+  // TARJETA DE UN REGISTRO DEL HISTORIAL
+  // (la usan la lista y el calendario)
+  // ----------------------------------------------------------
+
+  const renderHistoryEntry = (item) => {
+  // Buscamos el outfit original al que pertenece
+  // este registro del historial.
+  const outfit = outfits.find(
+    (savedOutfit) =>
+      String(savedOutfit.id) ===
+      String(item.outfitId)
+  );
+
+  // Si encontramos el outfit original,
+  // usamos EXACTAMENTE la misma tarjeta
+  // que se utiliza en "Mis outfits".
+  if (outfit) {
+    return (
+      <View style={styles.historyOutfitWrapper}>
+        <OutfitCard
+          outfit={outfit}
+          clothesById={clothesById}
+          onPress={() => handleOpenOutfit(outfit)}
+        />
+
+        <View style={styles.historyUsedBadge}>
+          <Ionicons
+            name="checkmark-circle"
+            size={16}
+            color={COLORS.primary}
+          />
+
+          <Text style={styles.historyUsedText}>
+            Usado el {formatDate(item.date)}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  // Si el outfit ya no existe, dejamos una tarjeta
+  // alternativa para no romper el historial.
+  return (
+    <View style={styles.historyFallbackCard}>
+      <View style={styles.historyFallbackIcon}>
+        <MaterialCommunityIcons
+          name="hanger"
+          size={32}
+          color="#B7A9C5"
+        />
+      </View>
+
+      <View style={styles.historyFallbackInfo}>
+        <Text
+          style={styles.historyTitle}
+          numberOfLines={1}
+        >
+          {item.outfitName || 'Outfit'}
+        </Text>
+
+        <View style={styles.dateRow}>
+          <Ionicons
+            name="calendar-outline"
+            size={14}
+            color="#77707F"
+          />
+
+          <Text style={styles.dateText}>
+            Usado el {formatDate(item.date)}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+};
+
 
   return (
 
@@ -930,7 +1012,7 @@ export default function MyOutfitsScreen({
           =================================================== */
 
           <FlatList
-            data={filteredHistory}
+            data={historyView === 'list' ? filteredHistory : []}
   style={styles.outfitList}
     ListHeaderComponent={
     <View style={styles.sectionHeader}>
@@ -943,6 +1025,52 @@ export default function MyOutfitsScreen({
         Consultá los outfits que usaste anteriormente
       </Text>
 
+      {/* LISTA / CALENDARIO */}
+      <View style={styles.historyViewToggle}>
+        {[
+          { key: 'list', label: 'Lista', icon: 'list-outline' },
+          { key: 'calendar', label: 'Calendario', icon: 'calendar-outline' },
+        ].map((option) => {
+          const active = historyView === option.key;
+
+          return (
+            <TouchableOpacity
+              key={option.key}
+              onPress={() => setHistoryView(option.key)}
+              style={[
+                styles.historyViewButton,
+                active && styles.historyViewButtonActive,
+              ]}
+              activeOpacity={0.85}
+            >
+              <Ionicons
+                name={option.icon}
+                size={17}
+                color={active ? COLORS.buttonDark : '#77707F'}
+              />
+
+              <Text
+                style={[
+                  styles.historyViewText,
+                  active && styles.historyViewTextActive,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {historyView === 'calendar' && (
+        <View style={styles.historyCalendarBox}>
+          <HistoryCalendar
+            history={filteredHistory}
+            renderEntry={renderHistoryEntry}
+          />
+        </View>
+      )}
+
     </View>
   }
             keyExtractor={(item, index) =>
@@ -952,77 +1080,7 @@ export default function MyOutfitsScreen({
               )
             }
 
-           renderItem={({ item }) => {
-  // Buscamos el outfit original al que pertenece
-  // este registro del historial.
-  const outfit = outfits.find(
-    (savedOutfit) =>
-      String(savedOutfit.id) ===
-      String(item.outfitId)
-  );
-
-  // Si encontramos el outfit original,
-  // usamos EXACTAMENTE la misma tarjeta
-  // que se utiliza en "Mis outfits".
-  if (outfit) {
-    return (
-      <View style={styles.historyOutfitWrapper}>
-        <OutfitCard
-          outfit={outfit}
-          clothesById={clothesById}
-          onPress={() => handleOpenOutfit(outfit)}
-        />
-
-        <View style={styles.historyUsedBadge}>
-          <Ionicons
-            name="checkmark-circle"
-            size={16}
-            color={COLORS.primary}
-          />
-
-          <Text style={styles.historyUsedText}>
-            Usado el {formatDate(item.date)}
-          </Text>
-        </View>
-      </View>
-    );
-  }
-
-  // Si el outfit ya no existe, dejamos una tarjeta
-  // alternativa para no romper el historial.
-  return (
-    <View style={styles.historyFallbackCard}>
-      <View style={styles.historyFallbackIcon}>
-        <MaterialCommunityIcons
-          name="hanger"
-          size={32}
-          color="#B7A9C5"
-        />
-      </View>
-
-      <View style={styles.historyFallbackInfo}>
-        <Text
-          style={styles.historyTitle}
-          numberOfLines={1}
-        >
-          {item.outfitName || 'Outfit'}
-        </Text>
-
-        <View style={styles.dateRow}>
-          <Ionicons
-            name="calendar-outline"
-            size={14}
-            color="#77707F"
-          />
-
-          <Text style={styles.dateText}>
-            Usado el {formatDate(item.date)}
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-}}
+           renderItem={({ item }) => renderHistoryEntry(item)}
 
             contentContainerStyle={[
               styles.listContent,
@@ -1045,6 +1103,7 @@ export default function MyOutfitsScreen({
 
             ListEmptyComponent={
 
+              historyView === 'calendar' ? null : (
               <View style={styles.emptyState}>
 
                 <View
@@ -1078,6 +1137,7 @@ export default function MyOutfitsScreen({
                 </Text>
 
               </View>
+              )
 
             }
 
@@ -1099,6 +1159,43 @@ export default function MyOutfitsScreen({
 // ============================================================
 
 const styles = StyleSheet.create({
+
+  historyViewToggle: {
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
+    backgroundColor: '#F3EEFC',
+    borderRadius: 12,
+    padding: 4,
+    marginTop: 14,
+  },
+
+  historyViewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    height: 38,
+    borderRadius: 9,
+  },
+
+  historyViewButtonActive: {
+    backgroundColor: '#FFFFFF',
+  },
+
+  historyViewText: {
+    fontFamily: 'Poppins_500Medium',
+    color: '#77707F',
+    fontSize: 14,
+  },
+
+  historyViewTextActive: {
+    fontFamily: 'Poppins_600SemiBold',
+    color: COLORS.buttonDark,
+  },
+
+  historyCalendarBox: {
+    marginTop: 16,
+  },
 
   safeArea: {
     flex: 1,

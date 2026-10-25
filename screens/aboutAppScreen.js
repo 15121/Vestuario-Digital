@@ -17,6 +17,7 @@ import {
 } from '@expo/vector-icons';
 
 import { COLORS } from '../theme/colours';
+import { OutfitScreenLayout } from '../navigation/MainTabNavigator';
 
 export default function AboutAppScreen({
   navigation,
@@ -61,145 +62,7 @@ export default function AboutAppScreen({
     });
   };
 
-  // ==========================================================
-  // SIDEBAR DESKTOP
-  // ==========================================================
 
-  const DesktopSidebar = () => (
-    <View style={styles.sidebar}>
-
-      <TouchableOpacity
-        style={styles.sidebarItem}
-        onPress={() => navigateTo('Inicio')}
-        activeOpacity={0.75}
-      >
-        <Ionicons
-          name="home-outline"
-          size={28}
-          color={COLORS.textDark}
-        />
-
-        <Text style={styles.sidebarLabel}>
-          Inicio
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.sidebarItem}
-        onPress={() => navigateTo('Prendas')}
-        activeOpacity={0.75}
-      >
-        <Ionicons
-          name="shirt-outline"
-          size={28}
-          color={COLORS.textDark}
-        />
-
-        <Text style={styles.sidebarLabel}>
-          Prendas
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.sidebarItem}
-        onPress={() => navigateTo('Outfits')}
-        activeOpacity={0.75}
-      >
-        <MaterialCommunityIcons
-          name="hanger"
-          size={29}
-          color={COLORS.textDark}
-        />
-
-        <Text style={styles.sidebarLabel}>
-          Outfits
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.sidebarItem}
-        onPress={() => navigateTo('Maleta')}
-        activeOpacity={0.75}
-      >
-        <Ionicons
-          name="briefcase-outline"
-          size={28}
-          color={COLORS.textDark}
-        />
-
-        <Text style={styles.sidebarLabel}>
-          Maleta
-        </Text>
-      </TouchableOpacity>
-
-      <View style={styles.sidebarSpacer} />
-
-      <TouchableOpacity
-        style={styles.addButtonDesktop}
-        onPress={handleAddClothing}
-        activeOpacity={0.8}
-      >
-        <Ionicons
-          name="add"
-          size={34}
-          color="#FFFFFF"
-        />
-      </TouchableOpacity>
-
-    </View>
-  );
-
-  // ==========================================================
-  // HEADER
-  // ==========================================================
-
-  const Header = () => (
-    <SafeAreaView style={styles.headerSafeArea}>
-      <View style={styles.header}>
-
-        {/* VOLVER */}
-        <TouchableOpacity
-          style={styles.headerButton}
-          onPress={handleGoBack}
-          activeOpacity={0.75}
-        >
-          <Ionicons
-            name="arrow-back"
-            size={30}
-            color="#FFFFFF"
-          />
-        </TouchableOpacity>
-
-        {/* TÍTULO */}
-        <Text
-          style={styles.headerTitle}
-          numberOfLines={1}
-        >
-          Acerca la aplicación
-        </Text>
-
-        {/* PERFIL */}
-        <TouchableOpacity
-          style={styles.profileButton}
-          onPress={() =>
-            navigation.navigate('Profile', {
-              user,
-            })
-          }
-          activeOpacity={0.8}
-        >
-          <View style={styles.profileCircle}>
-            <Ionicons
-              name="person-outline"
-              size={21}
-              color={COLORS.buttonDark}
-            />
-          </View>
-        </TouchableOpacity>
-
-      </View>
-    </SafeAreaView>
-  );
 
   // ==========================================================
   // CONTENIDO
@@ -337,133 +200,26 @@ export default function AboutAppScreen({
     </ScrollView>
   );
 
-  // ==========================================================
-  // MENÚ INFERIOR MOBILE
-  // ==========================================================
-
-  const MobileBottomMenu = () => (
-    <View style={styles.mobileBottomBar}>
-
-      <TouchableOpacity
-        style={styles.mobileNavItem}
-        onPress={() => navigateTo('Inicio')}
-      >
-        <Ionicons
-          name="home-outline"
-          size={24}
-          color={COLORS.textDark}
-        />
-
-        <Text style={styles.mobileNavLabel}>
-          Inicio
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.mobileNavItem}
-        onPress={() => navigateTo('Prendas')}
-      >
-        <Ionicons
-          name="shirt-outline"
-          size={24}
-          color={COLORS.textDark}
-        />
-
-        <Text style={styles.mobileNavLabel}>
-          Prendas
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.mobileAddButtonContainer}
-        onPress={handleAddClothing}
-      >
-        <View style={styles.mobileAddButton}>
-          <Ionicons
-            name="add"
-            size={32}
-            color="#FFFFFF"
-          />
-        </View>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.mobileNavItem}
-        onPress={() => navigateTo('Outfits')}
-      >
-        <MaterialCommunityIcons
-          name="hanger"
-          size={25}
-          color={COLORS.textDark}
-        />
-
-        <Text style={styles.mobileNavLabel}>
-          Outfits
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.mobileNavItem}
-        onPress={() => navigateTo('Maleta')}
-      >
-        <Ionicons
-          name="briefcase-outline"
-          size={24}
-          color={COLORS.textDark}
-        />
-
-        <Text style={styles.mobileNavLabel}>
-          Maleta
-        </Text>
-      </TouchableOpacity>
-
-    </View>
-  );
 
   // ==========================================================
-  // DESKTOP
+  // PANTALLA
   // ==========================================================
-
-  if (isDesktop) {
-  return (
-    <View style={styles.desktopRoot}>
-
-      {/* HEADER COMPLETO */}
-      <Header />
-
-      {/* CUERPO */}
-      <View style={styles.desktopMain}>
-
-        {/* SIDEBAR */}
-        <DesktopSidebar />
-
-        {/* CONTENIDO */}
-        <View style={styles.desktopBody}>
-          <AboutContent />
-        </View>
-
-      </View>
-
-    </View>
-  );
-}
-
-  // ==========================================================
-  // MOBILE
-  // ==========================================================
+  //
+  // Usa el mismo encabezado, menú lateral (PC) y menú inferior
+  // (celular) que el resto de la app. Antes tenía uno propio,
+  // más angosto.
 
   return (
-    <SafeAreaView style={styles.mobileRoot}>
-
-      <Header />
-
-      <View style={styles.mobileContent}>
+    <OutfitScreenLayout
+      title="Acerca de la aplicación"
+      navigation={navigation}
+      user={user}
+      activeTab={null}
+    >
+      <View style={styles.desktopBody}>
         <AboutContent />
       </View>
-
-      <MobileBottomMenu />
-
-    </SafeAreaView>
+    </OutfitScreenLayout>
   );
 }
 

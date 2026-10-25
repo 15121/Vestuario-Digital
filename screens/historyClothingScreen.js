@@ -13,7 +13,6 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { COLORS } from '../theme/colours';
 import { getUserHistory } from '../services/database';
-import HistoryCalendar from '../components/HistoryCalendar';
 
 export default function HistoryClothingScreen({ navigation, route }) {
   const { width } = useWindowDimensions();
@@ -25,9 +24,6 @@ export default function HistoryClothingScreen({ navigation, route }) {
 
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  // Vista del historial: 'list' (como siempre) o 'calendar'
-  const [viewMode, setViewMode] = useState('list');
 
   // ============================================================
   // CARGAR HISTORIAL
@@ -208,89 +204,38 @@ export default function HistoryClothingScreen({ navigation, route }) {
                 />
 
                 {/* ==============================================
-                    LISTA / CALENDARIO
+                    TÍTULO
                 ============================================== */}
 
-                <View style={styles.viewToggle}>
-                  {[
-                    { key: 'list', label: 'Lista', icon: 'list-outline' },
-                    { key: 'calendar', label: 'Calendario', icon: 'calendar-outline' },
-                  ].map((option) => {
-                    const active = viewMode === option.key;
+                <Text
+                  style={
+                    isDesktop
+                      ? styles.desktopSectionTitle
+                      : styles.mobileSectionTitle
+                  }
+                >
+                  Outfits utilizados
+                </Text>
 
-                    return (
-                      <Pressable
-                        key={option.key}
-                        onPress={() => setViewMode(option.key)}
-                        style={[
-                          styles.viewToggleButton,
-                          active && styles.viewToggleButtonActive,
-                        ]}
-                      >
-                        <Ionicons
-                          name={option.icon}
-                          size={18}
-                          color={active ? COLORS.buttonDark : COLORS.textLight}
-                        />
+                {/* ==============================================
+                    LISTADO
+                ============================================== */}
 
-                        <Text
-                          style={[
-                            styles.viewToggleText,
-                            active && styles.viewToggleTextActive,
-                          ]}
-                        >
-                          {option.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
+                <View
+                  style={
+                    isDesktop
+                      ? styles.historyGrid
+                      : styles.historyList
+                  }
+                >
+                  {history.map((item) => (
+                    <HistoryCard
+                      key={item.id}
+                      item={item}
+                      isDesktop={isDesktop}
+                    />
+                  ))}
                 </View>
-
-                {viewMode === 'calendar' ? (
-                  <HistoryCalendar
-                    history={history}
-                    isDesktop={isDesktop}
-                    renderEntry={(item) => (
-                      <HistoryCard item={item} isDesktop={false} />
-                    )}
-                  />
-                ) : (
-                  <>
-                    {/* ==========================================
-                        TÍTULO
-                    ========================================== */}
-
-                    <Text
-                      style={
-                        isDesktop
-                          ? styles.desktopSectionTitle
-                          : styles.mobileSectionTitle
-                      }
-                    >
-                      Outfits utilizados
-                    </Text>
-
-                    {/* ==========================================
-                        LISTADO
-                    ========================================== */}
-
-                    <View
-                      style={
-                        isDesktop
-                          ? styles.historyGrid
-                          : styles.historyList
-                      }
-                    >
-                      {history.map((item) => (
-                        <HistoryCard
-                          key={item.id}
-                          item={item}
-                          isDesktop={isDesktop}
-                        />
-                      ))}
-                    </View>
-                  </>
-                )}
               </>
             )}
 
@@ -810,39 +755,6 @@ function formatLongDate(dateValue) {
 ============================================================= */
 
 const styles = StyleSheet.create({
-  viewToggle: {
-    flexDirection: 'row',
-    alignSelf: 'flex-start',
-    backgroundColor: '#F3EEFC',
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 18,
-  },
-
-  viewToggleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    height: 38,
-    borderRadius: 9,
-  },
-
-  viewToggleButtonActive: {
-    backgroundColor: '#FFFFFF',
-  },
-
-  viewToggleText: {
-    fontFamily: 'Poppins_500Medium',
-    color: COLORS.textLight,
-    fontSize: 14,
-  },
-
-  viewToggleTextActive: {
-    fontFamily: 'Poppins_600SemiBold',
-    color: COLORS.buttonDark,
-  },
-
 
   /* ==========================================================
      GENERAL
