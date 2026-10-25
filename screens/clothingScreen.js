@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useMemo,
   useEffect,
+  useRef,
 } from 'react';
 
 import {
@@ -75,6 +76,23 @@ export default function ClothingScreen({ navigation, route }) {
   const [loading, setLoading] = useState(true);
 
   const [searchText, setSearchText] = useState('');
+
+  // Fila de categorías: posición y tamaños para saber si mostrar
+  // las flechas (solo en PC; en el celular se desliza con el dedo).
+  const chipsRef = useRef(null);
+  const chipsScrollX = useRef(0);
+  const [chipsInfo, setChipsInfo] = useState({ x: 0, content: 0, visible: 0 });
+
+  const canScrollLeft = chipsInfo.x > 4;
+  const canScrollRight = chipsInfo.content - chipsInfo.visible - chipsInfo.x > 4;
+
+  const scrollChips = (direction) => {
+    const step = Math.max(160, chipsInfo.visible * 0.7);
+    const maxX = Math.max(0, chipsInfo.content - chipsInfo.visible);
+    const next = Math.min(maxX, Math.max(0, chipsScrollX.current + direction * step));
+
+    chipsRef.current?.scrollTo({ x: next, animated: true });
+  };
 
   const [activeCategory, setActiveCategory] = useState('Todas');
 
@@ -572,12 +590,38 @@ export default function ClothingScreen({ navigation, route }) {
             CHIPS DE CATEGORÍA
             ================================================ */}
 
+        <View style={styles.chipsWrapper}>
         <ScrollView
+          ref={chipsRef}
           horizontal
-          // En PC se muestra la barra para poder arrastrarla con el mouse
-          showsHorizontalScrollIndicator={isDesktop}
+          showsHorizontalScrollIndicator={false}
           style={styles.chipsScroll}
           contentContainerStyle={styles.chipsRow}
+          scrollEventThrottle={16}
+          onScroll={(event) => {
+            const x = event.nativeEvent.contentOffset.x;
+            chipsScrollX.current = x;
+
+            // Solo se actualiza cuando cambia si hay que mostrar
+            // alguna flecha (así deslizar no recarga la pantalla).
+            setChipsInfo((current) => {
+              const wasLeft = current.x > 4;
+              const wasRight = current.content - current.visible - current.x > 4;
+              const isLeft = x > 4;
+              const isRight = current.content - current.visible - x > 4;
+
+              return wasLeft === isLeft && wasRight === isRight
+                ? current
+                : { ...current, x };
+            });
+          }}
+          onLayout={(event) => {
+            const visible = event.nativeEvent.layout.width;
+            setChipsInfo((current) => ({ ...current, visible }));
+          }}
+          onContentSizeChange={(content) =>
+            setChipsInfo((current) => ({ ...current, content }))
+          }
         >
           {categoryFilters.map((filter) => {
             const isActive =
@@ -606,6 +650,30 @@ export default function ClothingScreen({ navigation, route }) {
             );
           })}
         </ScrollView>
+
+        {/* Flechas para mover las categorías con el mouse (PC) */}
+        {isDesktop && canScrollLeft && (
+          <TouchableOpacity
+            style={[styles.chipsArrow, styles.chipsArrowLeft]}
+            onPress={() => scrollChips(-1)}
+            activeOpacity={0.8}
+            accessibilityLabel="Ver categorías anteriores"
+          >
+            <Ionicons name="chevron-back" size={18} color={COLORS.buttonDark} />
+          </TouchableOpacity>
+        )}
+
+        {isDesktop && canScrollRight && (
+          <TouchableOpacity
+            style={[styles.chipsArrow, styles.chipsArrowRight]}
+            onPress={() => scrollChips(1)}
+            activeOpacity={0.8}
+            accessibilityLabel="Ver más categorías"
+          >
+            <Ionicons name="chevron-forward" size={18} color={COLORS.buttonDark} />
+          </TouchableOpacity>
+        )}
+        </View>
 
         {/* ================================================
             CONTADOR + ORDEN
@@ -1008,15 +1076,47 @@ const styles = StyleSheet.create({
   // ----------------------------------------------------------
 
   // Una sola fila que se desliza de costado
+  chipsWrapper: {
+    position: 'relative',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+
   chipsScroll: {
     flexGrow: 0,
-    marginBottom: 14,
   },
 
   chipsRow: {
     flexDirection: 'row',
     gap: 8,
-    paddingBottom: 4,
+  },
+
+  // Flechas redondas sobre los extremos de la fila (solo PC)
+  chipsArrow: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -17,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E4D9F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+
+  chipsArrowLeft: {
+    left: -6,
+  },
+
+  chipsArrowRight: {
+    right: -6,
   },
 
   chip: {

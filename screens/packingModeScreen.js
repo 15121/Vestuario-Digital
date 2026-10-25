@@ -890,6 +890,60 @@ const handleCalendarSelect =
 
 
   // ==========================================================
+  // BUSCADOR Y FILTRO DE LA LISTA
+  // ==========================================================
+  //
+  // Solo cambian QUÉ prendas se ven en la lista. Guardar, las
+  // cantidades y la barra de progreso siguen usando TODAS
+  // (visibleClothes).
+
+  const [packSearch, setPackSearch] =
+    useState('');
+
+  // 'all' | 'packed' (en la maleta) | 'pending' (sin guardar)
+  const [packFilter, setPackFilter] =
+    useState('all');
+
+  const normalizeSearch = (value) =>
+    String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+
+  const listedClothes =
+    useMemo(() => {
+      const query = normalizeSearch(packSearch);
+
+      return visibleClothes.filter((item) => {
+        const isPacked = Boolean(packedItems[item.id]?.packed);
+
+        if (packFilter === 'packed' && !isPacked) return false;
+        if (packFilter === 'pending' && isPacked) return false;
+
+        if (!query) return true;
+
+        return [item.title, item.category, item.color]
+          .map(normalizeSearch)
+          .some((text) => text.includes(query));
+      });
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [visibleClothes, packedItems, packSearch, packFilter]);
+
+  const packedTotal = visibleClothes.filter(
+    (item) => packedItems[item.id]?.packed
+  ).length;
+
+  const isFiltering =
+    packSearch.trim() !== '' || packFilter !== 'all';
+
+  const clearPackFilters = () => {
+    setPackSearch('');
+    setPackFilter('all');
+  };
+
+
+  // ==========================================================
   // CANTIDADES RECOMENDADAS
   // ==========================================================
 
@@ -1800,6 +1854,77 @@ setSuccessMessageVisible(true);
         />
 
 
+        {/* BUSCADOR + FILTRO POR ESTADO */}
+
+        {visibleClothes.length > 0 && (
+          <View style={styles.packToolbar}>
+            <View style={styles.packSearchBox}>
+              <Ionicons
+                name="search-outline"
+                size={18}
+                color={COLORS.icon}
+              />
+
+              <TextInput
+                value={packSearch}
+                onChangeText={setPackSearch}
+                placeholder="Buscar prendas por nombre, categoría o color..."
+                placeholderTextColor="#A0A0A0"
+                style={styles.packSearchInput}
+                returnKeyType="search"
+              />
+
+              {packSearch.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setPackSearch('')}
+                  hitSlop={8}
+                >
+                  <Ionicons
+                    name="close-circle"
+                    size={18}
+                    color="#AAA2B0"
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.packFilterRow}>
+              {[
+                { key: 'all', label: `Todas (${visibleClothes.length})` },
+                { key: 'packed', label: `En la maleta (${packedTotal})` },
+                {
+                  key: 'pending',
+                  label: `Sin guardar (${visibleClothes.length - packedTotal})`,
+                },
+              ].map((option) => {
+                const active = packFilter === option.key;
+
+                return (
+                  <TouchableOpacity
+                    key={option.key}
+                    style={[
+                      styles.packFilterChip,
+                      active && styles.packFilterChipActive,
+                    ]}
+                    onPress={() => setPackFilter(option.key)}
+                    activeOpacity={0.85}
+                  >
+                    <Text
+                      style={[
+                        styles.packFilterText,
+                        active && styles.packFilterTextActive,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+
         {/* LISTADO */}
 
         <View
@@ -1810,7 +1935,39 @@ setSuccessMessageVisible(true);
               styles.clothesListDesktop,
           ]}
         >
-          {visibleClothes.length === 0 ? (
+          {visibleClothes.length > 0 && listedClothes.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons
+                name="search-outline"
+                size={38}
+                color={COLORS.icon}
+              />
+
+              <Text style={styles.emptyTitle}>
+                No hay prendas con ese filtro
+              </Text>
+
+              <Text style={styles.emptyText}>
+                {packFilter === 'packed' && !packSearch.trim()
+                  ? 'Todavía no guardaste ninguna prenda en esta maleta.'
+                  : packFilter === 'pending' && !packSearch.trim()
+                    ? '¡Ya guardaste todas tus prendas!'
+                    : 'Probá con otra palabra o cambiá el filtro.'}
+              </Text>
+
+              {isFiltering && (
+                <TouchableOpacity
+                  style={styles.packClearButton}
+                  onPress={clearPackFilters}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.packClearText}>
+                    Ver todas las prendas
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : visibleClothes.length === 0 ? (
             <View
               style={
                 styles.emptyContainer
@@ -1841,7 +1998,7 @@ setSuccessMessageVisible(true);
               </Text>
             </View>
           ) : (
-            visibleClothes.map(
+            listedClothes.map(
               renderClothingCard
             )
           )}
@@ -2627,6 +2784,77 @@ calendarCancelText: {
 
       alignItems: 'center',
       justifyContent: 'center',
+    },
+
+    packToolbar: {
+      marginBottom: 12,
+      gap: 10,
+    },
+
+    packSearchBox: {
+      minHeight: 46,
+      backgroundColor: '#FFFFFF',
+      borderWidth: 1,
+      borderColor: '#EEE8F3',
+      borderRadius: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 13,
+      gap: 8,
+    },
+
+    packSearchInput: {
+      flex: 1,
+      minWidth: 0,
+      fontSize: 14,
+      fontFamily: 'Poppins_400Regular',
+      color: COLORS.textDark,
+      paddingVertical: 10,
+    },
+
+    packFilterRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+
+    packFilterChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: '#FFFFFF',
+      borderWidth: 1,
+      borderColor: '#EFEFEF',
+    },
+
+    packFilterChipActive: {
+      backgroundColor: COLORS.primary,
+      borderColor: COLORS.primary,
+    },
+
+    packFilterText: {
+      fontSize: 13,
+      fontFamily: 'Poppins_400Regular',
+      color: COLORS.textLight,
+    },
+
+    packFilterTextActive: {
+      fontFamily: 'Poppins_600SemiBold',
+      color: '#FFFFFF',
+    },
+
+    packClearButton: {
+      marginTop: 14,
+      paddingHorizontal: 18,
+      paddingVertical: 10,
+      borderRadius: 10,
+      backgroundColor: COLORS.buttonDark,
+    },
+
+    packClearText: {
+      fontSize: 13,
+      fontFamily: 'Poppins_600SemiBold',
+      color: '#FFFFFF',
     },
 
     emptyTitle: {
