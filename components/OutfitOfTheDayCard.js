@@ -20,11 +20,17 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Platform,
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
 
 import { buildOutfitRecommendation } from '../utils/outfitrecommender';
+
+// En el navegador no existe el "driver nativo" de animaciones
+// (daba un aviso en la terminal): se usa solo en el celular.
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
+
 
 
 const PURPLE = '#8C73D6';
@@ -62,7 +68,7 @@ export default function OutfitOfTheDayCard({
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 500,
-      useNativeDriver: true,
+      useNativeDriver: USE_NATIVE_DRIVER,
     }).start();
   }, [items.length, fadeAnim]);
 

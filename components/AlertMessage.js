@@ -57,7 +57,7 @@ export default function AlertMessage({
   if (!floating) return content;
 
   return (
-    <View pointerEvents="none" style={[styles.floatingWrapper, { top }]}>
+    <View style={[styles.floatingWrapper, { top }]}>
       {content}
     </View>
   );
@@ -96,6 +96,8 @@ const styles = StyleSheet.create({
 
   // --- Modo flotante ---
   floatingWrapper: {
+    // No bloquea los toques de lo que está abajo
+    pointerEvents: 'none',
     position: 'absolute',
     left: 16,
     right: 16,

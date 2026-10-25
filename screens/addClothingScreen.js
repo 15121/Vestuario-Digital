@@ -1989,7 +1989,6 @@ export default function AddClothingScreen({
             {samplePoint &&
               sampledColor && (
                 <View
-                  pointerEvents="none"
                   style={[
                     styles.samplePoint,
                     {
@@ -2009,7 +2008,6 @@ export default function AddClothingScreen({
             {isColorPickerMode &&
               !isSamplingColor && (
                 <View
-                  pointerEvents="none"
                   style={
                     styles.colorPickerActiveOverlay
                   }
@@ -2040,7 +2038,6 @@ export default function AddClothingScreen({
 
             {isSamplingColor && (
               <View
-                pointerEvents="none"
                 style={
                   styles.colorSamplingOverlay
                 }
@@ -3192,6 +3189,8 @@ const styles =
     },
 
     samplePoint: {
+      // No bloquea los toques de lo que está abajo
+      pointerEvents: 'none',
       position:
         'absolute',
       width: 18,
@@ -3208,6 +3207,8 @@ const styles =
     },
 
     colorPickerActiveOverlay: {
+      // No bloquea los toques de lo que está abajo
+      pointerEvents: 'none',
       ...StyleSheet.absoluteFillObject,
       justifyContent:
         'flex-start',
@@ -3241,6 +3242,8 @@ const styles =
     },
 
     colorSamplingOverlay: {
+      // No bloquea los toques de lo que está abajo
+      pointerEvents: 'none',
       ...StyleSheet.absoluteFillObject,
       backgroundColor:
         'rgba(255,255,255,0.78)',

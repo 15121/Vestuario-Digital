@@ -21,6 +21,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Platform,
 } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -29,6 +30,11 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../theme/colours';
 
 import ilustracionImg from '../assets/ilustracion.png';
+
+// En el navegador no existe el "driver nativo" de animaciones
+// (daba un aviso en la terminal): se usa solo en el celular.
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
+
 
 
 const STEPS = [
@@ -114,13 +120,13 @@ export default function WelcomeModal({ user, blocked = false }) {
     Animated.timing(fade, {
       toValue: 0,
       duration: 120,
-      useNativeDriver: true,
+      useNativeDriver: USE_NATIVE_DRIVER,
     }).start(() => {
       setStep(next);
       Animated.timing(fade, {
         toValue: 1,
         duration: 180,
-        useNativeDriver: true,
+        useNativeDriver: USE_NATIVE_DRIVER,
       }).start();
     });
   };

@@ -2069,7 +2069,6 @@ const [imageUri, setImageUri] = useState(
             {samplePoint &&
               sampledColor && (
                 <View
-                  pointerEvents="none"
                   style={[
                     styles.samplePoint,
                     {
@@ -2089,7 +2088,6 @@ const [imageUri, setImageUri] = useState(
             {isColorPickerMode &&
               !isSamplingColor && (
                 <View
-                  pointerEvents="none"
                   style={
                     styles.colorPickerActiveOverlay
                   }
@@ -2120,7 +2118,6 @@ const [imageUri, setImageUri] = useState(
 
             {isSamplingColor && (
               <View
-                pointerEvents="none"
                 style={
                   styles.colorSamplingOverlay
                 }
@@ -3228,6 +3225,8 @@ const styles =
     },
 
     samplePoint: {
+      // No bloquea los toques de lo que está abajo
+      pointerEvents: 'none',
       position:
         'absolute',
       width: 18,
@@ -3244,6 +3243,8 @@ const styles =
     },
 
     colorPickerActiveOverlay: {
+      // No bloquea los toques de lo que está abajo
+      pointerEvents: 'none',
       ...StyleSheet.absoluteFillObject,
       justifyContent:
         'flex-start',
@@ -3277,6 +3278,8 @@ const styles =
     },
 
     colorSamplingOverlay: {
+      // No bloquea los toques de lo que está abajo
+      pointerEvents: 'none',
       ...StyleSheet.absoluteFillObject,
       backgroundColor:
         'rgba(255,255,255,0.78)',

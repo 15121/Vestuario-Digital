@@ -14,6 +14,7 @@ import {
   Modal,
   Pressable,
   TextInput,
+  Platform,
 } from 'react-native';
 
 import {
@@ -42,6 +43,11 @@ import {
 } from '../services/weatherStorage';
 
 import ilustracionImg from '../assets/ilustracion.png';
+
+// En el navegador no existe el "driver nativo" de animaciones
+// (daba un aviso en la terminal): se usa solo en el celular.
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
+
 
 // ============================================================
 // ÍCONO DEL CLIMA SEGÚN LA CONDICIÓN ACTUAL
@@ -330,7 +336,7 @@ export default function HomeScreen({
         {
           toValue: 1,
           duration: 400,
-          useNativeDriver: true,
+          useNativeDriver: USE_NATIVE_DRIVER,
         }
       ).start();
 
@@ -340,7 +346,7 @@ export default function HomeScreen({
           {
             toValue: 0,
             duration: 400,
-            useNativeDriver: true,
+            useNativeDriver: USE_NATIVE_DRIVER,
           }
         ).start(() => {
           setShowToast(false);
