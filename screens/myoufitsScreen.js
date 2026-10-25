@@ -697,19 +697,20 @@ export default function MyOutfitsScreen({
 };
 
 
-  return (
 
-    <SafeAreaView style={styles.safeArea}>
+  // ----------------------------------------------------------
+  // PARTE DE ARRIBA (buscador, Crear outfit, Mis outfits /
+  // Ver historial). Va DENTRO de la lista para que se desplace
+  // junto con los outfits en lugar de quedar fija.
+  // ----------------------------------------------------------
 
+  const topArea = (
       <View
         style={[
-          styles.screen,
-          isDesktop &&
-            styles.screenDesktop,
+          styles.topArea,
+          !isDesktop && styles.topAreaMobile,
         ]}
       >
-
-
         {/* ====================================================
             BUSCADOR + CREAR OUTFIT
         ===================================================== */}
@@ -860,14 +861,35 @@ export default function MyOutfitsScreen({
           </TouchableOpacity>
 
         </View>
+      </View>
+  );
 
 
- 
+  return (
+
+    <SafeAreaView style={styles.safeArea}>
+
+      <View
+        style={[
+          styles.screen,
+          isDesktop &&
+            styles.screenDesktop,
+        ]}
+      >
+
+
+        {/* El buscador y los botones de arriba están dentro de
+            cada lista (topArea), así se van al bajar. */}
+
         {/* ====================================================
             CARGANDO
         ===================================================== */}
 
         {loading ? (
+
+          <View style={styles.loadingWrapper}>
+
+          {topArea}
 
           <View style={styles.loadingContainer}>
 
@@ -882,6 +904,8 @@ export default function MyOutfitsScreen({
 
           </View>
 
+          </View>
+
         ) : activeView === 'outfits' ? (
 
           /* ==================================================
@@ -893,6 +917,10 @@ export default function MyOutfitsScreen({
             style={styles.outfitList}
 
             ListHeaderComponent={
+              <View>
+
+              {topArea}
+
               <View style={styles.sectionHeader}>
 
     <Text style={styles.sectionTitle}>
@@ -904,6 +932,8 @@ export default function MyOutfitsScreen({
     </Text>
 
   </View>
+
+              </View>
 }
 
             keyExtractor={(item) =>
@@ -1015,6 +1045,10 @@ export default function MyOutfitsScreen({
             data={historyView === 'list' ? filteredHistory : []}
   style={styles.outfitList}
     ListHeaderComponent={
+    <View>
+
+    {topArea}
+
     <View style={styles.sectionHeader}>
 
       <Text style={styles.sectionTitle}>
@@ -1070,6 +1104,8 @@ export default function MyOutfitsScreen({
           />
         </View>
       )}
+
+    </View>
 
     </View>
   }
@@ -1215,6 +1251,23 @@ const styles = StyleSheet.create({
     paddingTop: 34,
   },
 
+
+  // ==========================================================
+  // PARTE DE ARRIBA (dentro de la lista)
+  // ==========================================================
+
+  topArea: {
+    width: '100%',
+  },
+
+  // En el celular, aire entre el encabezado violeta y el buscador
+  topAreaMobile: {
+    paddingTop: 18,
+  },
+
+  loadingWrapper: {
+    flex: 1,
+  },
 
   // ==========================================================
   // BUSCADOR

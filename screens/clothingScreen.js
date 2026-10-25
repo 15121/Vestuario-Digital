@@ -508,16 +508,22 @@ export default function ClothingScreen({ navigation, route }) {
     </View>
   );
 
-  // ==========================================================
-  // INTERFAZ
-  // ==========================================================
 
-  return (
-    <View style={styles.container}>
+  // ==========================================================
+  // PARTE DE ARRIBA (buscador, filtros, categorías, orden)
+  // ==========================================================
+  //
+  // inList = true cuando va dentro de la lista de prendas.
+  // Es una función (no un componente) para que el buscador no
+  // pierda el foco mientras escribís.
+
+  const renderTopSection = (inList = false) => (
       <View
         style={[
           styles.topSection,
           isDesktop && styles.topSectionDesktop,
+          // Dentro de la lista, el padding lateral lo pone la lista
+          inList && styles.topSectionInList,
         ]}
       >
         {/* ================================================
@@ -566,7 +572,13 @@ export default function ClothingScreen({ navigation, route }) {
             CHIPS DE CATEGORÍA
             ================================================ */}
 
-        <View style={styles.chipsRow}>
+        <ScrollView
+          horizontal
+          // En PC se muestra la barra para poder arrastrarla con el mouse
+          showsHorizontalScrollIndicator={isDesktop}
+          style={styles.chipsScroll}
+          contentContainerStyle={styles.chipsRow}
+        >
           {categoryFilters.map((filter) => {
             const isActive =
               activeCategory === filter.key;
@@ -593,7 +605,7 @@ export default function ClothingScreen({ navigation, route }) {
               </TouchableOpacity>
             );
           })}
-        </View>
+        </ScrollView>
 
         {/* ================================================
             CONTADOR + ORDEN
@@ -660,22 +672,42 @@ export default function ClothingScreen({ navigation, route }) {
           </View>
         )}
       </View>
+  );
+
+  // ==========================================================
+  // INTERFAZ
+  // ==========================================================
+
+  return (
+    <View style={styles.container}>
+      {/* El buscador, las categorías y el contador van dentro de
+          la lista (renderTopSection) para que se desplacen con
+          las prendas en lugar de quedar fijos arriba. */}
 
       {/* ==================================================
           LISTADO / GRILLA / ESTADO VACÍO
           ================================================== */}
 
       {loading && clothes.length === 0 ? (
-        <View style={styles.loadingBox}>
-          <ActivityIndicator size="large" color={COLORS.buttonDark} />
-          <Text style={styles.loadingBoxText}>Cargando tus prendas…</Text>
-        </View>
+        <>
+          {renderTopSection(false)}
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color={COLORS.buttonDark} />
+            <Text style={styles.loadingBoxText}>Cargando tus prendas…</Text>
+          </View>
+        </>
       ) : !loading && clothes.length === 0 ? (
-        renderEmptyState()
+        <>
+          {renderTopSection(false)}
+          {renderEmptyState()}
+        </>
       ) : (
         <FlatList
           key={isDesktop ? 'grid-2' : 'list-1'}
           data={filteredClothes}
+          ListHeaderComponent={renderTopSection(true)}
+          // El menú "Ordenar por" se abre por encima de las prendas
+          ListHeaderComponentStyle={styles.listHeaderLayer}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderCard}
           numColumns={isDesktop ? 2 : 1}
@@ -899,6 +931,17 @@ const styles = StyleSheet.create({
     elevation: 20,
   },
 
+  // Dentro de la lista: sin padding lateral (lo pone la lista)
+  topSectionInList: {
+    paddingHorizontal: 0,
+  },
+
+  listHeaderLayer: {
+    position: 'relative',
+    zIndex: 20,
+    elevation: 20,
+  },
+
   topSectionDesktop: {
     paddingHorizontal: 24,
     paddingTop: 20,
@@ -964,11 +1007,16 @@ const styles = StyleSheet.create({
   // CHIPS DE CATEGORÍA
   // ----------------------------------------------------------
 
+  // Una sola fila que se desliza de costado
+  chipsScroll: {
+    flexGrow: 0,
+    marginBottom: 14,
+  },
+
   chipsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 14,
+    paddingBottom: 4,
   },
 
   chip: {
